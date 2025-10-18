@@ -1,0 +1,47 @@
+{
+  "private": true,
+  "name": "lista",
+  "description": "A minimalistic p2p list app",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "bundle:backend": "bare-pack backend/backend.mjs -o app/backend.bundle.js"
+  },
+  "dependencies": {
+    "@react-native-clipboard/clipboard": "^1.16.3",
+    "@inquirer/prompts": "^7.8.1",
+    "autopass": "^2.2.1",
+    "b4a": "^1.7.1",
+    "bare-fs": "^4.4.4",
+    "bare-rpc": "^0.2.12",
+    "corestore": "^7.4.7",
+    "expo": "^53.0.9",
+    "expo-build-properties": "^0.14.6",
+    "expo-constants": "^17.1.6",
+    "expo-linking": "^7.1.5",
+    "expo-router": "^5.0.6",
+    "expo-system-ui": "^5.0.7",
+    "protomux-wakeup": "^2.6.1",
+    "hyperswarm": "^4.12.1",
+    "hypercore-crypto": "^3.6.1",
+    "blind-peering": "^1.13.0",
+    "make-dir": "^5.1.0",
+    "react": "~19.0.0",
+    "react-dom": "~19.0.0",
+    "react-native": "^0.79.2",
+    "react-native-b4a": "^0.0.1",
+    "react-native-bare-kit": "^0.9.2",
+    "react-native-safe-area-context": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/b4a": "^1.6.5",
+    "@types/react": "^19.1.3",
+    "bare-pack": "^1.4.6",
+    "prettier": "^3.3.3",
+    "@react-native-community/cli": "latest",
+    "prettier-config-standard": "^7.0.0",
+    "typescript": "^5.3.3"
+  }
+}
