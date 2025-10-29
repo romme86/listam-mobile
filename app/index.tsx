@@ -37,16 +37,15 @@ export default function App() {
     const rpcRef = useRef<any>(null)
 
     const startWorklet = () => {
+
         console.log('Starting worklet')
         const worklet = new Worklet()
         console.log('documentDirectory', documentDirectory, pairingInvite)
-        const worklet_start = worklet.start('/app.bundle', bundle)
+        const worklet_start = worklet.start('/app.bundle', bundle, [String(documentDirectory)])
         console.log('worklet_start', worklet_start)
         const {IPC} = worklet
-        console.log('IPC', IPC)
 
         rpcRef.current = new RPC(IPC, (req) => {
-            console.log('IPC', req)
             if (req.command === RPC_MESSAGE) {
                 console.log('RPC MESSAGE')
 
@@ -70,9 +69,14 @@ export default function App() {
             }
             if (req.command === RPC_UPDATE) {
                 console.log('RPC_UPDATE')
+                if (req.data) {
+                    console.log('data from bare', b4a.toString(req.data))
+                } else {
+                    console.log('data from bare is null, empty or undefined')
+                }
 
-                const req = rpcRef.current.request(RPC_UPDATE)
-                req.send(JSON.stringify({ id: 1,  }))
+                // const req = rpcRef.current.request(RPC_UPDATE)
+                // req.send(JSON.stringify({ id: 1,  }))
             }
             if (req.command === RPC_DELETE) {
                 console.log('RPC_DELETE')
@@ -81,8 +85,6 @@ export default function App() {
                 req.send(JSON.stringify({ id: 1,  }))
             }
         })
-        rpcRef.current.request(RPC_UPDATE).send(b4a.from("sdf"))
-        rpcRef.current.request(RPC_UPDATE).send(JSON.stringify({ id: 1,  }))
         setIsWorkletStarted(true)
     }
 
