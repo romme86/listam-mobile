@@ -11,24 +11,26 @@ import Autobase from 'autobase'
 import Corestore from 'corestore'
 const { IPC } = BareKit
 
+// "bundle:backend": "bare-pack backend/backend.mjs -o app/app.bundle.mjs"
+
+
 console.log("parmigiano bare backend")
-const path = join(URL.fileURLToPath(Bare.argv[0]), 'lista')
+// const path = join(URL.fileURLToPath(Bare.argv[0]), 'lista')
 
 const rpc = new RPC(IPC, (req, error) => {
-    console.log("parmigiano rpc 2 way")
-    // Handle two way communication here
+    console.log("parmigiano rpc 2 way", req, error)
 })
 
-// For a clean start
-if (fs.existsSync(path)) {
-    console.log("parmigiano fs.sync")
-    fs.rmSync(path, {
-        recursive: true,
-        force: true
-    })
-}
+// // For a clean start
+// if (fs.existsSync(path)) {
+//     console.log("parmigiano fs.sync")
+//     fs.rmSync(path, {
+//         recursive: true,
+//         force: true
+//     })
+// }
 
-fs.mkdirSync(path)
+// fs.mkdirSync(path)
 console.log("parmigiano mkdirsync")
 const invite = Bare.argv[1]
 const pair = Autopass.pair(new Corestore(path), invite)
@@ -61,3 +63,5 @@ pass.on('error', (error) => {
 pass.on('reset', async (e) => {
     console.log("parmigiano reset")
 })
+
+

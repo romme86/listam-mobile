@@ -5,7 +5,7 @@ import {Worklet} from 'react-native-bare-kit'
 import bundle from './app.bundle.mjs'
 import RPC from 'bare-rpc'
 import b4a from 'b4a'
-import {RPC_MESSAGE, RPC_RESET, RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_CMDS} from '../rpc-commands.mjs'
+import {RPC_MESSAGE, RPC_RESET, RPC_UPDATE, RPC_DELETE, RPC_ADD} from '../rpc-commands.mjs'
 import InertialElasticList from './components/intertial_scroll'
 
 type ListEntry = {
@@ -40,7 +40,7 @@ export default function App() {
         console.log('Starting worklet')
         const worklet = new Worklet()
         console.log('documentDirectory', documentDirectory, pairingInvite)
-        const worklet_start = worklet.start('/app.bundle', bundle, [String(documentDirectory), pairingInvite])
+        const worklet_start = worklet.start('/app.bundle', bundle)
         console.log('worklet_start', worklet_start)
         const {IPC} = worklet
         console.log('IPC', IPC)
@@ -81,7 +81,8 @@ export default function App() {
                 req.send(JSON.stringify({ id: 1,  }))
             }
         })
-
+        rpcRef.current.request(RPC_UPDATE).send(b4a.from("sdf"))
+        rpcRef.current.request(RPC_UPDATE).send(JSON.stringify({ id: 1,  }))
         setIsWorkletStarted(true)
     }
 
