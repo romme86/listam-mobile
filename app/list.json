@@ -1,0 +1,11 @@
+{
+  "id": "list",
+  "type": "object",
+  "properties": {
+    "listId": {"type":"string"},
+    "title": {"type":"string"},
+    "createdBy": {"type":"string"},
+    "createdAt": {"type":"integer"}
+  },
+  "required":["listId","title","createdAt"]
+}

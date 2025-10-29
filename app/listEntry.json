@@ -1,0 +1,14 @@
+{
+  "id":"item",
+  "type":"object",
+  "properties":{
+    "itemId":{"type":"string"},
+    "listId":{"type":"string"},
+    "text":{"type":"string"},
+    "isDone":{"type":"boolean"},
+    "updatedAt":{"type":"integer"},
+    "timeOfCompletion":{"type":"integer"},
+    "author":{"type":"string"}
+  },
+  "required":["itemId","listId","text","updatedAt"]
+}

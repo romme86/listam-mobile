@@ -1,0 +1,636 @@
+default	08:53:13.631202+0100	Bare	[0x105ab3b90] activating connection: mach=true listener=false peer=false name=com.apple.cfprefsd.daemon.system
+default	08:53:13.631303+0100	Bare	[0x105ab3cd0] activating connection: mach=true listener=false peer=false name=com.apple.cfprefsd.daemon
+default	08:53:13.634991+0100	Bare	[C:1] Alloc com.apple.frontboard.systemappservices
+default	08:53:13.635123+0100	Bare	[0x106d28000] activating connection: mach=false listener=false peer=false name=(anonymous)
+default	08:53:13.637123+0100	Bare	Creating new assertion because there is no existing background assertion.
+default	08:53:13.637129+0100	Bare	Creating new background assertion
+default	08:53:13.637698+0100	Bare	Created new background assertion <BKSProcessAssertion: 0x105ab72f0>
+default	08:53:13.637713+0100	Bare	Initializing connection
+default	08:53:13.637727+0100	Bare	Removing all cached process handles
+default	08:53:13.637789+0100	Bare	Sending handshake request attempt #1 to server
+default	08:53:13.637852+0100	Bare	Creating connection to com.apple.runningboard
+default	08:53:13.637867+0100	Bare	[0x106d28140] activating connection: mach=true listener=false peer=false name=com.apple.runningboard
+default	08:53:13.638742+0100	Bare	Handshake succeeded
+default	08:53:13.638755+0100	Bare	Identity resolved as app<it.euncasino.lista(FEEDEEEE-DDDD-CCCC-BBBB-0000000001F5)>
+default	08:53:13.639517+0100	Bare	Incrementing reference count for background assertion <private>
+default	08:53:13.639525+0100	Bare	Cache loaded with 6210 pre-cached in CacheData and 78 items in CacheExtra.
+default	08:53:13.639616+0100	Bare	Created background task <private>.
+default	08:53:13.642191+0100	Bare	Realizing settings extension _UIApplicationSceneKeyboardSettings on FBSSceneSettings
+default	08:53:13.651844+0100	Bare	Realizing settings extension <_UISceneOcclusionSettings> on FBSSceneSettings
+default	08:53:13.652853+0100	Bare	Realizing settings extension <_UISceneInterfaceProtectionSettings> on FBSSceneSettings
+default	08:53:13.653852+0100	Bare	Deactivation reason added: 10; deactivation reasons: 0 -> 1024; animating application lifecycle event: 0
+default	08:53:13.653879+0100	Bare	activating monitor for service com.apple.frontboard.open
+default	08:53:13.654078+0100	Bare	Realizing settings extension _UISceneLayoutPreferencesHostSettingsExtension on FBSSceneSettings
+default	08:53:13.654613+0100	Bare	activating monitor for service com.apple.frontboard.workspace-service
+default	08:53:13.655139+0100	Bare	Realizing settings extension _UISceneSafeAreaSettingsExtension on FBSSceneSettings
+default	08:53:13.655163+0100	Bare	FBSWorkspace registering source: <private>
+default	08:53:13.656091+0100	Bare	FBSWorkspace connected to endpoint : <private>
+default	08:53:13.656120+0100	Bare	<FBSWorkspaceScenesClient:0x106e35ea0 <private>> attempting immediate handshake from activate
+default	08:53:13.656168+0100	Bare	<FBSWorkspaceScenesClient:0x106e35ea0 <private>> sent handshake
+default	08:53:13.656182+0100	Bare	Realizing settings extension _UISceneLayoutPreferenceClientSettingsExtension on FBSSceneClientSettings
+default	08:53:13.656189+0100	Bare	Added observer for process assertions expiration warning: <_RBSExpirationWarningClient: 0x106e2dc00>
+default	08:53:13.657138+0100	Bare	Realizing settings extension <_UIHomeAffordanceHostSceneSettings> on FBSSceneSettings
+default	08:53:13.657423+0100	Bare	Realizing settings extension _UISystemShellSceneHostingEnvironmentSettings on FBSSceneSettings
+default	08:53:13.657644+0100	Bare	Realizing settings extension _UISceneRenderingEnvironmentSettings on FBSSceneSettings
+default	08:53:13.658289+0100	Bare	Realizing settings extension <_UISceneRenderingEnvironmentClientSettings> on FBSSceneClientSettings
+default	08:53:13.658572+0100	Bare	Realizing settings extension <_UISceneTransitioningHostSettings> on FBSSceneSettings
+default	08:53:13.658612+0100	Bare	Evaluated capturing state as 0 on <UIScreen: 0x106d28780> for initial
+default	08:53:13.658628+0100	Bare	Realizing settings extension <_UISceneFocusSystemSettings> on FBSSceneSettings
+default	08:53:13.658710+0100	Bare	Evaluated capturing state as 0 on <UIScreen: 0x106d28780> for CADisplay KVO
+default	08:53:13.658718+0100	Bare	Realizing settings extension <_UISceneMainMenuSettings> on FBSSceneSettings
+default	08:53:13.659024+0100	Bare	Realizing settings extension _UISceneOrientationSettingsExtension on FBSSceneSettings
+default	08:53:13.659131+0100	Bare	Realizing settings extension _UISceneOrientationClientSettingsExtension on FBSSceneClientSettings
+default	08:53:13.659207+0100	Bare	Realizing settings extension _UISceneWindowingControlClientSettings on FBSSceneClientSettings
+default	08:53:13.660032+0100	Bare	Realizing settings extension <_UISceneHostingContentSizePreferenceClientSettings> on FBSSceneClientSettings
+default	08:53:13.660069+0100	Bare	Realizing settings extension _UISceneHostingTraitCollectionPropagationSettings on FBSSceneSettings
+default	08:53:13.661294+0100	Bare	Realizing settings extension <_UISceneHostingSheetPresentationSettings> on FBSSceneSettings
+default	08:53:13.662156+0100	Bare	Realizing settings extension <_UISceneHostingSheetPresentationClientSettings> on FBSSceneClientSettings
+default	08:53:13.662211+0100	Bare	Realizing settings extension <_UISceneHostingEventDeferringSettings> on FBSSceneSettings
+default	08:53:13.662864+0100	Bare	Read CategoryName: per-app = 1, category name = (null)
+default	08:53:13.663038+0100	Bare	Read CategoryName: per-app = 0, category name = UICTContentSizeCategoryL
+default	08:53:13.663045+0100	Bare	Realizing settings extension <UIKit__UITypedKeyValueSceneSettings> on FBSSceneSettings
+default	08:53:13.663431+0100	Bare	Realizing settings extension <UIKit__UITypedKeyValueSceneSettings> on FBSSceneClientSettings
+default	08:53:13.663606+0100	Bare	Realizing settings extension <_UISceneHostingViewControllerPreferencePropagationClientSettings> on FBSSceneClientSettings
+default	08:53:13.663825+0100	Bare	Realizing settings extension <_UISceneZoomTransitionSettings> on FBSSceneSettings
+default	08:53:13.664056+0100	Bare	Realizing settings extension FBSSceneSettingsCore on FBSSceneSettings
+default	08:53:13.665489+0100	Bare	Realizing settings extension FBSSceneClientSettingsCore on FBSSceneClientSettings
+default	08:53:13.667418+0100	Bare	UIMutableApplicationSceneSettings setting counterpart class: UIApplicationSceneSettings
+default	08:53:13.667524+0100	Bare	UIMutableApplicationSceneClientSettings setting counterpart class: UIApplicationSceneClientSettings
+default	08:53:13.667623+0100	Bare	Realizing settings extension FBSSceneTransitionContextCore on FBSSceneTransitionContext
+default	08:53:13.692298+0100	Bare	Registering for test daemon availability notify post.
+default	08:53:13.692405+0100	Bare	notify_get_state check indicated test daemon not ready.
+default	08:53:13.692496+0100	Bare	notify_get_state check indicated test daemon not ready.
+default	08:53:13.692538+0100	Bare	notify_get_state check indicated test daemon not ready.
+default	08:53:13.693300+0100	Bare	Selected display: name=LCD (primary), id=1
+default	08:53:13.697808+0100	Bare	Will add backgroundTask with taskName: <private>, expirationHandler: <__NSGlobalBlock__: 0x1ff46d990>
+default	08:53:13.697825+0100	Bare	Reusing background assertion <BKSProcessAssertion: 0x105ab72f0>
+default	08:53:13.697833+0100	Bare	Incrementing reference count for background assertion <private>
+default	08:53:13.697848+0100	Bare	Created background task <private>.
+default	08:53:13.697958+0100	Bare	Deactivation reason added: 5; deactivation reasons: 1024 -> 1056; animating application lifecycle event: 1
+default	08:53:13.698471+0100	Bare	Not push traits update to screen for new style 1, <UIWindowScene: 0x105aa0bf0> (934ADC03-4EB0-4281-85E7-940189D885DC)
+default	08:53:13.698482+0100	Bare	Should send trait collection or coordinate space update, interface style 1 -> 1, <UIWindowScene: 0x105aa0bf0> (934ADC03-4EB0-4281-85E7-940189D885DC)
+default	08:53:13.699810+0100	Bare	Not push traits update to screen for new style 1, <UIWindowScene: 0x105aa0bf0> (934ADC03-4EB0-4281-85E7-940189D885DC)
+default	08:53:13.701071+0100	Bare	Initializing: <_UIHomeAffordanceSceneNotifier: 0x106e88a10>; with scene: <UIWindowScene: 0x105aa0bf0>
+default	08:53:13.701407+0100	Bare	0x106e71980 setDelegate:<0x106e71a40 _UIBacklightEnvironment> hasDelegate:YES for environment:sceneID:it.euncasino.lista-default
+default	08:53:13.701466+0100	Bare	Not push traits update to screen for new style 1, <UIWindowScene: 0x105aa0bf0> (934ADC03-4EB0-4281-85E7-940189D885DC)
+default	08:53:13.701564+0100	Bare	[0x106e891f0] Initialized with scene: <UIWindowScene: 0x105aa0bf0>; behavior: <_UIEventDeferringBehavior_iOS: 0x106d670c0>; availableForProcess: 1, systemShellManagesKeyboardFocus: 1
+default	08:53:13.702060+0100	Bare	[C:2] Alloc com.apple.backboard.hid-services.xpc
+default	08:53:13.702079+0100	Bare	[0x106d28c80] activating connection: mach=false listener=false peer=false name=(anonymous)
+default	08:53:13.702872+0100	Bare	policyStatus:<BKSHIDEventDeliveryPolicyObserver: 0x106cd2ac0; process scope; status: target> was:none
+default	08:53:13.702883+0100	Bare	BKSHIDEventObserver - connection activation
+default	08:53:13.702903+0100	Bare	Setting default evaluation strategy for UIUserInterfaceIdiomPhone to LastOneWins
+default	08:53:13.702913+0100	Bare	Scene target of keyboard event deferring environment did change: 1; scene: UIWindowScene: 0x105aa0bf0; scene identity: com.apple.frontboard.systemappservices/FBSceneManager:sceneID%3Ait.euncasino.lista-default
+default	08:53:13.702924+0100	Bare	[0x106e891f0] Scene target of event deferring environments did update: scene: 0x105aa0bf0; current systemShellManagesKeyboardFocus: 1; systemShellManagesKeyboardFocusForScene: 1; eligibleForRecordRemoval: 1;
+default	08:53:13.702939+0100	Bare	Scene became target of keyboard event deferring environment: UIWindowScene: 0x105aa0bf0; scene identity: com.apple.frontboard.systemappservices/FBSceneManager:sceneID%3Ait.euncasino.lista-default
+default	08:53:13.703255+0100	Bare	Stack[KeyWindow] 0x106e71ce0: Taking no further action for migration from LastOneWins -> SystemShellManaged as there are no scenes
+default	08:53:13.703277+0100	Bare	Setting default evaluation strategy for UIUserInterfaceIdiomPhone to SystemShellManaged
+default	08:53:13.703300+0100	Bare	Key window needs update: 0; currentKeyWindowScene: 0x0; evaluatedKeyWindowScene: 0x105aa0bf0; currentApplicationKeyWindow: 0x0; evaluatedApplicationKeyWindow: 0x0; reason: UIWindowScene: 0x105aa0bf0: Window scene became target of keyboard environment
+default	08:53:13.707751+0100	Bare	Not push traits update to screen for new style 1, <UIWindowScene: 0x105aa0bf0> (934ADC03-4EB0-4281-85E7-940189D885DC)
+default	08:53:13.772320+0100	Bare	Not push traits update to screen for new style 1, <UIWindowScene: 0x105aa0bf0> (934ADC03-4EB0-4281-85E7-940189D885DC)
+fault	08:53:13.773356+0100	Bare	`UIScene` lifecycle will soon be required. Failure to adopt will result in an assert in the future.
+default	08:53:13.773499+0100	Bare	Not push traits update to screen for new style 1, <UIWindowScene: 0x105aa0bf0> (934ADC03-4EB0-4281-85E7-940189D885DC)
+default	08:53:13.775271+0100	Bare	sceneOfRecord: sceneID: sceneID:it.euncasino.lista-default  persistentID: 934ADC03-4EB0-4281-85E7-940189D885DC
+default	08:53:13.775331+0100	Bare	Ignoring already applied deactivation reason: 5; deactivation reasons: 1056
+default	08:53:13.775368+0100	Bare	Deactivation reason added: 11; deactivation reasons: 1056 -> 3104; animating application lifecycle event: 1
+default	08:53:13.776051+0100	Bare	startConnection
+default	08:53:13.777076+0100	Bare	[0x106d297c0] activating connection: mach=true listener=false peer=false name=com.apple.UIKit.KeyboardManagement.hosted
+default	08:53:13.777611+0100	Bare	You've implemented -[<UIApplicationDelegate> application:performFetchWithCompletionHandler:], but you still need to add "fetch" to the list of your supported UIBackgroundModes in your Info.plist.
+default	08:53:13.777632+0100	Bare	You've implemented -[<UIApplicationDelegate> application:didReceiveRemoteNotification:fetchCompletionHandler:], but you still need to add "remote-notification" to the list of your supported UIBackgroundModes in your Info.plist.
+default	08:53:13.789084+0100	Bare	networkd_settings_read_from_file initialized networkd settings by reading plist directly
+default	08:53:13.789309+0100	Bare	networkd_settings_read_from_file initialized networkd settings by reading plist directly
+default	08:53:13.793371+0100	Bare	Task <E3B477A1-77F6-4BEC-BC4F-1357BA43042D>.<1> resuming, timeouts(10.0, 604800.0) qos(0x21) voucher(<private>) activity(00000000-0000-0000-0000-000000000000)
+default	08:53:13.794897+0100	Bare	-[SOConfigurationClient init]  on <private>
+default	08:53:13.795037+0100	Bare	[0x106d2a1c0] activating connection: mach=true listener=false peer=false name=com.apple.AppSSO.service-xpc
+default	08:53:13.795075+0100	Bare	<SOServiceConnection: 0x106d65ec0>: new XPC connection
+default	08:53:13.805397+0100	Bare	System Keychain Always Supported set via feature flag to disabled
+default	08:53:13.805409+0100	Bare	[0x106d2a440] activating connection: mach=true listener=false peer=false name=com.apple.trustd
+default	08:53:13.805691+0100	Bare	Requesting container lookup; class = 13, identifier = <private>, group_identifier = <private>, create = 1, temp = 0, euid = 501, uid = 501
+default	08:53:13.806859+0100	Bare	_container_query_get_result_at_index: success
+default	08:53:13.806966+0100	Bare	container_system_group_path_for_identifier: success
+default	08:53:13.811371+0100	Bare	Initializing NSHTTPCookieStorage singleton
+default	08:53:13.811378+0100	Bare	Initializing CFHTTPCookieStorage singleton
+default	08:53:13.811395+0100	Bare	Creating default cookie storage with default identifier
+default	08:53:13.811885+0100	Bare	Initializing AlternativeServices Storage singleton
+default	08:53:13.812549+0100	Bare	kExcludedFromBackupXattrName set on path: <private>
+default	08:53:13.814194+0100	Bare	Garbage collection for alternative services
+default	08:53:13.817121+0100	Bare	Connection 1: starting, TC(0x0)
+default	08:53:13.817156+0100	Bare	[C1 A6E3B128-423A-41DE-8741-44F1FBB85E13 IPv4#bef4f779:8081 tcp, url hash: a29ec0a2, definite, attribution: developer, context: com.apple.CFNetwork.NSURLSession.{7EA4A09F-80E2-46BB-A745-C5D023C371D5}{(null)}{Y}{2}{0x0} (private), proc: 344515AD-26D4-35BB-AF92-595CB257CB29, delegated upid: 0] start
+default	08:53:13.817378+0100	Bare	[C1 IPv4#bef4f779:8081 initial parent-flow ((null))] event: path:start @0.000s
+default	08:53:13.817807+0100	Bare	[C1 IPv4#bef4f779:8081 waiting parent-flow (satisfied (Path is satisfied), interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied @0.000s, uuid: 53E34479-4EF7-40E3-B7E6-549DB55A3064
+default	08:53:13.817838+0100	Bare	[C1 IPv4#bef4f779:8081 in_progress channel-flow (satisfied (Path is satisfied), interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:start_nexus @0.000s
+default	08:53:13.817850+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C1] reporting state preparing
+default	08:53:13.818546+0100	Bare	[C1 IPv4#bef4f779:8081 in_progress channel-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:receive_nexus @0.001s
+default	08:53:13.818640+0100	Bare	user_tcp_init_all_block_invoke g_tcp_nw_assert_context is false value -1
+default	08:53:13.819176+0100	Bare	[C1 IPv4#bef4f779:8081 in_progress channel-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:start_connect @0.001s
+default	08:53:13.819300+0100	Bare	tcp_output [C1:2] flags=[SEC] seq=3571440477, ack=0, win=65535 state=SYN_SENT rcv_nxt=0, snd_una=3571440477
+default	08:53:13.819333+0100	Bare	Task <E3B477A1-77F6-4BEC-BC4F-1357BA43042D>.<1> setting up Connection 1
+default	08:53:13.903935+0100	Bare	tcp_input [C1:2] flags=[S.E] seq=792489176, ack=3571440478, win=65535 state=SYN_SENT rcv_nxt=0, snd_una=3571440477
+default	08:53:13.903985+0100	Bare	nw_flow_connected [C1 IPv4#bef4f779:8081 in_progress channel-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] Transport protocol connected (tcp)
+default	08:53:13.904009+0100	Bare	[C1 IPv4#bef4f779:8081 in_progress channel-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:finish_transport @0.086s
+default	08:53:13.904019+0100	Bare	nw_flow_connected [C1 IPv4#bef4f779:8081 in_progress channel-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] Output protocol connected (CFNetworkConnection-2444025323)
+default	08:53:13.904397+0100	Bare	[C1 IPv4#bef4f779:8081 ready channel-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:finish_connect @0.087s
+default	08:53:13.904501+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C1] reporting state ready
+default	08:53:13.904520+0100	Bare	[C1 IPv4#bef4f779:8081 ready channel-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:changed_viability @0.087s
+default	08:53:13.904541+0100	Bare	nw_connection_send_viability_changed_on_nw_queue [C1] viability_changed_handler(true)
+default	08:53:13.904548+0100	Bare	Connection 1: connected successfully
+default	08:53:13.904597+0100	Bare	Connection 1: ready C(N) E(N)
+default	08:53:13.904634+0100	Bare	Task <E3B477A1-77F6-4BEC-BC4F-1357BA43042D>.<1> now using Connection 1
+default	08:53:13.904649+0100	Bare	Connection 1: received viability advisory(Y)
+default	08:53:13.905086+0100	Bare	Task <E3B477A1-77F6-4BEC-BC4F-1357BA43042D>.<1> sent request, body N 0
+default	08:53:13.911520+0100	Bare	Task <E3B477A1-77F6-4BEC-BC4F-1357BA43042D>.<1> received response, status 200 content C
+default	08:53:13.911611+0100	Bare	Task <E3B477A1-77F6-4BEC-BC4F-1357BA43042D>.<1> response ended
+default	08:53:13.911623+0100	Bare	Task <E3B477A1-77F6-4BEC-BC4F-1357BA43042D>.<1> done using Connection 1
+default	08:53:13.911673+0100	Bare	[C1] event: client:connection_idle @0.094s
+default	08:53:13.911793+0100	Bare	nw_protocol_tcp_notify [C1:2] nw_protocol_notification_type_connection_idle is true
+default	08:53:13.911828+0100	Bare	nw_protocol_tcp_set_connection_idle [C1:2] os_nexus_flow_set_connection_idle returned 0
+default	08:53:13.911850+0100	Bare	Task <E3B477A1-77F6-4BEC-BC4F-1357BA43042D>.<1> summary for task success {transaction_duration_ms=112, response_status=200, connection=1, protocol="http/1.1", domain_lookup_duration_ms=0, connect_duration_ms=86, secure_connection_duration_ms=0, private_relay=false, request_start_ms=105, request_duration_ms=0, response_start_ms=112, response_duration_ms=0, request_bytes=207, request_throughput_kbps=5049, response_bytes=397, response_throughput_kbps=14308, cache_hit=false}
+default	08:53:13.911890+0100	Bare	[C1] event: client:connection_idle @0.094s
+default	08:53:13.911941+0100	Bare	nw_protocol_tcp_notify [C1:2] nw_protocol_notification_type_connection_idle is true
+default	08:53:13.911950+0100	Bare	nw_protocol_tcp_set_connection_idle [C1:2] os_nexus_flow_set_connection_idle returned 0
+default	08:53:13.912416+0100	Bare	[0x106d2a800] activating connection: mach=true listener=false peer=false name=com.apple.analyticsd
+default	08:53:13.912842+0100	Bare	Task <E3B477A1-77F6-4BEC-BC4F-1357BA43042D>.<1> finished successfully
+default	08:53:13.936408+0100	Bare	Task <60BB81DC-C3ED-463E-8956-FE7EA10DA784>.<1> resuming, timeouts(60.0, 604800.0) qos(0x21) voucher((null)) activity(00000000-0000-0000-0000-000000000000)
+default	08:53:13.938662+0100	Bare	Connection 2: starting, TC(0x0)
+default	08:53:13.938673+0100	Bare	[C2 59B966A6-662E-4A7F-BFFA-42687FF5E8F3 IPv4#bef4f779:8081 tcp, url hash: cfff0b89, definite, attribution: developer, context: com.apple.CFNetwork.NSURLSession.{5346D214-E578-4FE9-8F7C-A8FA34C02417}{(null)}{Y}{2}{0x0} (private), proc: 344515AD-26D4-35BB-AF92-595CB257CB29, delegated upid: 0] start
+default	08:53:13.938699+0100	Bare	[C2 IPv4#bef4f779:8081 initial parent-flow ((null))] event: path:start @0.000s
+default	08:53:13.938966+0100	Bare	[C2 IPv4#bef4f779:8081 waiting parent-flow (satisfied (Path is satisfied), interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied @0.000s, uuid: 330A28D1-D402-4E3C-BCE4-45B753B5E77A
+default	08:53:13.939009+0100	Bare	[C2 IPv4#bef4f779:8081 in_progress channel-flow (satisfied (Path is satisfied), interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:start_nexus @0.000s
+default	08:53:13.939018+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C2] reporting state preparing
+default	08:53:13.939320+0100	Bare	[C2 IPv4#bef4f779:8081 in_progress channel-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:receive_nexus @0.000s
+default	08:53:13.939446+0100	Bare	[C2 IPv4#bef4f779:8081 in_progress channel-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:start_connect @0.000s
+default	08:53:13.939527+0100	Bare	tcp_output [C2:2] flags=[SEC] seq=2358496055, ack=0, win=65535 state=SYN_SENT rcv_nxt=0, snd_una=2358496055
+default	08:53:13.939563+0100	Bare	Task <60BB81DC-C3ED-463E-8956-FE7EA10DA784>.<1> setting up Connection 2
+default	08:53:13.942564+0100	Bare	tcp_input [C2:2] flags=[S.E] seq=247475252, ack=2358496056, win=65535 state=SYN_SENT rcv_nxt=0, snd_una=2358496055
+default	08:53:13.942580+0100	Bare	nw_flow_connected [C2 IPv4#bef4f779:8081 in_progress channel-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] Transport protocol connected (tcp)
+default	08:53:13.942603+0100	Bare	[C2 IPv4#bef4f779:8081 in_progress channel-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:finish_transport @0.003s
+default	08:53:13.942616+0100	Bare	nw_flow_connected [C2 IPv4#bef4f779:8081 in_progress channel-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] Output protocol connected (CFNetworkConnection-2444025323)
+default	08:53:13.942676+0100	Bare	[C2 IPv4#bef4f779:8081 ready channel-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:finish_connect @0.003s
+default	08:53:13.942800+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C2] reporting state ready
+default	08:53:13.942823+0100	Bare	[C2 IPv4#bef4f779:8081 ready channel-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:changed_viability @0.003s
+default	08:53:13.942832+0100	Bare	nw_connection_send_viability_changed_on_nw_queue [C2] viability_changed_handler(true)
+default	08:53:13.942841+0100	Bare	Connection 2: connected successfully
+default	08:53:13.942848+0100	Bare	Connection 2: ready C(N) E(N)
+default	08:53:13.942898+0100	Bare	Task <60BB81DC-C3ED-463E-8956-FE7EA10DA784>.<1> now using Connection 2
+default	08:53:13.942914+0100	Bare	Connection 2: received viability advisory(Y)
+default	08:53:13.942944+0100	Bare	Task <60BB81DC-C3ED-463E-8956-FE7EA10DA784>.<1> sent request, body N 0
+default	08:53:13.948446+0100	Bare	<UIWindowScene: 0x105aa0bf0> (934ADC03-4EB0-4281-85E7-940189D885DC) Scene updated orientation preferences: none -> ( Pu )
+default	08:53:13.948870+0100	Bare	Key window API is scene-level: YES
+default	08:53:13.948885+0100	Bare	UIWindowScene: 0x105aa0bf0: Window became key in scene: UIWindow: 0x106d48000; contextId: 0xFFDF7B02: reason: UIWindowScene: 0x105aa0bf0: Window requested to become key in scene: 0x106d48000
+default	08:53:13.948896+0100	Bare	Key window needs update: 1; currentKeyWindowScene: 0x0; evaluatedKeyWindowScene: 0x105aa0bf0; currentApplicationKeyWindow: 0x0; evaluatedApplicationKeyWindow: 0x106d48000; reason: UIWindowScene: 0x105aa0bf0: Window requested to become key in scene: 0x106d48000
+default	08:53:13.948909+0100	Bare	Window did become application key: UIWindow: 0x106d48000; contextId: 0xFFDF7B02; scene identity: com.apple.frontboard.systemappservices/FBSceneManager:sceneID%3Ait.euncasino.lista-default
+default	08:53:13.948918+0100	Bare	[0x106e891f0] Begin local event deferring requested for token: 0x106cd2100; environments: 1; reason: UIWindowScene: 0x105aa0bf0: Begin event deferring in keyboardFocus for window: 0x106d48000
+default	08:53:13.949603+0100	Bare	BKSHIDEventDeliveryManager - connection activation
+default	08:53:13.950217+0100	Bare	Deactivation reason removed: 10; deactivation reasons: 3104 -> 2080; animating application lifecycle event: 1
+default	08:53:13.951406+0100	Bare	Deactivation reason added: 12; deactivation reasons: 2080 -> 6176; animating application lifecycle event: 1
+default	08:53:13.951416+0100	Bare	Deactivation reason removed: 11; deactivation reasons: 6176 -> 4128; animating application lifecycle event: 1
+default	08:53:13.951638+0100	Bare	Realizing settings extension <_UISceneIntelligenceSupportSettings> on FBSSceneSettings
+default	08:53:13.953691+0100	Bare	establishing connection to agent
+default	08:53:13.953731+0100	Bare	[0x106de20d0] Session created.
+default	08:53:13.953744+0100	Bare	[0x106de20d0] Session created from connection [0x106ffde00]
+default	08:53:13.953754+0100	Bare	[0x106ffde00] activating connection: mach=true listener=false peer=false name=com.apple.uiintelligencesupport.agent
+default	08:53:13.953769+0100	Bare	[0x106de20d0] Session activated
+default	08:53:13.954235+0100	Bare	Not push traits update to screen for new style 1, <UIWindowScene: 0x105aa0bf0> (934ADC03-4EB0-4281-85E7-940189D885DC)
+default	08:53:13.954940+0100	Bare	policyStatus:<BKSHIDEventDeliveryPolicyObserver: 0x106cd2ac0; token: com.apple.frontboard.systemappservices/FBSceneManager:sceneID%3Ait.euncasino.lista-default; status: ancestor> was:target
+default	08:53:13.956646+0100	Bare	Create activity from XPC object <nw_activity 50:1 [310C78F8-6306-4908-B708-69AC8C37D641] (reporting strategy default)>
+default	08:53:13.956659+0100	Bare	Create activity from XPC object <nw_activity 50:2 [22576BBD-4FA5-4718-BAA2-06C29A8DD4B4] (reporting strategy default)>
+default	08:53:13.956675+0100	Bare	Set activity <nw_activity 50:1 [310C78F8-6306-4908-B708-69AC8C37D641] (reporting strategy default)> as the global parent
+default	08:53:13.956830+0100	Bare	AggregateDictionary is deprecated and has been removed. Please migrate to Core Analytics.
+default	08:53:13.956861+0100	Bare	Ending background task with UIBackgroundTaskIdentifier: 1
+default	08:53:13.956876+0100	Bare	Ending task with identifier 1 and description: <private>, _expireHandler: (null)
+default	08:53:13.956902+0100	Bare	Decrementing reference count for assertion <private> (used by background task with identifier 1: <private>)
+default	08:53:13.957245+0100	Bare	Event Timing Profile for Touch: ok, path="/System/Library/EventTimingProfiles/D53g.Touch.plist"
+default	08:53:13.957346+0100	Bare	Event Timing Profile for Pencil: not found, path="/System/Library/EventTimingProfiles/D53g.Pencil.plist"
+default	08:53:13.957357+0100	Bare	Target list changed: <CADisplay:LCD primary>
+default	08:53:13.957537+0100	Bare	sceneOfRecord: sceneID: sceneID:it.euncasino.lista-default  persistentID: 934ADC03-4EB0-4281-85E7-940189D885DC
+default	08:53:13.957717+0100	Bare	Not push traits update to screen for new style 1, <UIWindowScene: 0x105aa0bf0> (934ADC03-4EB0-4281-85E7-940189D885DC)
+default	08:53:13.957792+0100	Bare	[0x106e891f0] Scene target of event deferring environments did update: scene: 0x105aa0bf0; current systemShellManagesKeyboardFocus: 1; systemShellManagesKeyboardFocusForScene: 1; eligibleForRecordRemoval: 1;
+default	08:53:13.957871+0100	Bare	Scene became target of keyboard event deferring environment: UIWindowScene: 0x105aa0bf0; scene identity: com.apple.frontboard.systemappservices/FBSceneManager:sceneID%3Ait.euncasino.lista-default
+default	08:53:13.957906+0100	Bare	sceneOfRecord: sceneID: sceneID:it.euncasino.lista-default  persistentID: 934ADC03-4EB0-4281-85E7-940189D885DC
+default	08:53:13.958097+0100	Bare	Not push traits update to screen for new style 1, <UIWindowScene: 0x105aa0bf0> (934ADC03-4EB0-4281-85E7-940189D885DC)
+default	08:53:13.958153+0100	Bare	sceneOfRecord: sceneID: sceneID:it.euncasino.lista-default  persistentID: 934ADC03-4EB0-4281-85E7-940189D885DC
+default	08:53:13.958163+0100	Bare	Deactivation reason removed: 12; deactivation reasons: 4128 -> 32; animating application lifecycle event: 1
+default	08:53:13.958169+0100	Bare	Send setDeactivating: N (-DeactivationReason:SuspendedEventsOnly)
+default	08:53:13.958307+0100	Bare	Deactivation reason removed: 5; deactivation reasons: 32 -> 0; animating application lifecycle event: 0
+default	08:53:13.958348+0100	Bare	Creating hang event with BundleID: it.euncasino.lista
+default	08:53:13.958379+0100	Bare	Updating event->rollingFGTimestamp from INVALID_FOREGROUND_TIMESTAMP to 276027286167
+default	08:53:13.958420+0100	Bare	Updating configuration of monitor M858-1
+default	08:53:13.958911+0100	Bare	[0x106ffd040] activating connection: mach=true listener=false peer=false name=com.apple.hangtracermonitor
+default	08:53:13.958925+0100	Bare	Creating side-channel connection to com.apple.runningboard
+default	08:53:13.958934+0100	Bare	[0x106ffd2c0] activating connection: mach=true listener=false peer=false name=com.apple.runningboard
+default	08:53:13.959364+0100	Bare	Skip setting user action callback for 3rd party apps
+default	08:53:13.959383+0100	Bare	[0x106ffd040] invalidated because the current process cancelled the connection by calling xpc_connection_cancel()
+default	08:53:13.959501+0100	Bare	startConnection
+default	08:53:13.959511+0100	Bare	handleKeyboardChange: set currentKeyboard:N (wasKeyboard:N)
+default	08:53:13.959922+0100	Bare	Hit the server for a process handle ff91fbd0000035a that resolved to: [app<it.euncasino.lista(FEEDEEEE-DDDD-CCCC-BBBB-0000000001F5)>:858]
+default	08:53:13.960064+0100	Bare	Received state update for 858 (app<it.euncasino.lista(FEEDEEEE-DDDD-CCCC-BBBB-0000000001F5)>, unknown-NotVisible
+default	08:53:13.960517+0100	Bare	forceReloadInputViews
+default	08:53:13.960530+0100	Bare	Reloading input views for key-window scene responder: <(null): 0x0; > force:Y
+default	08:53:13.960695+0100	Bare	isWritingToolsHandlingKeyboardTracking:Y (WT ready:Y, Arbiter ready:Y)
+default	08:53:13.962343+0100	Bare	sceneOfRecord: sceneID: sceneID:it.euncasino.lista-default  persistentID: 934ADC03-4EB0-4281-85E7-940189D885DC
+default	08:53:13.964174+0100	Bare	Realizing settings extension SBUISecureRenderingSettingsExtension on FBSSceneSettings
+default	08:53:13.965734+0100	Bare	Not push traits update to screen for new style 1, <UIWindowScene: 0x105aa0bf0> (934ADC03-4EB0-4281-85E7-940189D885DC)
+default	08:53:13.965743+0100	Bare	Received state update for 858 (app<it.euncasino.lista(FEEDEEEE-DDDD-CCCC-BBBB-0000000001F5)>, unknown-NotVisible
+default	08:53:13.965805+0100	Bare	sceneOfRecord: sceneID: sceneID:it.euncasino.lista-default  persistentID: 934ADC03-4EB0-4281-85E7-940189D885DC
+default	08:53:13.978132+0100	Bare	Task <60BB81DC-C3ED-463E-8956-FE7EA10DA784>.<1> received response, status 200 content C
+default	08:53:13.991113+0100	Bare	[0x106ffd900] activating connection: mach=true listener=false peer=false name=com.apple.fontservicesd
+default	08:53:14.047405+0100	Bare	<nw_activity 50:1 [310C78F8-6306-4908-B708-69AC8C37D641] (global parent) (reporting strategy default) complete (reason success)> complete with reason 2 (success), duration 1127ms
+default	08:53:14.047485+0100	Bare	<nw_activity 50:2 [22576BBD-4FA5-4718-BAA2-06C29A8DD4B4] (reporting strategy default) complete (reason success)> complete with reason 2 (success), duration 1127ms
+default	08:53:14.047519+0100	Bare	Unsetting the global parent activity <nw_activity 50:1 [310C78F8-6306-4908-B708-69AC8C37D641] (global parent) (reporting strategy default) complete (reason success)>
+default	08:53:14.047533+0100	Bare	Unset the global parent activity
+default	08:53:14.206589+0100	Bare	Smart invert app status cached: (null)
+default	08:53:14.210218+0100	Bare	Ending background task with UIBackgroundTaskIdentifier: 2
+default	08:53:14.210362+0100	Bare	Ending task with identifier 2 and description: <private>, _expireHandler: <__NSGlobalBlock__: 0x1ff46d990>
+default	08:53:14.210452+0100	Bare	Decrementing reference count for assertion <private> (used by background task with identifier 2: <private>)
+default	08:53:14.210470+0100	Bare	Will invalidate assertion: <BKSProcessAssertion: 0x105ab72f0> for task identifier: 2
+default	08:53:14.818090+0100	Bare	Received state update for 858 (app<it.euncasino.lista(FEEDEEEE-DDDD-CCCC-BBBB-0000000001F5)>, unknown-NotVisible
+default	08:53:15.655884+0100	Bare	Task <60BB81DC-C3ED-463E-8956-FE7EA10DA784>.<1> response ended
+default	08:53:15.656056+0100	Bare	Task <60BB81DC-C3ED-463E-8956-FE7EA10DA784>.<1> done using Connection 2
+default	08:53:15.656780+0100	Bare	[C2] event: client:connection_idle @1.717s
+default	08:53:15.656846+0100	Bare	nw_protocol_tcp_notify [C2:2] nw_protocol_notification_type_connection_idle is true
+default	08:53:15.656863+0100	Bare	nw_protocol_tcp_set_connection_idle [C2:2] os_nexus_flow_set_connection_idle returned 0
+default	08:53:15.657138+0100	Bare	[C2] event: client:connection_idle @1.717s
+default	08:53:15.657334+0100	Bare	nw_protocol_tcp_notify [C2:2] nw_protocol_notification_type_connection_idle is true
+default	08:53:15.657352+0100	Bare	nw_protocol_tcp_set_connection_idle [C2:2] os_nexus_flow_set_connection_idle returned 0
+default	08:53:15.662410+0100	Bare	Task <D4A09925-7370-4483-942F-FA0F4D4114A9>.<2> resuming, timeouts(10.0, 604800.0) qos(0x19) voucher((null)) activity(00000000-0000-0000-0000-000000000000)
+default	08:53:15.663911+0100	Bare	[C1] event: client:connection_idle @1.846s
+default	08:53:15.663952+0100	Bare	nw_protocol_tcp_notify [C1:2] nw_protocol_notification_type_connection_idle is true
+default	08:53:15.664133+0100	Bare	nw_protocol_tcp_set_connection_idle [C1:2] os_nexus_flow_set_connection_idle returned 0
+default	08:53:15.664156+0100	Bare	Task <D4A09925-7370-4483-942F-FA0F4D4114A9>.<2> now using Connection 1
+default	08:53:15.664199+0100	Bare	[C1] event: client:connection_reused @1.846s
+default	08:53:15.664233+0100	Bare	nw_protocol_tcp_notify [C1:2] nw_protocol_notification_type_connection_idle is false
+default	08:53:15.664244+0100	Bare	nw_protocol_tcp_set_connection_idle [C1:2] os_nexus_flow_set_connection_idle returned 0
+default	08:53:15.664546+0100	Bare	Task <D4A09925-7370-4483-942F-FA0F4D4114A9>.<2> sent request, body N 0
+default	08:53:15.668896+0100	Bare	Task <D4A09925-7370-4483-942F-FA0F4D4114A9>.<2> received response, status 200 content C
+default	08:53:15.669193+0100	Bare	Task <D4A09925-7370-4483-942F-FA0F4D4114A9>.<2> response ended
+default	08:53:15.669269+0100	Bare	Task <D4A09925-7370-4483-942F-FA0F4D4114A9>.<2> done using Connection 1
+default	08:53:15.669317+0100	Bare	[C1] event: client:connection_idle @1.852s
+default	08:53:15.669364+0100	Bare	nw_protocol_tcp_notify [C1:2] nw_protocol_notification_type_connection_idle is true
+default	08:53:15.669379+0100	Bare	nw_protocol_tcp_set_connection_idle [C1:2] os_nexus_flow_set_connection_idle returned 0
+default	08:53:15.669418+0100	Bare	Task <D4A09925-7370-4483-942F-FA0F4D4114A9>.<2> summary for task success {transaction_duration_ms=6, response_status=200, connection=1, reused=1, reused_after_ms=0, request_start_ms=1, request_duration_ms=0, response_start_ms=5, response_duration_ms=0, request_bytes=207, request_throughput_kbps=10620, response_bytes=397, response_throughput_kbps=6657, cache_hit=false}
+default	08:53:15.669440+0100	Bare	[C1] event: client:connection_idle @1.852s
+default	08:53:15.669475+0100	Bare	nw_protocol_tcp_notify [C1:2] nw_protocol_notification_type_connection_idle is true
+default	08:53:15.669540+0100	Bare	nw_protocol_tcp_set_connection_idle [C1:2] os_nexus_flow_set_connection_idle returned 0
+default	08:53:15.669606+0100	Bare	Task <D4A09925-7370-4483-942F-FA0F4D4114A9>.<2> finished successfully
+default	08:53:15.679143+0100	Bare	TCP Conn [3:0x106e370c0] using empty proxy configuration
+default	08:53:15.679651+0100	Bare	Stream client bypassing proxies on TCP Conn [3:0x106e370c0]
+default	08:53:15.679663+0100	Bare	TCP Conn 0x106e370c0 started
+default	08:53:15.679946+0100	Bare	[C3 16C730DF-C34C-486C-A5E2-12633A6B5C19 IPv4#bef4f779:8081 tcp, definite, attribution: developer, context: Default Network Context (private), proc: 344515AD-26D4-35BB-AF92-595CB257CB29, delegated upid: 0, no proxy, prohibit fallback, allow socket access] start
+default	08:53:15.680030+0100	Bare	[C3 IPv4#bef4f779:8081 initial parent-flow ((null))] event: path:start @0.000s
+default	08:53:15.680741+0100	Bare	[C3 IPv4#bef4f779:8081 waiting parent-flow (satisfied (Path is satisfied), interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied @0.000s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	08:53:15.681644+0100	Bare	nw_socket_initialize_socket [C3:1] Not guarding fd 11
+default	08:53:15.681684+0100	Bare	[C3 IPv4#bef4f779:8081 in_progress socket-flow (satisfied (Path is satisfied), interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:start_connect @0.001s
+default	08:53:15.681693+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C3] reporting state preparing
+default	08:53:15.681799+0100	Bare	[0x106ffd540] activating connection: mach=true listener=false peer=false name=com.apple.lsd.advertisingidentifiers
+default	08:53:15.684916+0100	Bare	TCP Conn [4:0x106e37700] using empty proxy configuration
+default	08:53:15.684933+0100	Bare	Stream client bypassing proxies on TCP Conn [4:0x106e37700]
+default	08:53:15.684943+0100	Bare	TCP Conn 0x106e37700 started
+default	08:53:15.685142+0100	Bare	[C4 D07986A5-4D89-4470-A5FF-F7B17019291A IPv4#bef4f779:8081 tcp, definite, attribution: developer, context: Default Network Context (private), proc: 344515AD-26D4-35BB-AF92-595CB257CB29, delegated upid: 0, no proxy, prohibit fallback, allow socket access] start
+default	08:53:15.685259+0100	Bare	[C4 IPv4#bef4f779:8081 initial parent-flow ((null))] event: path:start @0.000s
+default	08:53:15.685434+0100	Bare	[C4 IPv4#bef4f779:8081 waiting parent-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied @0.000s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	08:53:15.685647+0100	Bare	nw_socket_initialize_socket [C4:1] Not guarding fd 12
+default	08:53:15.685688+0100	Bare	[C4 IPv4#bef4f779:8081 in_progress socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:start_connect @0.000s
+default	08:53:15.685700+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C4] reporting state preparing
+default	08:53:15.686072+0100	Bare	nw_socket_handle_socket_event [C3:1] Socket received CONNECTED event
+default	08:53:15.686744+0100	Bare	nw_flow_connected [C3 IPv4#bef4f779:8081 in_progress socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] Output protocol connected (socket)
+default	08:53:15.686800+0100	Bare	[C3 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:finish_connect @0.006s
+default	08:53:15.686856+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C3] reporting state ready
+default	08:53:15.686866+0100	Bare	[C3 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:changed_viability @0.007s
+default	08:53:15.687149+0100	Bare	tcp_output [C2:2] flags=[F.] seq=2358496467, ack=255600489, win=49584 state=FIN_WAIT_1 rcv_nxt=255600489, snd_una=2358496467
+default	08:53:15.687175+0100	Bare	Connection 2: cleaning up
+default	08:53:15.687226+0100	Bare	[C2 59B966A6-662E-4A7F-BFFA-42687FF5E8F3 IPv4#bef4f779:8081 tcp, url hash: cfff0b89, definite, attribution: developer] cancel
+default	08:53:15.687511+0100	Bare	[C2 59B966A6-662E-4A7F-BFFA-42687FF5E8F3 IPv4#bef4f779:8081 tcp, url hash: cfff0b89, definite, attribution: developer] cancelled
+	[C2 330A28D1-D402-4E3C-BCE4-45B753B5E77A 192.168.8.147:58855<->IPv4#bef4f779:8081]
+	Connected Path: satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good
+	Privacy Stance: Not Eligible
+	Duration: 1.748s, TCP @0.000s took 0.003s
+	bytes in/out: 8125236/411, packets in/out: 708/277, rtt: 0.004s, retransmitted bytes: 0, out-of-order bytes: 0
+	ecn packets sent/acked/marked/lost: 1/1/0/0
+default	08:53:15.687596+0100	Bare	nw_protocol_tcp_log_summary [C2:2] 
+	[ECC8EFBF-F056-49D9-AB2D-8D910B096FB4 <private>:58855<-><private>:8081]
+	Init: 1, Conn_Time: 3.112ms, SYNs: 1, WR_T: 0/0, RD_T: 0/0, TFO: 0/0/0, ECN: 0/1/1, Accurate ECN (client/server): Disabled/Disabled, TS: 1, TSO: 0
+	rtt_cache: none, rtt_upd: 2, rtt: 4.000ms, rtt_var: 1.500ms rtt_nc: 4.000ms, rtt_var_nc: 1.500ms base rtt: 3ms
+	ACKs-compressed: 8, ACKs delayed: 669 delayed ACKs sent: 0
+default	08:53:15.687737+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C2] reporting state cancelled
+default	08:53:15.690079+0100	Bare	TCP Conn 0x106e370c0 event 1. err: 0
+default	08:53:15.690107+0100	Bare	TCP Conn 0x106e370c0 complete. fd: 13, err: 0
+default	08:53:15.690321+0100	Bare	nw_socket_handle_socket_event [C4:1] Socket received CONNECTED event
+default	08:53:15.690390+0100	Bare	nw_flow_connected [C4 IPv4#bef4f779:8081 in_progress socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] Output protocol connected (socket)
+default	08:53:15.690597+0100	Bare	[C4 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:finish_connect @0.005s
+default	08:53:15.690646+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C4] reporting state ready
+default	08:53:15.690676+0100	Bare	[C4 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:changed_viability @0.005s
+default	08:53:15.690799+0100	Bare	TCP Conn 0x106e37700 event 1. err: 0
+default	08:53:15.690834+0100	Bare	TCP Conn 0x106e37700 complete. fd: 16, err: 0
+default	08:53:15.691366+0100	Bare	tcp_input [C2:2] flags=[F.] seq=255600489, ack=2358496468, win=2053 state=FIN_WAIT_2 rcv_nxt=255600489, snd_una=2358496468
+default	08:53:15.837474+0100	Bare	TCP Conn [5:0x106e377a0] using empty proxy configuration
+default	08:53:15.837487+0100	Bare	Stream client bypassing proxies on TCP Conn [5:0x106e377a0]
+default	08:53:15.837497+0100	Bare	TCP Conn 0x106e377a0 started
+default	08:53:15.837603+0100	Bare	[C5 A528306F-75F4-442C-8481-3EF37F0FCE7F IPv4#bef4f779:8097 tcp, definite, attribution: developer, context: Default Network Context (private), proc: 344515AD-26D4-35BB-AF92-595CB257CB29, delegated upid: 0, no proxy, prohibit fallback, allow socket access] start
+default	08:53:15.837651+0100	Bare	[C5 IPv4#bef4f779:8097 initial parent-flow ((null))] event: path:start @0.000s
+default	08:53:15.837815+0100	Bare	[C5 IPv4#bef4f779:8097 waiting parent-flow (satisfied (Path is satisfied), interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied @0.000s, uuid: 1953BF1B-CEB9-450F-94EC-2FB2CAB1B031
+default	08:53:15.837955+0100	Bare	nw_socket_initialize_socket [C5:1] Not guarding fd 17
+default	08:53:15.837989+0100	Bare	[C5 IPv4#bef4f779:8097 in_progress socket-flow (satisfied (Path is satisfied), interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:start_connect @0.000s
+default	08:53:15.837999+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C5] reporting state preparing
+default	08:53:15.922867+0100	Bare	TCP Conn [6:0x106e378e0] using empty proxy configuration
+default	08:53:15.922877+0100	Bare	Stream client bypassing proxies on TCP Conn [6:0x106e378e0]
+default	08:53:15.922884+0100	Bare	TCP Conn 0x106e378e0 started
+default	08:53:15.922936+0100	Bare	[C6 ABBD8D10-4D15-4460-9B76-54649D053122 IPv4#bef4f779:8081 tcp, definite, attribution: developer, context: Default Network Context (private), proc: 344515AD-26D4-35BB-AF92-595CB257CB29, delegated upid: 0, no proxy, prohibit fallback, allow socket access] start
+default	08:53:15.922985+0100	Bare	[C6 IPv4#bef4f779:8081 initial parent-flow ((null))] event: path:start @0.000s
+default	08:53:15.923029+0100	Bare	[C6 IPv4#bef4f779:8081 waiting parent-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied @0.000s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	08:53:15.923099+0100	Bare	nw_socket_initialize_socket [C6:1] Not guarding fd 18
+default	08:53:15.923136+0100	Bare	[C6 IPv4#bef4f779:8081 in_progress socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:start_connect @0.000s
+default	08:53:15.923146+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C6] reporting state preparing
+default	08:53:15.926704+0100	Bare	nw_socket_handle_socket_event [C6:1] Socket received CONNECTED event
+default	08:53:15.926726+0100	Bare	nw_flow_connected [C6 IPv4#bef4f779:8081 in_progress socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] Output protocol connected (socket)
+default	08:53:15.926772+0100	Bare	[C6 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:finish_connect @0.003s
+default	08:53:15.926871+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C6] reporting state ready
+default	08:53:15.926969+0100	Bare	TCP Conn 0x106e378e0 event 1. err: 0
+default	08:53:15.926980+0100	Bare	[C6 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:changed_viability @0.003s
+default	08:53:15.926996+0100	Bare	TCP Conn 0x106e378e0 complete. fd: 19, err: 0
+default	08:53:16.006349+0100	Bare	TCP Conn [7:0x106e37ac0] using empty proxy configuration
+default	08:53:16.006357+0100	Bare	Stream client bypassing proxies on TCP Conn [7:0x106e37ac0]
+default	08:53:16.006366+0100	Bare	TCP Conn 0x106e37ac0 started
+default	08:53:16.006414+0100	Bare	[C7 4610810A-D38C-48C4-B112-05B80FE62902 IPv4#bef4f779:8081 tcp, definite, attribution: developer, context: Default Network Context (private), proc: 344515AD-26D4-35BB-AF92-595CB257CB29, delegated upid: 0, no proxy, prohibit fallback, allow socket access] start
+default	08:53:16.006445+0100	Bare	[C7 IPv4#bef4f779:8081 initial parent-flow ((null))] event: path:start @0.000s
+default	08:53:16.006484+0100	Bare	[C7 IPv4#bef4f779:8081 waiting parent-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied @0.000s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	08:53:16.006695+0100	Bare	nw_socket_initialize_socket [C7:1] Not guarding fd 20
+default	08:53:16.006726+0100	Bare	[C7 IPv4#bef4f779:8081 in_progress socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:start_connect @0.000s
+default	08:53:16.006735+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C7] reporting state preparing
+default	08:53:16.010113+0100	Bare	nw_socket_handle_socket_event [C7:1] Socket received CONNECTED event
+default	08:53:16.010134+0100	Bare	nw_flow_connected [C7 IPv4#bef4f779:8081 in_progress socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] Output protocol connected (socket)
+default	08:53:16.010178+0100	Bare	[C7 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:finish_connect @0.003s
+default	08:53:16.010267+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C7] reporting state ready
+default	08:53:16.010317+0100	Bare	TCP Conn 0x106e37ac0 event 1. err: 0
+default	08:53:16.010333+0100	Bare	[C7 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:changed_viability @0.003s
+default	08:53:16.010350+0100	Bare	TCP Conn 0x106e37ac0 complete. fd: 21, err: 0
+default	08:53:16.842089+0100	Bare	nw_socket_handle_socket_event [C5:1] Socket received CONNRESET event
+default	08:53:16.842178+0100	Bare	nw_socket_handle_socket_event [C5:1] Socket received DISCONNECTED event
+error	08:53:16.842210+0100	Bare	nw_socket_handle_socket_event [C5:1] Socket SO_ERROR [61: Connection refused]
+error	08:53:16.842310+0100	Bare	nw_protocol_socket_set_no_wake_from_sleep [C5:1] setsockopt SO_NOWAKEFROMSLEEP failed [22: Invalid argument]
+error	08:53:16.842343+0100	Bare	nw_protocol_socket_set_no_wake_from_sleep setsockopt SO_NOWAKEFROMSLEEP failed [22: Invalid argument]
+error	08:53:16.842966+0100	Bare	nw_endpoint_flow_failed_with_error [C5 IPv4#bef4f779:8097 in_progress socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] already failing, returning
+default	08:53:16.843003+0100	Bare	[C5 IPv4#bef4f779:8097 failed socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: flow:failed_connect @1.005s, error Connection refused
+default	08:53:16.843559+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C5] reporting state failed error Connection refused
+default	08:53:16.843604+0100	Bare	[0x106d28b40] activating connection: mach=true listener=false peer=false name=com.apple.usymptomsd
+default	08:53:16.843707+0100	Bare	TCP Conn 0x106e377a0 event 3. err: 61
+error	08:53:16.843738+0100	Bare	nw_connection_get_connected_socket_block_invoke [C5] Client called nw_connection_get_connected_socket on unconnected nw_connection
+default	08:53:16.843868+0100	Bare	TCP Conn 0x106e377a0 complete. fd: -1, err: 61
+error	08:53:16.844647+0100	Bare	TCP Conn 0x106e377a0 Failed : error 0:61 [61]
+default	08:53:16.844734+0100	Bare	TCP Conn 0x106e377a0 canceled
+default	08:53:16.844764+0100	Bare	[C5 A528306F-75F4-442C-8481-3EF37F0FCE7F IPv4#bef4f779:8097 tcp, legacy-socket, definite, attribution: developer] cancel
+error	08:53:16.845247+0100	Bare	nw_connection_copy_protocol_metadata_internal_block_invoke [C5] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+error	08:53:16.845278+0100	Bare	nw_connection_copy_protocol_metadata_internal_block_invoke [C5] Client called nw_connection_copy_protocol_metadata_internal on unconnected nw_connection
+error	08:53:16.845302+0100	Bare	nw_connection_copy_connected_local_endpoint_block_invoke [C5] Client called nw_connection_copy_connected_local_endpoint on unconnected nw_connection
+error	08:53:16.845676+0100	Bare	nw_connection_copy_connected_remote_endpoint_block_invoke [C5] Client called nw_connection_copy_connected_remote_endpoint on unconnected nw_connection
+default	08:53:16.845738+0100	Bare	[C5 A528306F-75F4-442C-8481-3EF37F0FCE7F IPv4#bef4f779:8097 tcp, legacy-socket, definite, attribution: developer] cancelled
+	[C5 1953BF1B-CEB9-450F-94EC-2FB2CAB1B031 <NULL><-><NULL>]
+	Connected Path: (null)
+	Privacy Stance: Not Eligible
+	Duration: 1.007s, TCP @0.000s took 0.000s
+default	08:53:16.845890+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C5] reporting state cancelled error Connection refused
+default	08:53:21.790013+0100	Bare	tcp_input [C1:2] flags=[F.] seq=792489975, ack=3571440892, win=2053 state=ESTABLISHED rcv_nxt=792489975, snd_una=3571440892
+default	08:53:21.790425+0100	Bare	nw_protocol_tcp_log_summary [C1:2] 
+	[0080F05D-2F3D-450F-8735-6CEF5E1AEAD8 <private>:58854<-><private>:8081]
+	Init: 1, Conn_Time: 84.783ms, SYNs: 1, WR_T: 0/0, RD_T: 0/0, TFO: 0/0/0, ECN: 0/1/1, Accurate ECN (client/server): Disabled/Disabled, TS: 1, TSO: 0
+	rtt_cache: none, rtt_upd: 3, rtt: 65.906ms, rtt_var: 57.062ms rtt_nc: 65.906ms, rtt_var_nc: 57.062ms base rtt: 3ms
+	ACKs-compressed: 0, ACKs delayed: 0 delayed ACKs sent: 0
+default	08:53:21.790935+0100	Bare	Connection 1: read-side closed
+default	08:53:21.791193+0100	Bare	tcp_output [C1:2] flags=[F.] seq=3571440892, ack=792489976, win=2048 state=LAST_ACK rcv_nxt=792489976, snd_una=3571440892
+default	08:53:21.791232+0100	Bare	Connection 1: cleaning up
+default	08:53:21.791264+0100	Bare	[C1 A6E3B128-423A-41DE-8741-44F1FBB85E13 IPv4#bef4f779:8081 tcp, url hash: a29ec0a2, definite, attribution: developer] cancel
+default	08:53:21.791328+0100	Bare	[C1 A6E3B128-423A-41DE-8741-44F1FBB85E13 IPv4#bef4f779:8081 tcp, url hash: a29ec0a2, definite, attribution: developer] cancelled
+	[C1 53E34479-4EF7-40E3-B7E6-549DB55A3064 192.168.8.147:58854<->IPv4#bef4f779:8081]
+	Connected Path: satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good
+	Privacy Stance: Not Eligible
+	Duration: 7.973s, TCP @0.001s took 0.085s
+	bytes in/out: 798/414, packets in/out: 7/8, rtt: 0.065s, retransmitted bytes: 0, out-of-order bytes: 0
+	ecn packets sent/acked/marked/lost: 2/2/0/0
+default	08:53:21.791555+0100	Bare	nw_connection_report_state_with_handler_on_nw_queue [C1] reporting state cancelled
+default	08:53:24.083811+0100	Bare	TX focusApplication (peekAppEvent) stealKB:Y scene:it.euncasino.lista-default
+default	08:53:24.084156+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	08:53:24.084459+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	08:53:24.084501+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	08:53:24.137471+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	08:53:24.137485+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	08:53:24.137518+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	08:53:24.137571+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 1
+default	08:53:24.137633+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	08:55:00.135267+0100	Bare	[C7 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @104.129s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	08:55:00.135623+0100	Bare	[C3 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @104.456s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	08:55:00.136033+0100	Bare	[C4 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @104.451s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	08:55:00.136404+0100	Bare	[C6 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @104.214s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	08:55:00.886240+0100	Bare	[C7 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @104.585s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	08:55:00.886471+0100	Bare	[C3 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @104.912s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	08:55:00.886647+0100	Bare	[C4 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @104.907s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	08:55:00.886842+0100	Bare	[C6 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @104.669s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	09:04:18.300875+0100	Bare	TX focusApplication (peekAppEvent) stealKB:Y scene:it.euncasino.lista-default
+default	09:04:18.301810+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.301867+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.301911+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.327435+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.327450+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.327464+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.347775+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 1
+default	09:04:18.348128+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.348139+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.348151+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.351191+0100	Bare	[C:3] Alloc com.apple.PointerUI.pointeruid.service
+default	09:04:18.351366+0100	Bare	[0x10f050280] activating connection: mach=false listener=false peer=false name=(anonymous)
+default	09:04:18.351526+0100	Bare	Ignoring beginScrollingWithRegion: <UIPointerRegion: 0x10f0327b0; rect = (0 0; 350 723); identifier = UIScrollView.scrollingPointerRegion> because pointer state is disabled
+default	09:04:18.359659+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.359684+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.359700+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.376661+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.376677+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.376688+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.393218+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.393230+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.393244+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.409863+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.409878+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.409889+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.426470+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.426484+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.426495+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.443262+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.443294+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.443308+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.459916+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.459940+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.459956+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.476649+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.476671+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.476686+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.493244+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.493376+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.493405+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.510032+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.510044+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.510054+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.526772+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.526798+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.526820+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.543267+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.543288+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.543303+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.560118+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.560131+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.560142+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.576827+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.576868+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.576885+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.593455+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.593487+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.593504+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.610148+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.610183+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.610214+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.626868+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.626929+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.626988+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.643580+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.643647+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.643680+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.660213+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.660240+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.660258+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.681309+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:18.681651+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:18.681674+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:18.697614+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:19.138000+0100	Bare	Ignoring endScrollingWithRegion: <UIPointerRegion: 0x10f0327b0; rect = (0 0; 350 723); identifier = UIScrollView.scrollingPointerRegion> because scrollingRegion does not match: (null)
+default	09:04:19.618190+0100	Bare	TX focusApplication (peekAppEvent) stealKB:Y scene:it.euncasino.lista-default
+default	09:04:19.620358+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:19.620420+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:19.620465+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:19.645380+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:19.645411+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:19.645431+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:19.662209+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 1
+default	09:04:19.662518+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:19.662544+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:19.662595+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:19.663595+0100	Bare	Ignoring beginScrollingWithRegion: <UIPointerRegion: 0x10f032710; rect = (0 0; 350 723); identifier = UIScrollView.scrollingPointerRegion> because pointer state is disabled
+default	09:04:19.678525+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:19.678567+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:19.678612+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:19.695152+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:19.695182+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:19.695203+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:19.711779+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:19.711792+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:19.711815+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:19.728527+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:19.728537+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:19.728553+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:19.745212+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:19.745222+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:19.745237+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:19.761814+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:19.761836+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:19.761857+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:19.778774+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:19.778882+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:19.778913+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:19.795289+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:19.795300+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:19.795311+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:19.813023+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:19.813039+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:19.813424+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:19.818386+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:19.818396+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:19.818407+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:19.832695+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:20.305049+0100	Bare	Ignoring endScrollingWithRegion: <UIPointerRegion: 0x10f032710; rect = (0 0; 350 723); identifier = UIScrollView.scrollingPointerRegion> because scrollingRegion does not match: (null)
+default	09:04:20.305531+0100	Bare	Received configuration update from daemon (initial)
+default	09:04:21.136836+0100	Bare	TX focusApplication (peekAppEvent) stealKB:Y scene:it.euncasino.lista-default
+default	09:04:21.142759+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.142780+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.142791+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.164340+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.164390+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.164448+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.180778+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 1
+default	09:04:21.181080+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.181121+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.181143+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.182246+0100	Bare	Ignoring beginScrollingWithRegion: <UIPointerRegion: 0x10f032710; rect = (0 0; 350 723); identifier = UIScrollView.scrollingPointerRegion> because pointer state is disabled
+default	09:04:21.197525+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.197555+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.197576+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.213721+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.213762+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.213783+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.230424+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.230448+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.230473+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.247411+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.247453+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.247490+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.264359+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.264377+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.264393+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.280591+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.280606+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.280623+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.301343+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.302320+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.302370+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.317821+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.686284+0100	Bare	Ignoring endScrollingWithRegion: <UIPointerRegion: 0x10f032710; rect = (0 0; 350 723); identifier = UIScrollView.scrollingPointerRegion> because scrollingRegion does not match: (null)
+default	09:04:21.693129+0100	Bare	TX focusApplication (peekAppEvent) stealKB:Y scene:it.euncasino.lista-default
+default	09:04:21.693180+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.693428+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.693454+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.731024+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.731053+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.731074+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.748208+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 1
+default	09:04:21.748238+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.748271+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.748286+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.748373+0100	Bare	Ignoring beginScrollingWithRegion: <UIPointerRegion: 0x10f031860; rect = (0 0; 350 723); identifier = UIScrollView.scrollingPointerRegion> because pointer state is disabled
+default	09:04:21.764718+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.764728+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.764739+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.781362+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.781380+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.781411+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.797835+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.797868+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.797907+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.814646+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.814687+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.814714+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.831113+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.831132+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.831160+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.847897+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.847906+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.847917+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.864758+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.864795+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.864814+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.881278+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.881289+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.881304+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.897907+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.897923+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.897934+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.914678+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.914686+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.914695+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.936713+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 1; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:21.936726+0100	Bare	Sending UIEvent type: 0; subtype: 0; to windows: 1
+default	09:04:21.936742+0100	Bare	Sending UIEvent type: 0; subtype: 0; to window: <UIWindow: 0x106d48000>; contextId: 0xFFDF7B02
+default	09:04:21.951925+0100	Bare	Evaluating dispatch of UIEvent: 0x106cfe000; type: 0; subtype: 0; backing type: 11; shouldSend: 0; ignoreInteractionEvents: 0, systemGestureStateChange: 0
+default	09:04:22.419373+0100	Bare	Ignoring endScrollingWithRegion: <UIPointerRegion: 0x10f031860; rect = (0 0; 350 723); identifier = UIScrollView.scrollingPointerRegion> because scrollingRegion does not match: (null)
+default	09:05:37.635523+0100	Bare	[C7 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @741.633s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	09:05:37.635822+0100	Bare	[C3 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @741.960s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	09:05:37.636085+0100	Bare	[C4 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @741.955s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	09:05:37.636750+0100	Bare	[C6 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @741.718s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	09:05:38.432666+0100	Bare	[C7 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @742.006s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	09:05:38.432785+0100	Bare	[C3 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @742.333s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	09:05:38.432917+0100	Bare	[C4 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @742.328s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	09:05:38.433023+0100	Bare	[C6 IPv4#bef4f779:8081 ready socket-flow (satisfied (Path is satisfied), viable, interface: en0[802.11], ipv4, dns, uses wifi, LQM: good)] event: path:satisfied_change @742.090s, uuid: B0BCFDF6-6D78-40B4-B92E-354E71BB9C03
+default	09:08:14.303476+0100	Bare	Attempting to emit telemetry for rolling foreground case with HTForegroundUpdateType: HTFGUpdatePersistentForegroundness with data from the past 900.350572 seconds

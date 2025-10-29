@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Bare",
-    "slug": "bare-expo",
+    "name": "lista",
+    "slug": "lista-expo",
     "version": "1.0.0",
     "newArchEnabled": true,
     "orientation": "portrait",
-    "scheme": "to.holepunch.bare.expo",
+    "scheme": "it.euncasino.lista",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
@@ -15,14 +15,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "to.holepunch.bare.expo"
+      "bundleIdentifier": "it.euncasino.lista"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "to.holepunch.bare.expo"
+      "package": "it.euncasino.lista"
     },
     "plugins": [
       ["expo-router"],
