@@ -5,7 +5,7 @@ import {Worklet} from 'react-native-bare-kit'
 import bundle from './app.bundle.mjs'
 import RPC from 'bare-rpc'
 import b4a from 'b4a'
-import {RPC_MESSAGE, RPC_RESET, RPC_UPDATE, RPC_DELETE, RPC_ADD} from '../rpc-commands.mjs'
+import {RPC_MESSAGE, RPC_RESET, RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_GET_KEY, SYNC_LIST} from '../rpc-commands.mjs'
 import InertialElasticList from './components/intertial_scroll'
 
 type ListEntry = {
@@ -15,17 +15,7 @@ type ListEntry = {
 }
 
 export default function App() {
-    const [dataList, setDataList] = useState<ListEntry[]>([
-        {text: 'Tap to mark as done', isDone: false, timeOfCompletion: 0},
-        {text: 'Double tap to add new', isDone: false, timeOfCompletion: 0},
-        {text: 'Slide left to delete', isDone: false, timeOfCompletion: 0},
-        {text: 'Mozzarella', isDone: false, timeOfCompletion: 0},
-        {text: 'Tomato Sauce', isDone: false, timeOfCompletion: 0},
-        {text: 'Flour', isDone: false, timeOfCompletion: 0},
-        {text: 'Yeast', isDone: false, timeOfCompletion: 0},
-        {text: 'Salt', isDone: false, timeOfCompletion: 0},
-        {text: 'Basil', isDone: false, timeOfCompletion: 0},
-    ])
+    const [dataList, setDataList] = useState<ListEntry[]>([])
 
     useEffect(() => {
         if (!isWorkletStarted) {
@@ -45,32 +35,52 @@ export default function App() {
         console.log('worklet_start', worklet_start)
         const {IPC} = worklet
 
-        rpcRef.current = new RPC(IPC, (req) => {
-            if (req.command === RPC_MESSAGE) {
-                console.log('RPC MESSAGE')
-
-                const data = b4a.toString(req.data)
-                const parsedData = JSON.parse(data)
-                const entry: ListEntry = {
-                    text: parsedData[1],
-                    isDone: parsedData[2],
-                    timeOfCompletion: parsedData[3]
+        rpcRef.current = new RPC(IPC, (reqFromBackend) => {
+            if (reqFromBackend.command === RPC_MESSAGE) {
+                console.log('RPC MESSAGE req', reqFromBackend)
+                if (reqFromBackend.data) {
+                    console.log('data from bare', b4a.toString(reqFromBackend.data))
+                    const data = b4a.toString(reqFromBackend.data)
+                    const parsedData = JSON.parse(data)
+                    const entry: ListEntry = {
+                        text: parsedData[1],
+                        isDone: parsedData[2],
+                        timeOfCompletion: parsedData[3]
+                    }
+                } else {
+                    console.log('data from bare is null, empty or undefined')
                 }
-                const req = rpcRef.current.request(RPC_MESSAGE)
-                req.send(JSON.stringify({ id: 1,  }))
+
+                // const req = rpcRef.current.request(RPC_MESSAGE)
+                // req.send(JSON.stringify({ id: 1,  }))
+            }
+            if (reqFromBackend.command === SYNC_LIST) {
+                console.log('RPC SYNC_LIST req')
+                if (reqFromBackend.data) {
+                    console.log('data from bare', b4a.toString(reqFromBackend.data))
+                    const data = b4a.toString(reqFromBackend.data)
+                    const parsedData: ListEntry = JSON.parse(data)
+                    dataList.push(parsedData)
+                    setDataList(() => dataList)
+                } else {
+                    console.log('data from bare is null, empty or undefined')
+                }
+
+                // const req = rpcRef.current.request(RPC_MESSAGE)
+                // req.send(JSON.stringify({ id: 1,  }))
             }
 
-            if (req.command === RPC_RESET) {
+            if (reqFromBackend.command === RPC_RESET) {
                 console.log('RPC RESET')
 
                 setDataList(() => [])
                 const req = rpcRef.current.request(RPC_RESET)
                 req.send(JSON.stringify({ id: 1,  }))
             }
-            if (req.command === RPC_UPDATE) {
+            if (reqFromBackend.command === RPC_UPDATE) {
                 console.log('RPC_UPDATE')
-                if (req.data) {
-                    console.log('data from bare', b4a.toString(req.data))
+                if (reqFromBackend.data) {
+                    console.log('data from bare', b4a.toString(reqFromBackend.data))
                 } else {
                     console.log('data from bare is null, empty or undefined')
                 }
@@ -78,11 +88,17 @@ export default function App() {
                 // const req = rpcRef.current.request(RPC_UPDATE)
                 // req.send(JSON.stringify({ id: 1,  }))
             }
-            if (req.command === RPC_DELETE) {
+            if (reqFromBackend.command === RPC_DELETE) {
                 console.log('RPC_DELETE')
 
                 const req = rpcRef.current.request(RPC_DELETE)
                 req.send(JSON.stringify({ id: 1,  }))
+            }
+            if (reqFromBackend.command === RPC_GET_KEY) {
+                console.log('RPC_GET_KEY')
+
+                // const req = rpcRef.current.request(RPC_GET_KEY)
+                // req.send(JSON.stringify({ id: 1,  }))
             }
         })
         setIsWorkletStarted(true)

@@ -2,7 +2,7 @@
   "id":"item",
   "type":"object",
   "properties":{
-    "itemId":{"type":"string"},
+    "id":{"type":"string"},
     "listId":{"type":"string"},
     "text":{"type":"string"},
     "isDone":{"type":"boolean"},

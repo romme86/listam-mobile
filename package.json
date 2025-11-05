@@ -17,6 +17,7 @@
     "b4a": "^1.7.1",
     "bare-fs": "^4.4.4",
     "bare-rpc": "^0.2.12",
+    "bare-crypto": "^1.12.0",
     "blind-peering": "^1.13.0",
     "corestore": "^7.5.0",
     "expo": "^53.0.9",
