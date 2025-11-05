@@ -5,6 +5,7 @@ import fs from 'bare-fs'
 import URL from 'bare-url'
 import { join } from 'bare-path'
 import { RPC_RESET, RPC_MESSAGE, RPC_UPDATE, RPC_ADD, RPC_DELETE, RPC_GET_KEY, SYNC_LIST } from '../rpc-commands.mjs'
+import b4a from 'b4a'
 
 import Autopass from 'autopass'
 import Autobase from 'autobase'
@@ -13,7 +14,7 @@ import Hyperswarm from 'hyperswarm'
 const { IPC } = BareKit
 import { randomBytes } from 'bare-crypto'
 
-const newList = [
+const startingList = [
     {text: 'Tap to mark as done', isDone: false, timeOfCompletion: 0},
     {text: 'Double tap to add new', isDone: false, timeOfCompletion: 0},
     {text: 'Slide left to delete', isDone: false, timeOfCompletion: 0},
@@ -128,17 +129,13 @@ function sendListToUI() {
                 }
                 return a.timestamp - b.timestamp
             })
-
         if (items.length === 0) {
-            items = newList
+            listView.set("initialList", startingList)
+            items = listView.get("initialList")
         }
-
         log('Sending', items.length, 'items to UI')
-
-        for (const item of items) {
-            const req = rpc.request(SYNC_LIST)
-            req.send(JSON.stringify(item))
-        }
+        const req = rpc.request(SYNC_LIST)
+        req.send(JSON.stringify(items))
     } catch (err) {
         log('Error sending to UI:', err)
     }
@@ -177,6 +174,7 @@ function generateId() {
 
 // Add item operation
 async function addItem(text, listId) {
+    console.error("command RPC_ADD addItem text", text )
     const item = {
         id: generateId(),
         text,
@@ -199,6 +197,7 @@ async function addItem(text, listId) {
 
 // Update item operation
 async function updateItem(id, listId, updates) {
+    console.error("command RPC_ADD updateItem  id ,  listId, updates", id ,  listId, updates)
     const existing = listView.get(id)
     if (!existing) {
         log('Item not found for update:', id)
@@ -222,6 +221,7 @@ async function updateItem(id, listId, updates) {
 
 // Delete item operation
 async function deleteItem(id) {
+    console.error("command RPC_DELETE deleteItem  id ,  listId, updates", id ,  listId, updates)
     const existing = listView.get(id)
     if (!existing) {
         log('Item not found for delete:', id)
@@ -260,12 +260,15 @@ await discovery.flushed()
 log('Joined swarm')
 
 const rpc = new RPC(IPC, async (req, error) => {
-    console.error("got a request from react", req, error)
+    console.error("got a request from react", req)
+    if (error) {
+        console.error("got an error from react", error)
+    }
     try {
         switch (req.command) {
             case RPC_ADD: {
-                const data = JSON.parse(req.data.toString())
-                await addItem(data.text)
+                const text = JSON.parse(b4a.toString(req.data))
+                await addItem(text)
                 break
             }
             case RPC_UPDATE: {
@@ -280,6 +283,7 @@ const rpc = new RPC(IPC, async (req, error) => {
             }
             case RPC_GET_KEY: {
                 // Send our writer key back to UI
+                console.error("command RPC_GET_KEY")
                 const keyReq = rpc.request(RPC_GET_KEY)
                 keyReq.send(local.key.toString('hex'))
                 break

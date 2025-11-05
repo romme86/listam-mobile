@@ -59,15 +59,11 @@ export default function App() {
                 if (reqFromBackend.data) {
                     console.log('data from bare', b4a.toString(reqFromBackend.data))
                     const data = b4a.toString(reqFromBackend.data)
-                    const parsedData: ListEntry = JSON.parse(data)
-                    dataList.push(parsedData)
-                    setDataList(() => dataList)
+                    const parsedSyncedList: ListEntry[] = JSON.parse(data)
+                    setDataList(() => parsedSyncedList)
                 } else {
                     console.log('data from bare is null, empty or undefined')
                 }
-
-                // const req = rpcRef.current.request(RPC_MESSAGE)
-                // req.send(JSON.stringify({ id: 1,  }))
             }
 
             if (reqFromBackend.command === RPC_RESET) {
@@ -148,8 +144,8 @@ export default function App() {
                 timeOfCompletion: 0
             }
             newList.splice(index, 0, newEntry)
-            const req = rpcRef.current.request(RPC_MESSAGE)
-            req.send(JSON.stringify({ id: 1,  }))
+            const req = rpcRef.current.request(RPC_ADD)
+            req.send(JSON.stringify(text))
             return newList
         })
     }
