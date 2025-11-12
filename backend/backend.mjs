@@ -1,13 +1,10 @@
 // /* global Bare, BareKit */
 
 import RPC from 'bare-rpc'
-import fs from 'bare-fs'
 import URL from 'bare-url'
 import { join } from 'bare-path'
 import { RPC_RESET, RPC_MESSAGE, RPC_UPDATE, RPC_ADD, RPC_DELETE, RPC_GET_KEY, SYNC_LIST } from '../rpc-commands.mjs'
 import b4a from 'b4a'
-
-import Autopass from 'autopass'
 import Autobase from 'autobase'
 import Corestore from 'corestore'
 import Hyperswarm from 'hyperswarm'
@@ -41,6 +38,23 @@ const store = new Corestore(storagePath)
 await store.ready()
 log('Corestore ready at:', storagePath)
 
+function open(store) {
+    console.log('opening store...', store.get('test'))
+    return store.get('test')
+}
+
+async function apply(nodes, view, host) {
+    console.log("apply started")
+    for (const {value} of nodes) {
+        if (value.addWriter()) {
+            console.log("adding writer")
+            await host.addWriter(value.addWriter, {indexer: true})
+            continue
+        }
+        await view.append(value)
+    }
+}
+
 // Simple inline schema validation
 function validateItem(item) {
     if (typeof item !== 'object' || item === null) return false
@@ -67,10 +81,11 @@ log('Local writer key:', local.key.toString('hex'))
 //     storage: (name) => store.get({ name: 'autobase-' + name })
 // })
 
-const autobase = new Autobase(store, local.key, {})
+const autobase = new Autobase(store, local.key, {apply, open})
 
 await autobase.ready()
-log('Autobase ready, key:', autobase.key?.toString('hex'))
+
+log('Autobase ready, writable? ', autobase.writable, ' key:', autobase.key?.toString('hex'))
 
 if (peerKeysString) {
     const peerKeys = peerKeysString.split(',').filter(k => k.trim())
@@ -192,6 +207,7 @@ async function addItem(text, listId) {
     }
 
     await local.append(Buffer.from(JSON.stringify(op)))
+    await autobase.append(Buffer.from(JSON.stringify(op)))
     log('Added item:', text)
 }
 
@@ -242,8 +258,13 @@ const swarm = new Hyperswarm()
 
 // Replicate on connection
 swarm.on('connection', (conn) => {
-    log('New peer connected')
+    log('New peer connected', conn, conn.publicKey)
     store.replicate(conn)
+    // autobase.append(
+    //     encode('@autopass/add-writer', {
+    //         key: b4a.isBuffer(conn.key) ? conn.key : b4a.from(conn.key)
+    //     })
+    // )
 })
 
 

@@ -19,9 +19,11 @@ export default function App() {
 
     useEffect(() => {
         if (!isWorkletStarted) {
+            setIsWorkletStarted(true)
             startWorklet()
         }
     }, [])
+
     const [pairingInvite, setPairingInvite] = useState('')
     const [isWorkletStarted, setIsWorkletStarted] = useState(false)
     const rpcRef = useRef<any>(null)
