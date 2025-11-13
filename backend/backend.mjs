@@ -24,11 +24,7 @@ const startingList = [
 ]
 
 
-// "bundle:backend": "bare-pack backend/backend.mjs -o app/app.bundle.mjs"
-// Helper function to log (visible in process stream)
-function log(...args) {
-    console.error('[Backend]', ...args)
-}
+
 
 console.error("bare backend is rocking.")
 const storagePath = join(URL.fileURLToPath(Bare.argv[0]), 'lista') || './data'
@@ -36,21 +32,21 @@ const peerKeysString = Bare.argv[1] || '' // Comma-separated peer keys
  // Initialize Corestore
 const store = new Corestore(storagePath)
 await store.ready()
-log('Corestore ready at:', storagePath)
+console.error('Corestore ready at:', storagePath)
 
 function open(store) {
-    console.log('opening store...', store.get('test'))
+    console.error('opening store...', store.get('test'))
     return store.get('test')
 }
 
 async function apply(nodes, view, host) {
-    console.log("apply started")
+    console.error("apply started")
     for (const {value} of nodes) {
-        if (value.addWriter()) {
-            console.log("adding writer")
-            await host.addWriter(value.addWriter, {indexer: true})
-            continue
-        }
+        // if (value.addWriter()) {
+        //     console.error("adding writer")
+        //     await host.addWriter(value.addWriter, {indexer: true})
+        //     continue
+        // }
         await view.append(value)
     }
 }
@@ -65,27 +61,19 @@ function validateItem(item) {
     if (typeof item.timestamp !== 'number') return false
     return true
 }
-
-// Create or load local writer core
 const local = store.get({ name: 'local-writer' })
 await local.ready()
-log('Local writer key:', local.key.toString('hex'))
-// TODO send this key to the react app
+console.error('Local writer key:', local.key.toString('hex'))
 
-// Initialize Autobase with local input
-// const autobase = new Autobase({
-//     store: store,
-//     inputs: [local],
-//     localInput: local,
-//     autostart: true,
-//     storage: (name) => store.get({ name: 'autobase-' + name })
-// })
 
-const autobase = new Autobase(store, local.key, {apply, open})
+const autobase = new Autobase(store, null , {apply, open})
 
 await autobase.ready()
 
-log('Autobase ready, writable? ', autobase.writable, ' key:', autobase.key?.toString('hex'))
+console.error('Autobase ready, writable? ', autobase.writable, ' key:', autobase.key?.toString('hex'))
+
+
+
 
 if (peerKeysString) {
     const peerKeys = peerKeysString.split(',').filter(k => k.trim())
@@ -95,9 +83,9 @@ if (peerKeysString) {
             const peerCore = store.get({ key: peerKey })
             await peerCore.ready()
             await autobase.addInput(peerCore)
-            log('Added peer writer:', keyHex.trim())
+            console.error('Added peer writer:', keyHex.trim())
         } catch (err) {
-            log('Failed to add peer:', keyHex, err.message)
+            console.error('Failed to add peer:', keyHex, err.message)
         }
     }
 }
@@ -109,7 +97,7 @@ let listView = new Map() // id -> item
 function applyOp(op) {
     try {
         if (!validateItem(op.value)) {
-            log('Invalid item:', op.value)
+            console.error('Invalid item:', op.value)
             return
         }
 
@@ -123,7 +111,7 @@ function applyOp(op) {
                 break
         }
     } catch (err) {
-        log('Invalid operation:', err)
+        console.error('Invalid operation:', err)
     }
 }
 
@@ -148,11 +136,11 @@ function sendListToUI() {
             listView.set("initialList", startingList)
             items = listView.get("initialList")
         }
-        log('Sending', items.length, 'items to UI')
+        console.error('Sending', items.length, 'items to UI')
         const req = rpc.request(SYNC_LIST)
         req.send(JSON.stringify(items))
     } catch (err) {
-        log('Error sending to UI:', err)
+        console.error('Error sending to UI:', err)
     }
 }
 
@@ -167,10 +155,10 @@ async function rebuildView() {
             applyOp(op)
         }
     } catch (err) {
-        log('Error rebuilding view:', err)
+        console.error('Error rebuilding view:', err)
     }
 
-    log('View rebuilt:', oldSize, '->', listView.size, 'items')
+    console.error('View rebuilt:', oldSize, '->', listView.size, 'items')
 
     // Send the complete list to React Native
     sendListToUI()
@@ -178,7 +166,7 @@ async function rebuildView() {
 
 // Listen for new data from any input
 autobase.on('append', async () => {
-    log('New data appended, rebuilding view...')
+    console.error('New data appended, rebuilding view...')
     await rebuildView()
 })
 
@@ -208,7 +196,7 @@ async function addItem(text, listId) {
 
     await local.append(Buffer.from(JSON.stringify(op)))
     await autobase.append(Buffer.from(JSON.stringify(op)))
-    log('Added item:', text)
+    console.error('Added item:', text)
 }
 
 // Update item operation
@@ -216,7 +204,7 @@ async function updateItem(id, listId, updates) {
     console.error("command RPC_ADD updateItem  id ,  listId, updates", id ,  listId, updates)
     const existing = listView.get(id)
     if (!existing) {
-        log('Item not found for update:', id)
+        console.error('Item not found for update:', id)
         return
     }
 
@@ -232,7 +220,7 @@ async function updateItem(id, listId, updates) {
     }
 
     await local.append(Buffer.from(JSON.stringify(op)))
-    log('Updated item:', item.text)
+    console.error('Updated item:', item.text)
 }
 
 // Delete item operation
@@ -240,7 +228,7 @@ async function deleteItem(id) {
     console.error("command RPC_DELETE deleteItem  id ,  listId, updates", id ,  listId, updates)
     const existing = listView.get(id)
     if (!existing) {
-        log('Item not found for delete:', id)
+        console.error('Item not found for delete:', id)
         return
     }
 
@@ -250,7 +238,7 @@ async function deleteItem(id) {
     }
 
     await local.append(Buffer.from(JSON.stringify(op)))
-    log('Deleted item:', existing.text)
+    console.error('Deleted item:', existing.text)
 }
 
 // Initialize Hyperswarm for P2P replication
@@ -258,27 +246,20 @@ const swarm = new Hyperswarm()
 
 // Replicate on connection
 swarm.on('connection', (conn) => {
-    log('New peer connected', conn, conn.publicKey)
-    store.replicate(conn)
-    // autobase.append(
-    //     encode('@autopass/add-writer', {
-    //         key: b4a.isBuffer(conn.key) ? conn.key : b4a.from(conn.key)
-    //     })
-    // )
+    console.error('New peer connected', conn, conn.publicKey)
+    autobase.replicate(conn)
 })
-
-
 
 const firstLocalAutobaseKey = randomBytes(32)
 console.error("firstLocalAutobaseKey:", firstLocalAutobaseKey)
 
 // Join a topic based on autobase key for discovery
 const topic = autobase.key || firstLocalAutobaseKey
-log('Discovery topic:', topic.toString('hex'))
+console.error('Discovery topic:', topic.toString('hex'))
 
 const discovery = swarm.join(topic, { server: true, client: true })
 await discovery.flushed()
-log('Joined swarm')
+console.error('Joined swarm')
 
 const rpc = new RPC(IPC, async (req, error) => {
     console.error("got a request from react", req)
@@ -311,61 +292,23 @@ const rpc = new RPC(IPC, async (req, error) => {
             }
         }
     } catch (err) {
-        log('Error handling RPC request:', err)
+        console.error('Error handling RPC request:', err)
     }
 })
 
-// // Handle RPC requests from React Native
-// rpc.on('request', async (req) => {
-//     try {
-//         switch (req.command) {
-//             case RPC_ADD: {
-//                 const data = JSON.parse(req.data.toString())
-//                 await addItem(data.text)
-//                 break
-//             }
-//
-//             case RPC_UPDATE: {
-//                 const data = JSON.parse(req.data.toString())
-//                 await updateItem(data.id, data.updates)
-//                 break
-//             }
-//
-//             case RPC_DELETE: {
-//                 const data = JSON.parse(req.data.toString())
-//                 await deleteItem(data.id)
-//                 break
-//             }
-//
-//             case RPC_GET_KEY: {
-//                 // Send our writer key back to UI
-//                 const keyReq = rpc.request(RPC_GET_KEY)
-//                 keyReq.send(local.key.toString('hex'))
-//                 break
-//             }
-//         }
-//     } catch (err) {
-//         log('Error handling RPC request:', err)
-//     }
-// })
+// send the autobase key to react
+const req = rpc.request(RPC_GET_KEY)
+req.send(autobase.key?.toString('hex'))
 
 // Build initial view
 await rebuildView()
-log('Backend ready')
-
-// Send our key to UI on startup
-try {
-    const keyReq = rpc.request(RPC_GET_KEY)
-    keyReq.send(local.key.toString('hex'))
-} catch (err) {
-    log('Could not send key to UI:', err)
-}
+console.error('Backend ready')
 
 // Cleanup on teardown
 Bare.on('teardown', async () => {
-    log('Backend shutting down...')
+    console.error('Backend shutting down...')
     await swarm.destroy()
     await store.close()
-    log('Backend shutdown complete')
+    console.error('Backend shutdown complete')
 })
 

@@ -24,7 +24,7 @@ type Props = {
   onInsert?: (index: number, text: string) => void;
 };
 
-export default function InertialElasticList({ 
+export default function  InertialElasticList({
   data, 
   onToggleDone,
   onDelete,

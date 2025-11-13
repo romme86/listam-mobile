@@ -1,10 +1,11 @@
 import React, {useEffect, useRef, useState} from 'react'
-import {StyleSheet, View} from 'react-native'
+import {StyleSheet, View, TouchableOpacity, SafeAreaView, Share, Modal, TextInput, Text, Alert} from 'react-native'
 import {documentDirectory} from 'expo-file-system'
 import {Worklet} from 'react-native-bare-kit'
 import bundle from './app.bundle.mjs'
 import RPC from 'bare-rpc'
 import b4a from 'b4a'
+import { Ionicons } from '@expo/vector-icons';
 import {RPC_MESSAGE, RPC_RESET, RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_GET_KEY, SYNC_LIST} from '../rpc-commands.mjs'
 import InertialElasticList from './components/intertial_scroll'
 
@@ -26,7 +27,11 @@ export default function App() {
 
     const [pairingInvite, setPairingInvite] = useState('')
     const [isWorkletStarted, setIsWorkletStarted] = useState(false)
+    const [autobaseInviteKey, setAutobaseInviteKey] = useState('')
     const rpcRef = useRef<any>(null)
+    const [joinDialogVisible, setJoinDialogVisible] = useState(false)
+    const [joinKeyInput, setJoinKeyInput] = useState('')
+
 
     const startWorklet = () => {
 
@@ -93,10 +98,14 @@ export default function App() {
                 req.send(JSON.stringify({ id: 1,  }))
             }
             if (reqFromBackend.command === RPC_GET_KEY) {
-                console.log('RPC_GET_KEY')
-
-                // const req = rpcRef.current.request(RPC_GET_KEY)
-                // req.send(JSON.stringify({ id: 1,  }))
+                console.log('RPC_GET_KEY', )
+                if (reqFromBackend.data) {
+                    console.log('data from bare', b4a.toString(reqFromBackend.data))
+                    const data = b4a.toString(reqFromBackend.data)
+                    setAutobaseInviteKey(data)
+                } else {
+                    console.log('data from bare is null, empty or undefined')
+                }
             }
         })
         setIsWorkletStarted(true)
@@ -152,9 +161,127 @@ export default function App() {
         })
     }
 
+    const handleShare = async () => {
+        console.log('Share pressed');
+        if (!autobaseInviteKey) {
+            console.log('No invite key available to share');
+            return;
+        }
+
+        try {
+            const result = await Share.share({
+                message: `Join my list! Use this key: ${autobaseInviteKey}`,
+                title: 'Share Invite Key'
+            });
+
+            if (result.action === Share.sharedAction) {
+                if (result.activityType) {
+                    console.log('Shared with activity type:', result.activityType);
+                } else {
+                    console.log('Shared successfully');
+                }
+            } else if (result.action === Share.dismissedAction) {
+                console.log('Share dismissed');
+            }
+        } catch (error) {
+            console.error('Error sharing:', error);
+        }
+    };
+
+    const handleJoin = () => {
+        console.log('Join pressed');
+        setJoinDialogVisible(true);
+    };
+
+    const handleJoinSubmit = () => {
+        if (!joinKeyInput.trim()) {
+            Alert.alert('Error', 'Please enter an invite key');
+            return;
+        }
+
+        console.log('Submitting join key:', joinKeyInput);
+
+        // Make RPC call to backend
+        // Replace RPC_JOIN_KEY with the appropriate command number from your rpc-commands.mjs
+        const RPC_JOIN_KEY = 6; // Adjust this number based on your backend
+        const req = rpcRef.current.request(RPC_JOIN_KEY);
+        req.send(JSON.stringify({ key: joinKeyInput }));
+
+        // Close dialog and reset input
+        setJoinDialogVisible(false);
+        setJoinKeyInput('');
+    };
+
+    const handleJoinCancel = () => {
+        setJoinDialogVisible(false);
+        setJoinKeyInput('');
+    };
+
     return (
         <View style={styles.container}>
             <>
+                <SafeAreaView style={styles_safe_area.safeArea}>
+                    <View style={styles_safe_area.container}>
+                        <View style={styles_safe_area.leftSection} />
+
+                        <View style={styles_safe_area.rightSection}>
+                            <TouchableOpacity
+                                style={styles_safe_area.iconButton}
+                                onPress={handleShare}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="share-outline" size={24} color="#333" />
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles_safe_area.iconButton}
+                                onPress={handleJoin}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="person-add-outline" size={24} color="#333" />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </SafeAreaView>
+                <Modal
+                    visible={joinDialogVisible}
+                    transparent={true}
+                    animationType="fade"
+                    onRequestClose={handleJoinCancel}
+                >
+                    <View style={dialog_styles.overlay}>
+                        <View style={dialog_styles.dialog}>
+                            <Text style={dialog_styles.title}>Join with Invite Key</Text>
+                            <Text style={dialog_styles.subtitle}>Paste the invite key below</Text>
+
+                            <TextInput
+                                style={dialog_styles.input}
+                                value={joinKeyInput}
+                                onChangeText={setJoinKeyInput}
+                                placeholder="Enter invite key..."
+                                placeholderTextColor="#999"
+                                multiline={true}
+                                autoFocus={true}
+                            />
+
+                            <View style={dialog_styles.buttonContainer}>
+                                <TouchableOpacity
+                                    style={[dialog_styles.button, dialog_styles.cancelButton]}
+                                    onPress={handleJoinCancel}
+                                >
+                                    <Text style={dialog_styles.cancelButtonText}>Cancel</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={[dialog_styles.button, dialog_styles.submitButton]}
+                                    onPress={handleJoinSubmit}
+                                >
+                                    <Text style={dialog_styles.submitButtonText}>Join</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
                 <InertialElasticList
                     data={dataList}
                     onToggleDone={handleToggleDone}
@@ -192,3 +319,101 @@ const styles = StyleSheet.create({
         color: '#333'
     }
 })
+
+const styles_safe_area = StyleSheet.create({
+    safeArea: {
+        backgroundColor: '#fff',
+    },
+    container: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: '#fff',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        height: 60,
+    },
+    leftSection: {
+        flex: 1,
+    },
+    rightSection: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+    },
+    iconButton: {
+        padding: 8,
+    },
+});
+
+
+const dialog_styles = StyleSheet.create({
+    overlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    dialog: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 24,
+        width: '100%',
+        maxWidth: 400,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 4,
+        elevation: 5,
+    },
+    title: {
+        fontSize: 20,
+        fontWeight: '600',
+        color: '#333',
+        marginBottom: 8,
+    },
+    subtitle: {
+        fontSize: 14,
+        color: '#666',
+        marginBottom: 20,
+    },
+    input: {
+        borderWidth: 1,
+        borderColor: '#ddd',
+        borderRadius: 8,
+        padding: 12,
+        fontSize: 14,
+        color: '#333',
+        minHeight: 80,
+        textAlignVertical: 'top',
+        marginBottom: 20,
+    },
+    buttonContainer: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    button: {
+        flex: 1,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    cancelButton: {
+        backgroundColor: '#f0f0f0',
+    },
+    submitButton: {
+        backgroundColor: '#333',
+    },
+    cancelButtonText: {
+        color: '#333',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    submitButtonText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+});

@@ -31,6 +31,7 @@
     "hyperdispatch": "^1.4.4",
     "hyperschema": "^1.17.0",
     "hyperswarm": "^4.12.1",
+    "lucide-react-native": "^0.553.0",
     "make-dir": "^5.1.0",
     "protomux-wakeup": "^2.6.1",
     "react": "~19.0.0",
