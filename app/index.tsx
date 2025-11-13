@@ -6,7 +6,7 @@ import bundle from './app.bundle.mjs'
 import RPC from 'bare-rpc'
 import b4a from 'b4a'
 import { Ionicons } from '@expo/vector-icons';
-import {RPC_MESSAGE, RPC_RESET, RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_GET_KEY, SYNC_LIST} from '../rpc-commands.mjs'
+import {RPC_MESSAGE, RPC_RESET, RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_GET_KEY, SYNC_LIST, RPC_JOIN_KEY} from '../rpc-commands.mjs'
 import InertialElasticList from './components/intertial_scroll'
 
 type ListEntry = {
@@ -203,7 +203,6 @@ export default function App() {
 
         // Make RPC call to backend
         // Replace RPC_JOIN_KEY with the appropriate command number from your rpc-commands.mjs
-        const RPC_JOIN_KEY = 6; // Adjust this number based on your backend
         const req = rpcRef.current.request(RPC_JOIN_KEY);
         req.send(JSON.stringify({ key: joinKeyInput }));
 
