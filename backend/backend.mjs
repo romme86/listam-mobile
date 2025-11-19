@@ -42,11 +42,12 @@ function open(store) {
 async function apply(nodes, view, host) {
     console.error("apply started")
     for (const {value} of nodes) {
-        // if (value.addWriter()) {
-        //     console.error("adding writer")
-        //     await host.addWriter(value.addWriter, {indexer: true})
-        //     continue
-        // }
+        if (value && typeof value.addWriter === "string") {
+            const writerKey = Buffer.from(value.addWriter, "hex");
+            // Only allow root peer to be indexer for testing purposes
+            await host.addWriter(writerKey, { indexer: false });
+            continue;
+        }
         await view.append(value)
     }
 }
