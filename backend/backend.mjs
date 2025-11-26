@@ -3,7 +3,16 @@
 import RPC from 'bare-rpc'
 import URL from 'bare-url'
 import { join } from 'bare-path'
-import { RPC_RESET, RPC_MESSAGE, RPC_UPDATE, RPC_ADD, RPC_DELETE, RPC_GET_KEY, SYNC_LIST } from '../rpc-commands.mjs'
+import {
+    RPC_RESET,
+    RPC_MESSAGE,
+    RPC_UPDATE,
+    RPC_ADD,
+    RPC_DELETE,
+    RPC_GET_KEY,
+    RPC_JOIN_KEY,
+    SYNC_LIST
+} from '../rpc-commands.mjs'
 import b4a from 'b4a'
 import Autobase from 'autobase'
 import Corestore from 'corestore'
@@ -12,48 +21,61 @@ const { IPC } = BareKit
 import { randomBytes } from 'bare-crypto'
 
 const startingList = [
-    {text: 'Tap to mark as done', isDone: false, timeOfCompletion: 0},
-    {text: 'Double tap to add new', isDone: false, timeOfCompletion: 0},
-    {text: 'Slide left to delete', isDone: false, timeOfCompletion: 0},
-    {text: 'Mozzarella', isDone: false, timeOfCompletion: 0},
-    {text: 'Tomato Sauce', isDone: false, timeOfCompletion: 0},
-    {text: 'Flour', isDone: false, timeOfCompletion: 0},
-    {text: 'Yeast', isDone: false, timeOfCompletion: 0},
-    {text: 'Salt', isDone: false, timeOfCompletion: 0},
-    {text: 'Basil', isDone: false, timeOfCompletion: 0},
+    { text: 'Tap to mark as done', isDone: false, timeOfCompletion: 0 },
+    { text: 'Double tap to add new', isDone: false, timeOfCompletion: 0 },
+    { text: 'Slide left to delete', isDone: false, timeOfCompletion: 0 },
+    { text: 'Mozzarella', isDone: false, timeOfCompletion: 0 },
+    { text: 'Tomato Sauce', isDone: false, timeOfCompletion: 0 },
+    { text: 'Flour', isDone: false, timeOfCompletion: 0 },
+    { text: 'Yeast', isDone: false, timeOfCompletion: 0 },
+    { text: 'Salt', isDone: false, timeOfCompletion: 0 },
+    { text: 'Basil', isDone: false, timeOfCompletion: 0 }
 ]
 
+console.error('bare backend is rocking.')
 
-
-
-console.error("bare backend is rocking.")
 const storagePath = join(URL.fileURLToPath(Bare.argv[0]), 'lista') || './data'
 const peerKeysString = Bare.argv[1] || '' // Comma-separated peer keys
- // Initialize Corestore
+const baseKeyHex = Bare.argv[2] || '' // Optional Autobase key (to join an existing base)
+
+// Initialize Corestore
 const store = new Corestore(storagePath)
 await store.ready()
 console.error('Corestore ready at:', storagePath)
 
-function open(store) {
-    console.error('opening store...', store.get('test'))
-    return store.get('test')
+function open (store) {
+    const view = store.get({
+        name: 'test',
+        valueEncoding: 'json'
+    })
+    console.error('opening store...', view)
+    return view
 }
 
-async function apply(nodes, view, host) {
-    console.error("apply started")
-    for (const {value} of nodes) {
-        if (value && typeof value.addWriter === "string") {
-            const writerKey = Buffer.from(value.addWriter, "hex");
-            // Only allow root peer to be indexer for testing purposes
-            await host.addWriter(writerKey, { indexer: false });
-            continue;
+async function apply (nodes, view, host) {
+    console.error('apply started')
+    for (const { value } of nodes) {
+        if (!value) continue
+
+        // Handle writer membership updates coming from handshake
+        if (value.type === 'add-writer' && typeof value.key === 'string') {
+            try {
+                const writerKey = Buffer.from(value.key, 'hex')
+                await host.addWriter(writerKey, { indexer: false })
+                console.error('Added writer from add-writer op:', value.key)
+            } catch (err) {
+                console.error('Failed to add writer from add-writer op:', err)
+            }
+            continue
         }
+
+        // All other values are appended to the view
         await view.append(value)
     }
 }
 
 // Simple inline schema validation
-function validateItem(item) {
+function validateItem (item) {
     if (typeof item !== 'object' || item === null) return false
     if (typeof item.id !== 'string') return false
     if (typeof item.text !== 'string') return false
@@ -62,43 +84,46 @@ function validateItem(item) {
     if (typeof item.timestamp !== 'number') return false
     return true
 }
-const local = store.get({ name: 'local-writer' })
-await local.ready()
-console.error('Local writer key:', local.key.toString('hex'))
 
-
-const autobase = new Autobase(store, null , {apply, open})
-
-await autobase.ready()
-
-console.error('Autobase ready, writable? ', autobase.writable, ' key:', autobase.key?.toString('hex'))
-
-
-
-
-if (peerKeysString) {
-    const peerKeys = peerKeysString.split(',').filter(k => k.trim())
-    for (const keyHex of peerKeys) {
-        try {
-            const peerKey = Buffer.from(keyHex.trim(), 'hex')
-            const peerCore = store.get({ key: peerKey })
-            await peerCore.ready()
-            await autobase.addInput(peerCore)
-            console.error('Added peer writer:', keyHex.trim())
-        } catch (err) {
-            console.error('Failed to add peer:', keyHex, err.message)
-        }
+// Optional Autobase key from argv (initial base)
+let baseKey = null
+if (baseKeyHex) {
+    try {
+        baseKey = Buffer.from(baseKeyHex.trim(), 'hex')
+        console.error('Using existing Autobase key from argv[2]:', baseKeyHex.trim())
+    } catch (err) {
+        console.error('Invalid base key hex, creating new base instead:', err.message)
+        baseKey = null
     }
 }
 
 // In-memory view of the list (linearized from autobase)
 let listView = new Map() // id -> item
 
+// P2P state
+const swarm = new Hyperswarm()
+let autobase = null
+let discovery = null
+let currentTopic = null
+
+// Handshake swarm for writer key exchange
+let chatSwarm = null
+let chatTopic = null
+const knownWriters = new Set()
+
+// RPC instance (assigned later, but referenced by helper fns)
+let rpc = null
+
 // Function to apply operations to the view
-function applyOp(op) {
+function applyOp (op) {
     try {
+        if (!op || typeof op !== 'object') {
+            console.error('Invalid op object:', op)
+            return
+        }
+
         if (!validateItem(op.value)) {
-            console.error('Invalid item:', op.value)
+            console.error('Invalid item in op.value:', op.value)
             return
         }
 
@@ -110,15 +135,22 @@ function applyOp(op) {
             case 'delete':
                 listView.delete(op.value.id)
                 break
+            default:
+                break
         }
     } catch (err) {
         console.error('Invalid operation:', err)
     }
 }
 
-
 // Send current list state to UI
-function sendListToUI() {
+function sendListToUI () {
+    if (!rpc) {
+        // Can be called before RPC is created; just skip in that case.
+        console.error('sendListToUI called before RPC is ready')
+        return
+    }
+
     try {
         // First send reset
         const resetReq = rpc.request(RPC_RESET)
@@ -133,10 +165,12 @@ function sendListToUI() {
                 }
                 return a.timestamp - b.timestamp
             })
+
         if (items.length === 0) {
-            listView.set("initialList", startingList)
-            items = listView.get("initialList")
+            listView.set('initialList', startingList)
+            items = listView.get('initialList')
         }
+
         console.error('Sending', items.length, 'items to UI')
         const req = rpc.request(SYNC_LIST)
         req.send(JSON.stringify(items))
@@ -146,13 +180,17 @@ function sendListToUI() {
 }
 
 // Linearize and build the view
-async function rebuildView() {
+async function rebuildView () {
+    if (!autobase) {
+        console.error('rebuildView called before Autobase is initialized')
+        return
+    }
+
     const oldSize = listView.size
     listView.clear()
 
     try {
-        for await (const node of autobase.createReadStream({ live: false })) {
-            const op = JSON.parse(node.value.toString())
+        for await (const { value: op } of autobase.createReadStream({ live: false })) {
             applyOp(op)
         }
     } catch (err) {
@@ -165,29 +203,29 @@ async function rebuildView() {
     sendListToUI()
 }
 
-// Listen for new data from any input
-autobase.on('append', async () => {
-    console.error('New data appended, rebuilding view...')
-    await rebuildView()
-})
-
 // Generate unique ID
-function generateId() {
+function generateId () {
     return randomBytes(16).toString('hex')
 }
 
 // Add item operation
-async function addItem(text, listId) {
-    console.error("command RPC_ADD addItem text", text )
+async function addItem (text, listId) {
+    if (!autobase) {
+        console.error('addItem called before Autobase is initialized')
+        return
+    }
+
+    console.error('command RPC_ADD addItem text', text)
+
     const item = {
         id: generateId(),
         text,
         isDone: false,
-        listId: listId,
+        listId: listId || null,
         timeOfCompletion: 0,
         updatedAt: Date.now(),
         timestamp: Date.now(),
-        author: local.key.toString('hex').slice(0, 8)
+        author: autobase.local.key.toString('hex').slice(0, 8)
     }
 
     const op = {
@@ -195,14 +233,18 @@ async function addItem(text, listId) {
         value: item
     }
 
-    await local.append(Buffer.from(JSON.stringify(op)))
-    await autobase.append(Buffer.from(JSON.stringify(op)))
+    await autobase.append(op)
     console.error('Added item:', text)
 }
 
 // Update item operation
-async function updateItem(id, listId, updates) {
-    console.error("command RPC_ADD updateItem  id ,  listId, updates", id ,  listId, updates)
+async function updateItem (id, listId, updates) {
+    if (!autobase) {
+        console.error('updateItem called before Autobase is initialized')
+        return
+    }
+
+    console.error('command RPC_UPDATE updateItem id, listId, updates', id, listId, updates)
     const existing = listView.get(id)
     if (!existing) {
         console.error('Item not found for update:', id)
@@ -212,6 +254,8 @@ async function updateItem(id, listId, updates) {
     const item = {
         ...existing,
         ...updates,
+        listId: listId ?? existing.listId,
+        updatedAt: Date.now(),
         timestamp: Date.now()
     }
 
@@ -220,13 +264,18 @@ async function updateItem(id, listId, updates) {
         value: item
     }
 
-    await local.append(Buffer.from(JSON.stringify(op)))
+    await autobase.append(op)
     console.error('Updated item:', item.text)
 }
 
 // Delete item operation
-async function deleteItem(id) {
-    console.error("command RPC_DELETE deleteItem  id ,  listId, updates", id ,  listId, updates)
+async function deleteItem (id) {
+    if (!autobase) {
+        console.error('deleteItem called before Autobase is initialized')
+        return
+    }
+
+    console.error('command RPC_DELETE deleteItem id', id)
     const existing = listView.get(id)
     if (!existing) {
         console.error('Item not found for delete:', id)
@@ -238,34 +287,210 @@ async function deleteItem(id) {
         value: { id, timestamp: Date.now() }
     }
 
-    await local.append(Buffer.from(JSON.stringify(op)))
+    await autobase.append(op)
     console.error('Deleted item:', existing.text)
 }
 
-// Initialize Hyperswarm for P2P replication
-const swarm = new Hyperswarm()
-
-// Replicate on connection
+// Replicate on connection (swarm is shared between bases)
 swarm.on('connection', (conn) => {
-    console.error('New peer connected', conn, conn.publicKey)
-    autobase.replicate(conn)
+    console.error('New peer connected (replication swarm)', conn.publicKey)
+    if (autobase) {
+        autobase.replicate(conn)
+    } else {
+        console.error('No Autobase yet to replicate with')
+    }
 })
 
-const firstLocalAutobaseKey = randomBytes(32)
-console.error("firstLocalAutobaseKey:", firstLocalAutobaseKey)
+// --- Handshake swarm for writer key exchange (desktop parity) ---
 
-// Join a topic based on autobase key for discovery
-const topic = autobase.key || firstLocalAutobaseKey
-console.error('Discovery topic:', topic.toString('hex'))
+function sendHandshakeMessage (conn, msg) {
+    const line = JSON.stringify(msg) + '\n'
+    conn.write(line)
+}
 
-const discovery = swarm.join(topic, { server: true, client: true })
-await discovery.flushed()
-console.error('Joined swarm')
+async function handleHandshakeMessage (msg) {
+    if (!autobase) return
+    if (!msg || msg.type !== 'writer-key') return
 
-const rpc = new RPC(IPC, async (req, error) => {
-    console.error("got a request from react", req)
+    const remoteKeyHex = msg.key
+    if (!remoteKeyHex || typeof remoteKeyHex !== 'string') return
+
+    if (knownWriters.has(remoteKeyHex)) return
+    knownWriters.add(remoteKeyHex)
+
+    // Only a writer can add other writers.
+    if (!autobase.writable) {
+        console.error('Not writable here, cannot add remote writer yet')
+        return
+    }
+
+    console.error('Adding remote writer via autobase:', remoteKeyHex)
+
+    await autobase.append({
+        type: 'add-writer',
+        key: remoteKeyHex
+    })
+}
+
+function setupHandshakeChannel (conn) {
+    if (!autobase) {
+        console.error('setupHandshakeChannel called before Autobase is initialized')
+        return
+    }
+
+    // Send our writer key immediately
+    const myWriterKeyHex = autobase.local.key.toString('hex')
+    sendHandshakeMessage(conn, {
+        type: 'writer-key',
+        key: myWriterKeyHex
+    })
+
+    let buffer = ''
+    conn.on('data', (chunk) => {
+        buffer += chunk.toString()
+        let idx
+        while ((idx = buffer.indexOf('\n')) !== -1) {
+            const line = buffer.slice(0, idx)
+            buffer = buffer.slice(idx + 1)
+            if (!line.trim()) continue
+
+            let msg
+            try {
+                msg = JSON.parse(line)
+            } catch (e) {
+                console.warn('invalid JSON from peer (handshake):', line)
+                continue
+            }
+
+            handleHandshakeMessage(msg)
+        }
+    })
+}
+
+function setupChatSwarm () {
+    if (!autobase) {
+        console.error('setupChatSwarm called before Autobase is initialized')
+        return
+    }
+
+    chatTopic = autobase.key
+    chatSwarm = new Hyperswarm()
+
+    chatSwarm.on('connection', (conn, info) => {
+        console.error('Handshake connection (chat swarm) with peer', info?.peer)
+        setupHandshakeChannel(conn)
+    })
+
+    chatSwarm.join(chatTopic, { server: true, client: true })
+    console.error('Handshake chat swarm joined on topic:', chatTopic.toString('hex'))
+}
+
+let addedStaticPeers = false
+
+async function initAutobase (newBaseKey) {
+    // Detach listeners from previous base
+    if (autobase) {
+        autobase.removeAllListeners('append')
+    }
+
+    baseKey = newBaseKey || null
+    autobase = new Autobase(store, baseKey, { apply, open, valueEncoding: 'json' })
+
+    await autobase.ready()
+
+    console.error(
+        'Autobase ready, writable? ',
+        autobase.writable,
+        ' key:',
+        autobase.key?.toString('hex'),
+        ' local writer key:',
+        autobase.local?.key?.toString('hex')
+    )
+
+    // Add static peer inputs if provided via argv[1] (only once)
+    if (peerKeysString && !addedStaticPeers) {
+        const peerKeys = peerKeysString.split(',').filter(k => k.trim())
+        for (const keyHex of peerKeys) {
+            try {
+                const peerKey = Buffer.from(keyHex.trim(), 'hex')
+                const peerCore = store.get({ key: peerKey })
+                await peerCore.ready()
+                await autobase.addInput(peerCore)
+                console.error('Added peer writer from argv[1]:', keyHex.trim())
+            } catch (err) {
+                console.error('Failed to add peer from argv[1]:', keyHex, err.message)
+            }
+        }
+        addedStaticPeers = true
+    }
+
+    // Reset writer cache; add our own writer
+    knownWriters.clear()
+    knownWriters.add(autobase.local.key.toString('hex'))
+
+    // Join replication topic for this base
+    const topic = autobase.key || randomBytes(32)
+    currentTopic = topic
+    console.error('Discovery topic (replication swarm):', topic.toString('hex'))
+
+    if (discovery) {
+        try {
+            await discovery.destroy()
+        } catch (e) {
+            console.error('Error destroying previous discovery:', e)
+        }
+    }
+
+    discovery = swarm.join(topic, { server: true, client: true })
+    await discovery.flushed()
+    console.error('Joined replication swarm for current base')
+
+    // Listen for new data from any input
+    autobase.on('append', async () => {
+        console.error('New data appended, rebuilding view...')
+        await rebuildView()
+    })
+
+    // Restart chat swarm with new topic
+    if (chatSwarm) {
+        try {
+            await chatSwarm.destroy()
+        } catch (e) {
+            console.error('Error destroying previous chat swarm:', e)
+        }
+        chatSwarm = null
+    }
+    setupChatSwarm()
+
+    // Rebuild view from the new base
+    listView.clear()
+    await rebuildView()
+}
+
+async function joinNewBase (baseKeyHexStr) {
+    if (!baseKeyHexStr || typeof baseKeyHexStr !== 'string') {
+        console.error('joinNewBase: invalid baseKey', baseKeyHexStr)
+        return
+    }
+
+    try {
+        const newKey = Buffer.from(baseKeyHexStr.trim(), 'hex')
+        if (newKey.length !== 32) {
+            console.error('joinNewBase: baseKey must be 32 bytes, got', newKey.length)
+            return
+        }
+        console.error('Joining new Autobase key at runtime:', baseKeyHexStr.trim())
+        await initAutobase(newKey)
+    } catch (e) {
+        console.error('joinNewBase failed:', e)
+    }
+}
+
+// Create RPC server
+rpc = new RPC(IPC, async (req, error) => {
+    console.error('got a request from react', req)
     if (error) {
-        console.error("got an error from react", error)
+        console.error('got an error from react', error)
     }
     try {
         switch (req.command) {
@@ -276,7 +501,7 @@ const rpc = new RPC(IPC, async (req, error) => {
             }
             case RPC_UPDATE: {
                 const data = JSON.parse(req.data.toString())
-                await updateItem(data.id, data.updates)
+                await updateItem(data.id, data.listId, data.updates)
                 break
             }
             case RPC_DELETE: {
@@ -285,10 +510,27 @@ const rpc = new RPC(IPC, async (req, error) => {
                 break
             }
             case RPC_GET_KEY: {
-                // Send our writer key back to UI
-                console.error("command RPC_GET_KEY")
+                // Send our writer key back to UI (same key used in handshake)
+                console.error('command RPC_GET_KEY')
+                if (!autobase) {
+                    console.error('RPC_GET_KEY requested before Autobase is ready')
+                    break
+                }
                 const keyReq = rpc.request(RPC_GET_KEY)
-                keyReq.send(local.key.toString('hex'))
+                keyReq.send(autobase.local.key.toString('hex'))
+                break
+            }
+            case RPC_JOIN_KEY: {
+                console.error('command RPC_JOIN_KEY')
+                const data = JSON.parse(req.data.toString())
+                console.error('Joining new base key from RPC:', data.baseKey)
+                await joinNewBase(data.baseKey)
+
+                // Respond with the base key we actually joined (for confirmation)
+                if (autobase) {
+                    const joinResp = rpc.request(RPC_JOIN_KEY)
+                    joinResp.send(JSON.stringify({ baseKey: autobase.key?.toString('hex') }))
+                }
                 break
             }
         }
@@ -297,19 +539,44 @@ const rpc = new RPC(IPC, async (req, error) => {
     }
 })
 
-// send the autobase key to react
-const req = rpc.request(RPC_GET_KEY)
-req.send(autobase.key?.toString('hex'))
+// Initialize Autobase for the initial baseKey (from argv or new)
+await initAutobase(baseKey)
 
-// Build initial view
-await rebuildView()
+// send the autobase key to react (for joining/sharing)
+if (autobase) {
+    const req = rpc.request(RPC_GET_KEY)
+    req.send(autobase.key?.toString('hex'))
+}
+
+// Backend ready
 console.error('Backend ready')
 
 // Cleanup on teardown
 Bare.on('teardown', async () => {
     console.error('Backend shutting down...')
-    await swarm.destroy()
-    await store.close()
+    try {
+        await swarm.destroy()
+    } catch (e) {
+        console.error('Error destroying replication swarm:', e)
+    }
+    if (chatSwarm) {
+        try {
+            await chatSwarm.destroy()
+        } catch (e) {
+            console.error('Error destroying chat swarm:', e)
+        }
+    }
+    if (discovery) {
+        try {
+            await discovery.destroy()
+        } catch (e) {
+            console.error('Error destroying discovery:', e)
+        }
+    }
+    try {
+        await store.close()
+    } catch (e) {
+        console.error('Error closing store:', e)
+    }
     console.error('Backend shutdown complete')
 })
-
