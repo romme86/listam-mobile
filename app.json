@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "lista",
-    "slug": "lista-expo",
+    "name": "listam",
+    "slug": "listam-expo",
     "version": "1.0.0",
     "newArchEnabled": true,
     "orientation": "portrait",
-    "scheme": "ch.saynode.lista",
+    "scheme": "ch.saynode.listam",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ch.saynode.lista",
+      "bundleIdentifier": "ch.saynode.listam",
       "appleTeamId": "4F2NJTPHF4"
     },
     "android": {
@@ -23,7 +23,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "ch.saynode.lista"
+      "package": "ch.saynode.listam"
     },
     "plugins": [
       [

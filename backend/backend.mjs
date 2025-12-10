@@ -30,10 +30,7 @@ const peerKeysString = Bare.argv[1] || '' // Comma-separated peer keys
 const baseKeyHex = Bare.argv[2] || '' // Optional Autobase key (to join an existing base)
 
 // Initialize Corestore
-// const store = new Corestore(storagePath)
-let store 
-// await store.ready()
-// console.error('Corestore ready at:', storagePath)
+let store
 
 // P2P state
 let swarm = null
@@ -47,11 +44,11 @@ let chatTopic = null
 const knownWriters = new Set()
 let addedStaticPeers = false
 
+// Track connected replication peers
+let peerCount = 0
+
 // RPC instance (assigned later, but referenced by helper fns)
 let rpc = null
-
-
-
 
 // Optional Autobase key from argv (initial base)
 let baseKey = null
@@ -65,17 +62,10 @@ if (baseKeyHex) {
     }
 }
 
-
 // Generate unique ID (used only for addItem)
 function generateId () {
     return randomBytes(16).toString('hex')
 }
-
-
-// Replicate on connection (swarm is shared between bases)
-
-
-// --- Handshake swarm for writer key exchange (desktop parity) ---
 
 function sendHandshakeMessage (conn, msg) {
     const line = JSON.stringify(msg) + '\n'
@@ -132,7 +122,6 @@ async function setupHandshakeChannel (conn) {
             // Fast-path: hypercore protocol frames and other binary garbage
             // are not going to start with '{', so just ignore them.
             if (line[0] !== '{') {
-                // console.warn('non-JSON frame on handshake channel (ignored)')
                 continue
             }
 
@@ -149,23 +138,32 @@ async function setupHandshakeChannel (conn) {
     })
 }
 
-
 function setupChatSwarm (chatTopic) {
     if (!autobase) {
         console.error('setupChatSwarm called before Autobase is initialized')
         return
     }
     chatSwarm = new Hyperswarm()
-    console.error("setting up chat swarm with topic:", chatTopic.toString('hex'))
+    console.error('setting up chat swarm with topic:', chatTopic.toString('hex'))
     chatSwarm.on('connection', (conn, info) => {
         console.error('Handshake connection (chat swarm) with peer', info?.peer)
         setupHandshakeChannel(conn)
+        // NOTE: chatSwarm connections are not counted towards peerCount
     })
 
     chatSwarm.join(chatTopic, { server: true, client: true })
     console.error('Handshake chat swarm joined on topic:', chatTopic.toString('hex'))
 }
 
+function broadcastPeerCount () {
+    if (!rpc) return
+    try {
+        const req = rpc.request(RPC_MESSAGE)
+        req.send(JSON.stringify({ type: 'peer-count', count: peerCount }))
+    } catch (e) {
+        console.error('Failed to broadcast peer count', e)
+    }
+}
 
 async function initAutobase (newBaseKey) {
     // 1. Clean up previous Autobase instance (if any)
@@ -175,9 +173,6 @@ async function initAutobase (newBaseKey) {
             if (typeof autobase.close === 'function') {
                 console.error('Closing previous Autobase instance...')
                 await autobase.close()
-                // store = new Corestore(storagePath)
-                // await store.ready()
-                // console.error('Recreated Corestore after closing previous Autobase')
             } else {
                 console.error('Previous Autobase has no close() method, skipping close')
             }
@@ -255,9 +250,10 @@ async function initAutobase (newBaseKey) {
         addedStaticPeers = true
     }
 
-    // Rebuild view from the new base
-    // await rebuildView()
-    
+    // Reset peer count on new base
+    peerCount = 0
+    broadcastPeerCount()
+
     // --- Update replication swarm topic for this base ---
     const firstLocalAutobaseKey = randomBytes(32)
     const topic = autobase.key || firstLocalAutobaseKey
@@ -275,13 +271,22 @@ async function initAutobase (newBaseKey) {
     swarm = new Hyperswarm()
     swarm.on('connection', (conn) => {
         console.error('New peer connected (replication swarm)', b4a.from(conn.publicKey), conn.publicKey)
+
+        peerCount++
+        broadcastPeerCount()
+
+        conn.on('close', () => {
+            peerCount = Math.max(0, peerCount - 1)
+            broadcastPeerCount()
+        })
+
         if (autobase) {
             autobase.replicate(conn)
         } else {
             console.error('No Autobase yet to replicate with')
         }
     })
-    
+
     discovery = swarm.join(topic, { server: true, client: true })
     await discovery.flushed()
     console.error('Joined replication swarm for current base')
@@ -297,7 +302,7 @@ async function initAutobase (newBaseKey) {
         }
         chatSwarm = null
     }
-    setupChatSwarm(baseKey != null? baseKey : autobase.key)
+    setupChatSwarm(baseKey != null ? baseKey : autobase.key)
 }
 
 async function joinNewBase (baseKeyHexStr) {
@@ -334,18 +339,15 @@ rpc = new RPC(IPC, async (req, error) => {
             }
             case RPC_UPDATE: {
                 const data = JSON.parse(req.data.toString())
-                // FRONTEND NOW SENDS: { item: <full item> }
                 await updateItem(data.item)
                 break
             }
             case RPC_DELETE: {
                 const data = JSON.parse(req.data.toString())
-                // FRONTEND SENDS: { item: <full item> }
                 await deleteItem(data.item)
                 break
             }
             case RPC_GET_KEY: {
-                // Send our writer key back to UI (same key used in handshake)
                 console.error('command RPC_GET_KEY')
                 if (!autobase) {
                     console.error('RPC_GET_KEY requested before Autobase is ready')
@@ -370,9 +372,6 @@ rpc = new RPC(IPC, async (req, error) => {
 
 // Initialize Autobase for the initial baseKey (from argv or new)
 await initAutobase(baseKey)
-
-// send the autobase key to react (for joining/sharing)
-
 
 // Backend ready
 console.error('Backend ready')
@@ -467,8 +466,8 @@ async function apply (nodes, view, host) {
         }
 
         if (value.type === 'list') {
-            if (!validateItem(value.value)) {
-                console.error('Invalid item schema in list operation:', value.value)
+            if (!Array.isArray(value.value)) {
+                console.error('Invalid list operation payload, expected array:', value.value)
                 continue
             }
             console.error('Applying list operation for items:', value.value)
@@ -490,7 +489,6 @@ function validateItem (item) {
     if (typeof item.timeOfCompletion !== 'number') return false
     return true
 }
-
 
 // Add item operation (backend creates the canonical item)
 async function addItem (text, listId) {

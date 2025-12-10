@@ -6,10 +6,22 @@ import bundle from './app.bundle.mjs'
 import RPC from 'bare-rpc'
 import b4a from 'b4a'
 import { Ionicons } from '@expo/vector-icons';
-import {RPC_MESSAGE, RPC_RESET, RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_GET_KEY, RPC_ADD_FROM_BACKEND, RPC_UPDATE_FROM_BACKEND, RPC_DELETE_FROM_BACKEND, RPC_JOIN_KEY, SYNC_LIST} from '../rpc-commands.mjs'
+import {
+    RPC_MESSAGE,
+    RPC_RESET,
+    RPC_UPDATE,
+    RPC_DELETE,
+    RPC_ADD,
+    RPC_GET_KEY,
+    RPC_ADD_FROM_BACKEND,
+    RPC_UPDATE_FROM_BACKEND,
+    RPC_DELETE_FROM_BACKEND,
+    RPC_JOIN_KEY,
+    SYNC_LIST
+} from '../rpc-commands.mjs'
 import InertialElasticList from './components/intertial_scroll'
 
-type ListEntry = {
+export type ListEntry = {
     text: string,
     isDone: boolean,
     timeOfCompletion: EpochTimeStamp,
@@ -17,54 +29,89 @@ type ListEntry = {
 
 export default function App() {
     const [dataList, setDataList] = useState<ListEntry[]>([
-            { text: 'Tap to mark as done', isDone: false, timeOfCompletion: 0 },
-            { text: 'Double tap to add new', isDone: false, timeOfCompletion: 0 },
-            { text: 'Slide left to delete', isDone: false, timeOfCompletion: 0 },
-            { text: 'Mozzarella', isDone: false, timeOfCompletion: 0 },
-            { text: 'Tomato Sauce', isDone: false, timeOfCompletion: 0 },
-            { text: 'Flour', isDone: false, timeOfCompletion: 0 },
-            { text: 'Yeast', isDone: false, timeOfCompletion: 0 },
-            { text: 'Salt', isDone: false, timeOfCompletion: 0 },
-            { text: 'Basil', isDone: false, timeOfCompletion: 0 }
+        { text: 'Tap to mark as done', isDone: false, timeOfCompletion: 0 },
+        { text: 'Double tap to add new', isDone: false, timeOfCompletion: 0 },
+        { text: 'Slide left to delete', isDone: false, timeOfCompletion: 0 },
+        { text: 'Mozzarella', isDone: false, timeOfCompletion: 0 },
+        { text: 'Tomato Sauce', isDone: false, timeOfCompletion: 0 },
+        { text: 'Flour', isDone: false, timeOfCompletion: 0 },
+        { text: 'Yeast', isDone: false, timeOfCompletion: 0 },
+        { text: 'Salt', isDone: false, timeOfCompletion: 0 },
+        { text: 'Basil', isDone: false, timeOfCompletion: 0 }
     ])
+
+    const [pairingInvite, setPairingInvite] = useState('')
+    const [isWorkletStarted, setIsWorkletStarted] = useState(false)
+    const [autobaseInviteKey, setAutobaseInviteKey] = useState('')
+    const rpcRef = useRef<any>(null)
+    const workletRef = useRef<Worklet | null>(null)
+    const [joinDialogVisible, setJoinDialogVisible] = useState(false)
+    const [joinKeyInput, setJoinKeyInput] = useState('')
+    const [peerCount, setPeerCount] = useState(0)
 
     useEffect(() => {
         if (!isWorkletStarted) {
             setIsWorkletStarted(true)
             startWorklet()
         }
+
+        return () => {
+            // Cleanup on unmount / reload
+            if (workletRef.current && typeof (workletRef.current as any).stop === 'function') {
+                try {
+                    ;(workletRef.current as any).stop()
+                } catch (e) {
+                    console.warn('Error stopping worklet', e)
+                }
+            }
+            workletRef.current = null
+            rpcRef.current = null
+        }
     }, [])
 
-    const [pairingInvite, setPairingInvite] = useState('')
-    const [isWorkletStarted, setIsWorkletStarted] = useState(false)
-    const [autobaseInviteKey, setAutobaseInviteKey] = useState('')
-    const rpcRef = useRef<any>(null)
-    const [joinDialogVisible, setJoinDialogVisible] = useState(false)
-    const [joinKeyInput, setJoinKeyInput] = useState('')
+    const sendRPC = (command: number, payload?: string) => {
+        if (!rpcRef.current) {
+            console.warn('RPC not ready, ignoring command', command)
+            return
+        }
+        const req = rpcRef.current.request(command)
+        if (payload !== undefined) {
+            req.send(payload)
+        }
+    }
+
 
 
     const startWorklet = () => {
 
         console.log('Starting worklet')
         const worklet = new Worklet()
+        workletRef.current = worklet
+
         console.log('documentDirectory', documentDirectory, pairingInvite)
         const worklet_start = worklet.start('/app.bundle', bundle, [String(documentDirectory)])
         console.log('worklet_start', worklet_start)
-        const {IPC} = worklet
+        const { IPC } = worklet
+
         rpcRef.current = new RPC(IPC, (reqFromBackend) => {
             if (reqFromBackend.command === RPC_MESSAGE) {
                 console.log('RPC MESSAGE req', reqFromBackend)
                 if (reqFromBackend.data) {
-                    console.log('data from bare', b4a.toString(reqFromBackend.data))
-                    const data = b4a.toString(reqFromBackend.data)
-                    const parsedData = JSON.parse(data)
-                    const entry: ListEntry = {
-                        text: parsedData[1],
-                        isDone: parsedData[2],
-                        timeOfCompletion: parsedData[3]
+                    const dataStr = b4a.toString(reqFromBackend.data)
+                    console.log('data from bare', dataStr)
+                    try {
+                        const payload = JSON.parse(dataStr)
+                        if (payload.type === 'peer-count') {
+                            const count = typeof payload.count === 'number' ? payload.count : 0
+                            setPeerCount(count)
+                        } else {
+                            console.log('RPC_MESSAGE payload (unhandled type):', payload)
+                        }
+                    } catch (e) {
+                        console.warn('Invalid RPC_MESSAGE payload', dataStr)
                     }
                 } else {
-                    console.log('data from bare is null, empty or undefined')
+                    console.log('RPC_MESSAGE without data')
                 }
             }
             if (reqFromBackend.command === RPC_RESET) {
@@ -127,21 +174,35 @@ export default function App() {
     const handleToggleDone = (index: number) => {
         setDataList((prevList) => {
             const newList = [...prevList]
-            const item = newList[index]
-            const updatedItem = {
-                ...item,
-                isDone: !item.isDone,
-                timeOfCompletion: !item.isDone ? Date.now() : 0
+            const current = newList[index]
+
+            if (!current) {
+                return prevList
             }
+
+            const updatedItem: ListEntry = {
+                ...current,
+                isDone: !current.isDone,
+                timeOfCompletion: !current.isDone ? Date.now() : 0,
+            }
+
+            // Reorder: done items to bottom, undone to top
             newList.splice(index, 1)
             if (updatedItem.isDone) {
-                newList.push(updatedItem) // Add to bottom
+                newList.push(updatedItem)
             } else {
-                newList.unshift(updatedItem) // Add to top
+                newList.unshift(updatedItem)
             }
-            console.log("sending RPC request update")
-            const req = rpcRef.current.request(RPC_UPDATE)
-            req.send(JSON.stringify({ id: item.isDone,  }))
+
+            console.log('sending RPC request update')
+
+            if (rpcRef.current) {
+                const req = sendRPC(RPC_UPDATE)
+                req.send(JSON.stringify({ item: updatedItem }))
+            } else {
+                console.warn('RPC not ready, ignoring UPDATE')
+            }
+
             return newList
         })
     }
@@ -149,23 +210,30 @@ export default function App() {
     const handleDelete = (index: number) => {
         const deletedItem = dataList[index];
         setDataList((prevList) => prevList.filter((_, i) => i !== index))
-        const req = rpcRef.current.request(RPC_DELETE)
-        req.send(JSON.stringify({ item: deletedItem,  }))
+        const req = sendRPC(RPC_DELETE)
+        req.send(JSON.stringify({ item: deletedItem }))
     }
 
     const handleInsert = (index: number, text: string) => {
-        setDataList((prevList) => {
-            const newList = [...prevList]
-            const newEntry: ListEntry = {
-                text,
-                isDone: false,
-                timeOfCompletion: 0
-            }
-            newList.splice(index, 0, newEntry)
-            const req = rpcRef.current.request(RPC_ADD)
-            req.send(JSON.stringify(text))
-            return newList
-        })
+        // setDataList((prevList) => {
+        //     const newList = [...prevList]
+        //     const newEntry: ListEntry = {
+        //         text,
+        //         isDone: false,
+        //         timeOfCompletion: 0
+        //     }
+        //     newList.splice(index, 0, newEntry)
+        //     const req = sendRPC(RPC_ADD)
+        //     req.send(JSON.stringify(text))
+        //     return newList
+        // })
+        if (!rpcRef.current) {
+            console.warn('RPC not ready, ignoring ADD')
+            return
+        }
+
+        const req = sendRPC(RPC_ADD)
+        req.send(JSON.stringify(text))
     }
 
     const handleShare = async () => {
@@ -209,8 +277,7 @@ export default function App() {
         console.log('Submitting join key:', joinKeyInput);
 
         // Make RPC call to backend
-        // Replace RPC_JOIN_KEY with the appropriate command number from your rpc-commands.mjs
-        const req = rpcRef.current.request(RPC_JOIN_KEY);
+        const req = sendRPC(RPC_JOIN_KEY);
         req.send(JSON.stringify({ key: joinKeyInput }));
 
         // Close dialog and reset input
@@ -223,6 +290,8 @@ export default function App() {
         setJoinKeyInput('');
     };
 
+    const peerCountLabel = peerCount > 99 ? '99+' : String(peerCount)
+
     return (
         <View style={styles.container}>
             <>
@@ -231,13 +300,20 @@ export default function App() {
                         <View style={styles_safe_area.leftSection} />
 
                         <View style={styles_safe_area.rightSection}>
-                            <TouchableOpacity
-                                style={styles_safe_area.iconButton}
-                                onPress={handleShare}
-                                activeOpacity={0.7}
-                            >
-                                <Ionicons name="share-outline" size={24} color="#333" />
-                            </TouchableOpacity>
+                            <View style={styles_safe_area.iconWithBadge}>
+                                <TouchableOpacity
+                                    style={styles_safe_area.iconButton}
+                                    onPress={handleShare}
+                                    activeOpacity={0.7}
+                                >
+                                    <Ionicons name="share-outline" size={24} color="#333" />
+                                </TouchableOpacity>
+                                {peerCount > 0 && (
+                                    <View style={styles_safe_area.badge}>
+                                        <Text style={styles_safe_area.badgeText}>{peerCountLabel}</Text>
+                                    </View>
+                                )}
+                            </View>
 
                             <TouchableOpacity
                                 style={styles_safe_area.iconButton}
@@ -294,7 +370,6 @@ export default function App() {
                     onDelete={handleDelete}
                     onInsert={handleInsert}
                 />
-                {/*<Button title='Start' onPress={startWorklet} color='#393939ff' />*/}
             </>
         </View>
     )
@@ -349,6 +424,28 @@ const styles_safe_area = StyleSheet.create({
     },
     iconButton: {
         padding: 8,
+    },
+    iconWithBadge: {
+        position: 'relative',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    badge: {
+        position: 'absolute',
+        top: 4,
+        right: 2,
+        minWidth: 16,
+        height: 16,
+        borderRadius: 999,
+        backgroundColor: '#ff3b30',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 3,
+    },
+    badgeText: {
+        color: '#fff',
+        fontSize: 10,
+        fontWeight: '600',
     },
 });
 

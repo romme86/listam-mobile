@@ -1,6 +1,6 @@
 {
   "private": true,
-  "name": "lista",
+  "name": "listam",
   "description": "A minimalistic p2p list app",
   "main": "expo-router/entry",
   "scripts": {
