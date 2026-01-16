@@ -6,9 +6,10 @@
   "scripts": {
     "start": "expo start",
     "android": "npm run bundle:backend:android && expo run:android",
+    "android:release": "cd android && ./gradlew bundleRelease",
     "ios": "npm run bundle:backend:ios && expo run:ios --device",
-    "bundle:backend:ios": "npx bare-pack --target ios --linked --out app/app.bundle.ios.mjs backend/backend.mjs",
-    "bundle:backend:android": "npx bare-pack --target android --linked --out app/app.android.js backend/backend.mjs"
+    "bundle:backend:ios": "npx bare-pack --target ios --linked backend/backend.mjs --encoding base64 --out app/app.ios.bundle && node scripts/wrap-bare-bundle.mjs app/app.ios.bundle app/app.ios.bundle.mjs",
+    "bundle:backend:android": "npx bare-pack --target android --linked backend/backend.mjs --encoding base64 --out app/assets/backend.android.bundle && node scripts/wrap-bare-bundle.mjs app/assets/backend.android.bundle app/assets/backend.android.bundle.mjs"
   },
   "dependencies": {
     "@inquirer/prompts": "^7.8.1",
@@ -19,11 +20,13 @@
     "bare-crypto": "^1.12.0",
     "bare-fs": "^4.4.4",
     "bare-rpc": "^0.2.12",
+    "base64-js": "^1.5.1",
     "blind-peering": "^1.13.0",
     "corestore": "^7.5.0",
-    "expo": "54.0.30",
+    "expo": "~54.0.31",
     "expo-build-properties": "1.0.10",
-    "expo-constants": "18.0.12",
+    "expo-constants": "~18.0.13",
+    "expo-file-system": "~19.0.21",
     "expo-linking": "8.0.11",
     "expo-router": "6.0.21",
     "expo-system-ui": "6.0.9",
@@ -35,20 +38,23 @@
     "lucide-react-native": "^0.553.0",
     "make-dir": "^5.1.0",
     "protomux-wakeup": "^2.6.1",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "react-native": "0.83.0",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "0.81.5",
     "react-native-b4a": "0.0.4",
     "react-native-bare-kit": "0.11.5",
-    "react-native-safe-area-context": "5.6.2"
+    "react-native-reanimated": "~4.1.1",
+    "react-native-safe-area-context": "5.6.2",
+    "react-native-worklets": "0.5.1"
   },
   "devDependencies": {
     "@react-native-community/cli": "latest",
     "@types/b4a": "1.6.5",
     "@types/react": "19.2.7",
+    "babel-plugin-module-resolver": "^5.0.2",
     "bare-pack": "1.5.1",
     "prettier": "3.7.4",
-    "prettier-config-standard": "^7.0.0",
+    "prettier-config-holepunch": "2.0.0",
     "typescript": "5.9.3"
   }
 }

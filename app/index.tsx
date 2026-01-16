@@ -1,8 +1,11 @@
-import React, {useEffect, useRef, useState} from 'react'
-import {Platform, StyleSheet, View, TouchableOpacity, SafeAreaView, Share, Modal, TextInput, Text, Alert} from 'react-native'
-import {documentDirectory} from 'expo-file-system'
+import React, {useEffect, useRef, useState, useCallback} from 'react'
+import {Platform, StyleSheet, View, TouchableOpacity, SafeAreaView, Share, Modal, TextInput, Text, Alert, ActivityIndicator, Animated} from 'react-native'
+import * as FileSystemExpo from 'expo-file-system';
+import { toByteArray } from 'base64-js';
 import {Worklet} from 'react-native-bare-kit'
-import bundle from './app.android.js'
+// import bundle from './assets/backend.android.bundle.mjs'
+// import backendBundleB64 from './assets/backend.android.bundle.mjs';
+import backendBundleB64 from './app.ios.bundle.mjs';
 import RPC from 'bare-rpc'
 import b4a from 'b4a'
 import { Ionicons } from '@expo/vector-icons';
@@ -17,7 +20,8 @@ import {
     RPC_UPDATE_FROM_BACKEND,
     RPC_DELETE_FROM_BACKEND,
     RPC_JOIN_KEY,
-    SYNC_LIST
+    SYNC_LIST,
+    RPC_REQUEST_SYNC
 } from '../rpc-commands.mjs'
 import InertialElasticList from './components/intertial_scroll'
 
@@ -27,31 +31,114 @@ export type ListEntry = {
     timeOfCompletion: EpochTimeStamp,
 }
 
+type AnimatedIconButtonProps = {
+    onPress: () => void;
+    children: React.ReactNode;
+    style?: any;
+}
+
+function AnimatedIconButton({ onPress, children, style }: AnimatedIconButtonProps) {
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+
+    const handlePressIn = () => {
+        Animated.spring(scaleAnim, {
+            toValue: 0.85,
+            useNativeDriver: true,
+            speed: 50,
+            bounciness: 4,
+        }).start();
+    };
+
+    const handlePressOut = () => {
+        Animated.spring(scaleAnim, {
+            toValue: 1,
+            useNativeDriver: true,
+            speed: 20,
+            bounciness: 10,
+        }).start();
+    };
+
+    return (
+        <TouchableOpacity
+            onPress={onPress}
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+            activeOpacity={1}
+            style={style}
+        >
+            <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+                {children}
+            </Animated.View>
+        </TouchableOpacity>
+    );
+}
+
 export default function App() {
-    const [dataList, setDataList] = useState<ListEntry[]>([
-        { text: 'Tap to mark as done', isDone: false, timeOfCompletion: 0 },
-        { text: 'Double tap to add new', isDone: false, timeOfCompletion: 0 },
-        { text: 'Slide left to delete', isDone: false, timeOfCompletion: 0 },
-        { text: 'Mozzarella', isDone: false, timeOfCompletion: 0 },
-        { text: 'Tomato Sauce', isDone: false, timeOfCompletion: 0 },
-        { text: 'Flour', isDone: false, timeOfCompletion: 0 },
-        { text: 'Yeast', isDone: false, timeOfCompletion: 0 },
-        { text: 'Salt', isDone: false, timeOfCompletion: 0 },
-        { text: 'Basil', isDone: false, timeOfCompletion: 0 }
-    ])
+    // List state is initialized empty - backend will send persisted data (including defaults on first run)
+    const [dataList, setDataList] = useState<ListEntry[]>([])
 
     const [pairingInvite, setPairingInvite] = useState('')
     const [isWorkletStarted, setIsWorkletStarted] = useState(false)
     const [autobaseInviteKey, setAutobaseInviteKey] = useState('')
     const rpcRef = useRef<any>(null)
     const workletRef = useRef<Worklet | null>(null)
+    const isJoiningRef = useRef(false)
     const [joinDialogVisible, setJoinDialogVisible] = useState(false)
     const [joinKeyInput, setJoinKeyInput] = useState('')
     const [peerCount, setPeerCount] = useState(0)
+    const [isJoining, setIsJoining] = useState(false)
+    const [currentP2PMessage, setCurrentP2PMessage] = useState(0)
+    const blinkAnim = useRef(new Animated.Value(1)).current
+
+    // Blinking animation when key is not ready
+    useEffect(() => {
+        if (!autobaseInviteKey) {
+            const blink = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(blinkAnim, {
+                        toValue: 0.3,
+                        duration: 500,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(blinkAnim, {
+                        toValue: 1,
+                        duration: 500,
+                        useNativeDriver: true,
+                    }),
+                ])
+            )
+            blink.start()
+            return () => blink.stop()
+        } else {
+            blinkAnim.setValue(1)
+        }
+    }, [autobaseInviteKey])
+
+    const p2pMessages = [
+        "🌐 Connecting to the decentralized network...",
+        "🔐 No servers, no middlemen - just you and your peers",
+        "🚀 P2P means your data stays yours, always",
+        "🔗 Building encrypted tunnels between devices...",
+        "✨ Syncing directly - no cloud required",
+        "🌍 Your list, your network, your rules",
+        "⚡ Peer-to-peer: the way the internet was meant to be",
+        "🛡️ End-to-end encrypted, naturally",
+    ]
+
+    // Rotate P2P messages while joining
+    useEffect(() => {
+        if (!isJoining) return
+        const interval = setInterval(() => {
+            setCurrentP2PMessage((prev) => (prev + 1) % p2pMessages.length)
+        }, 3000)
+        return () => clearInterval(interval)
+    }, [isJoining])
 
     useEffect(() => {
         if (!isWorkletStarted) {
             setIsWorkletStarted(true)
+
+
             startWorklet()
         }
 
@@ -87,9 +174,16 @@ export default function App() {
         console.log('Starting worklet')
         const worklet = new Worklet()
         workletRef.current = worklet
+        // IMPORTANT: BareKit needs the RAW .bundle bytes.
+        const bundleBytes = toByteArray(backendBundleB64);
+        // If you need a path argument, prefer FileSystem.documentDirectory (your log shows the named export was undefined).
 
-        console.log('documentDirectory', documentDirectory, pairingInvite)
-        const worklet_start = worklet.start('/app.bundle', bundle, [String(documentDirectory)])
+        const baseDir =
+            FileSystemExpo.Paths.document.uri ??
+            FileSystemExpo.Paths.cache.uri ??
+              '';
+        console.log('documentDirectory', baseDir, pairingInvite);
+        const worklet_start = worklet.start('/app.bundle', bundleBytes, [String(baseDir)])
         console.log('worklet_start', worklet_start)
         const { IPC } = worklet
 
@@ -104,6 +198,14 @@ export default function App() {
                         if (payload.type === 'peer-count') {
                             const count = typeof payload.count === 'number' ? payload.count : 0
                             setPeerCount(count)
+                            // If we're joining and got a peer, we're connected!
+                            if (isJoiningRef.current && count > 0) {
+                                isJoiningRef.current = false
+                                setIsJoining(false)
+                                Alert.alert('Success!', 'Connected to peer successfully. Your lists are now synced.')
+                            }
+                        } else if (payload.type === 'not-writable') {
+                            Alert.alert('Please wait', payload.message || 'You are not yet authorized to modify the list. Please wait a moment.')
                         } else {
                             console.log('RPC_MESSAGE payload (unhandled type):', payload)
                         }
@@ -123,9 +225,9 @@ export default function App() {
                 if(reqFromBackend.data) {
                     console.log('data from bare', b4a.toString(reqFromBackend.data))
                     const listToSync = JSON.parse(b4a.toString(reqFromBackend.data))
-                    setDataList(() => listToSync)
+                    // Backend is the source of truth - display whatever it sends
+                    setDataList(listToSync)
                 }
-
             }
             if (reqFromBackend.command === RPC_DELETE_FROM_BACKEND) {
                 console.log('RPC_DELETE_FROM_BACKEND')
@@ -168,6 +270,24 @@ export default function App() {
                 }
             }
         })
+
+        // Request the current list from the backend after RPC is ready
+        // This ensures we get the persisted list state on app restart
+        // Retry multiple times to handle timing issues
+        const requestSync = () => {
+            if (rpcRef.current) {
+                console.log('Requesting sync from backend...')
+                const req = rpcRef.current.request(RPC_REQUEST_SYNC)
+                req.send('')
+            }
+        }
+
+        // Try at different intervals to catch the backend when it's ready
+        setTimeout(requestSync, 100)
+        setTimeout(requestSync, 500)
+        setTimeout(requestSync, 1000)
+        setTimeout(requestSync, 2000)
+
         setIsWorkletStarted(true)
     }
 
@@ -222,15 +342,15 @@ export default function App() {
     }
 
     const handleShare = async () => {
-        console.log('Share pressed');
+        console.log('Share pressed, key:', autobaseInviteKey);
         if (!autobaseInviteKey) {
-            console.log('No invite key available to share');
+            Alert.alert('Connection in progress', 'Invite key is not available yet. Please wait a moment and try again.');
             return;
         }
 
         try {
             const result = await Share.share({
-                message: `Join my list! Use this key: ${autobaseInviteKey}`,
+                message: `${autobaseInviteKey}`,
                 title: 'Share Invite Key'
             });
 
@@ -261,6 +381,11 @@ export default function App() {
 
         console.log('Submitting join key:', joinKeyInput);
 
+        // Show joining overlay
+        setIsJoining(true);
+        setCurrentP2PMessage(0);
+        isJoiningRef.current = true;
+
         // Make RPC call to backend
         sendRPC(RPC_JOIN_KEY, JSON.stringify({ key: joinKeyInput }));
 
@@ -274,6 +399,30 @@ export default function App() {
         setJoinKeyInput('');
     };
 
+    const handleDeleteAll = () => {
+        Alert.alert(
+            'Delete All Items',
+            'Are you sure you want to delete all items? This cannot be undone.',
+            [
+                {
+                    text: 'Cancel',
+                    style: 'cancel',
+                },
+                {
+                    text: 'Delete All',
+                    style: 'destructive',
+                    onPress: () => {
+                        // Delete each item via RPC
+                        dataList.forEach((item) => {
+                            sendRPC(RPC_DELETE, JSON.stringify({ item }));
+                        });
+                        setDataList([]);
+                    },
+                },
+            ]
+        );
+    };
+
     const peerCountLabel = peerCount > 99 ? '99+' : String(peerCount)
 
     return (
@@ -281,31 +430,42 @@ export default function App() {
             <>
                 <SafeAreaView style={styles_safe_area.safeArea}>
                     <View style={styles_safe_area.container}>
-                        <View style={styles_safe_area.leftSection} />
+                        <View style={styles_safe_area.leftSection}>
+                            <AnimatedIconButton
+                                style={styles_safe_area.iconButton}
+                                onPress={handleDeleteAll}
+                            >
+                                <Ionicons name="trash-outline" size={24} color="#333" />
+                            </AnimatedIconButton>
+                        </View>
 
                         <View style={styles_safe_area.rightSection}>
                             <View style={styles_safe_area.iconWithBadge}>
-                                <TouchableOpacity
+                                <AnimatedIconButton
                                     style={styles_safe_area.iconButton}
                                     onPress={handleShare}
-                                    activeOpacity={0.7}
                                 >
                                     <Ionicons name="share-outline" size={24} color="#333" />
-                                </TouchableOpacity>
-                                {peerCount > 0 && (
-                                    <View style={styles_safe_area.badge}>
-                                        <Text style={styles_safe_area.badgeText}>{peerCountLabel}</Text>
+                                </AnimatedIconButton>
+                                {!autobaseInviteKey ? (
+                                    <Animated.View style={[styles_safe_area.badge, styles_safe_area.orangeBadge, { opacity: blinkAnim }]} />
+                                ) : peerCount > 0 ? (
+                                    <View style={styles_safe_area.pearBadge}>
+                                        <View style={styles_safe_area.pearStalk} />
+                                        <View style={styles_safe_area.pearTop} />
+                                        <View style={styles_safe_area.pearBottom}>
+                                            <Text style={styles_safe_area.pearBadgeText}>{peerCountLabel}</Text>
+                                        </View>
                                     </View>
-                                )}
+                                ) : null}
                             </View>
 
-                            <TouchableOpacity
+                            <AnimatedIconButton
                                 style={styles_safe_area.iconButton}
                                 onPress={handleJoin}
-                                activeOpacity={0.7}
                             >
                                 <Ionicons name="person-add-outline" size={24} color="#333" />
-                            </TouchableOpacity>
+                            </AnimatedIconButton>
                         </View>
                     </View>
                 </SafeAreaView>
@@ -345,6 +505,33 @@ export default function App() {
                                     <Text style={dialog_styles.submitButtonText}>Join</Text>
                                 </TouchableOpacity>
                             </View>
+                        </View>
+                    </View>
+                </Modal>
+                <Modal
+                    visible={isJoining}
+                    transparent={true}
+                    animationType="fade"
+                >
+                    <View style={joining_styles.overlay}>
+                        <View style={joining_styles.content}>
+                            <ActivityIndicator size="large" color="#333" />
+                            <Text style={joining_styles.title}>Connecting to peer...</Text>
+                            <Text style={joining_styles.subtitle}>
+                                Please keep the app open while we establish a secure connection.
+                            </Text>
+                            <Text style={joining_styles.p2pMessage}>
+                                {p2pMessages[currentP2PMessage]}
+                            </Text>
+                            <TouchableOpacity
+                                style={joining_styles.cancelButton}
+                                onPress={() => {
+                                    setIsJoining(false);
+                                    isJoiningRef.current = false;
+                                }}
+                            >
+                                <Text style={joining_styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
                 </Modal>
@@ -431,6 +618,47 @@ const styles_safe_area = StyleSheet.create({
         fontSize: 10,
         fontWeight: '600',
     },
+    orangeBadge: {
+        backgroundColor: '#ff9500',
+        width: 10,
+        height: 10,
+        minWidth: 10,
+    },
+    pearBadge: {
+        position: 'absolute',
+        top: -2,
+        right: 0,
+        alignItems: 'center',
+    },
+    pearStalk: {
+        width: 2,
+        height: 5,
+        backgroundColor: '#8B4513',
+        borderRadius: 1,
+        marginBottom: -1,
+    },
+    pearTop: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#34c759',
+        marginBottom: -3,
+        zIndex: 1,
+    },
+    pearBottom: {
+        minWidth: 16,
+        height: 16,
+        borderRadius: 8,
+        backgroundColor: '#34c759',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 4,
+    },
+    pearBadgeText: {
+        color: '#fff',
+        fontSize: 9,
+        fontWeight: '700',
+    },
 });
 
 
@@ -502,5 +730,53 @@ const dialog_styles = StyleSheet.create({
         color: '#fff',
         fontSize: 16,
         fontWeight: '600',
+    },
+});
+
+const joining_styles = StyleSheet.create({
+    overlay: {
+        flex: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 40,
+    },
+    content: {
+        alignItems: 'center',
+        maxWidth: 300,
+    },
+    title: {
+        fontSize: 20,
+        fontWeight: '600',
+        color: '#333',
+        marginTop: 24,
+        marginBottom: 12,
+        textAlign: 'center',
+    },
+    subtitle: {
+        fontSize: 14,
+        color: '#666',
+        textAlign: 'center',
+        marginBottom: 32,
+        lineHeight: 20,
+    },
+    p2pMessage: {
+        fontSize: 14,
+        color: '#888',
+        textAlign: 'center',
+        fontStyle: 'italic',
+        minHeight: 40,
+    },
+    cancelButton: {
+        marginTop: 32,
+        paddingVertical: 12,
+        paddingHorizontal: 32,
+        borderRadius: 8,
+        backgroundColor: '#f0f0f0',
+    },
+    cancelButtonText: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#666',
     },
 });

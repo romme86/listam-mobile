@@ -9,3 +9,4 @@ export const RPC_JOIN_KEY = 7
 export const RPC_ADD_FROM_BACKEND = 8
 export const RPC_UPDATE_FROM_BACKEND = 9
 export const RPC_DELETE_FROM_BACKEND = 10
+export const RPC_REQUEST_SYNC = 11
