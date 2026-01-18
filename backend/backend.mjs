@@ -1,9 +1,6 @@
-// /* global Bare, BareKit */
-
 import RPC from 'bare-rpc'
 import URL from 'bare-url'
 import { join } from 'bare-path'
-import fs from 'bare-fs'
 import {
     RPC_RESET,
     RPC_MESSAGE,
@@ -24,106 +21,31 @@ import Corestore from 'corestore'
 import Hyperswarm from 'hyperswarm'
 const { IPC } = BareKit
 import { randomBytes } from 'bare-crypto'
-
 console.error('bare backend is rocking.')
-
-// const storagePath = join(URL.fileURLToPath(Bare.argv[0]), 'lista') || './data'
 const argv0 = typeof Bare?.argv?.[0] === 'string' ? Bare.argv[0] : '';
 let baseDir = '';
 if (argv0) {
       try {
-            // expo-file-system gives "file://..." URLs; but allow plain absolute paths too.
                 baseDir = argv0.startsWith('file://') ? URL.fileURLToPath(argv0) : argv0;
           } catch {
             baseDir = '';
           }
     }
 const storagePath = baseDir ? join(baseDir, 'lista') : './data';
-const keyFilePath = baseDir ? join(baseDir, 'lista-autobase-key.txt') : './autobase-key.txt';
-const localWriterKeyFilePath = baseDir ? join(baseDir, 'lista-local-writer-key.txt') : './local-writer-key.txt';
 const peerKeysString = Bare.argv[1] || '' // Comma-separated peer keys
-
 const baseKeyHex = Bare.argv[2] || '' // Optional Autobase key (to join an existing base)
-
-// Save autobase key to file for persistence across restarts
-function saveAutobaseKey(key) {
-    try {
-        const keyHex = key.toString('hex')
-        fs.writeFileSync(keyFilePath, keyHex)
-        console.error('Saved autobase key to file:', keyHex)
-    } catch (e) {
-        console.error('Failed to save autobase key:', e)
-    }
-}
-
-// Load autobase key from file if it exists
-function loadAutobaseKey() {
-    try {
-        if (fs.existsSync(keyFilePath)) {
-            const keyHex = fs.readFileSync(keyFilePath, 'utf8').trim()
-            if (keyHex && keyHex.length === 64) {
-                console.error('Loaded autobase key from file:', keyHex)
-                return Buffer.from(keyHex, 'hex')
-            }
-        }
-    } catch (e) {
-        console.error('Failed to load autobase key:', e)
-    }
-    return null
-}
-
-// Save local writer key to file for persistence
-function saveLocalWriterKey(key) {
-    try {
-        const keyHex = key.toString('hex')
-        fs.writeFileSync(localWriterKeyFilePath, keyHex)
-        console.error('Saved local writer key to file:', keyHex)
-    } catch (e) {
-        console.error('Failed to save local writer key:', e)
-    }
-}
-
-// Load local writer key from file if it exists
-function loadLocalWriterKey() {
-    try {
-        if (fs.existsSync(localWriterKeyFilePath)) {
-            const keyHex = fs.readFileSync(localWriterKeyFilePath, 'utf8').trim()
-            if (keyHex && keyHex.length === 64) {
-                console.error('Loaded local writer key from file:', keyHex)
-                return Buffer.from(keyHex, 'hex')
-            }
-        }
-    } catch (e) {
-        console.error('Failed to load local writer key:', e)
-    }
-    return null
-}
-
-// Initialize Corestore
 let store
-
-// P2P state
 let swarm = null
 let autobase = null
 let discovery = null
-let currentTopic = null
-
-// Handshake swarm for writer key exchange
 let chatSwarm = null
-let chatTopic = null
 const knownWriters = new Set()
 let addedStaticPeers = false
-
-// Track connected replication peers
 let peerCount = 0
-
-// RPC instance (assigned later, but referenced by helper fns)
 let rpc = null
-
-// In-memory list state (rebuilt from autobase on startup)
 let currentList = []
-
-// Default list items for first-time users (persisted to autobase on empty start)
+const keyFilePath = baseDir ? join(baseDir, 'lista-autobase-key.txt') : './autobase-key.txt';
+const localWriterKeyFilePath = baseDir ? join(baseDir, 'lista-local-writer-key.txt') : './local-writer-key.txt';
 const DEFAULT_LIST = [
     { text: 'Tap to mark as done', isDone: false, timeOfCompletion: 0 },
     { text: 'Double tap to add new', isDone: false, timeOfCompletion: 0 },
@@ -163,95 +85,6 @@ if (!baseKey) {
 function generateId () {
     return randomBytes(16).toString('hex')
 }
-
-// Verify startup integrity - ensures the correct hypercore is loaded on restart
-async function verifyStartupIntegrity (savedLocalWriterKey, savedBaseKey) {
-    console.error('=== STARTUP INTEGRITY CHECK ===')
-
-    if (!autobase) {
-        console.error('INTEGRITY CHECK: FAILED - autobase not initialized')
-        return false
-    }
-
-    const checks = []
-
-    // 1. Verify local writer key matches saved key (if we had one)
-    if (savedLocalWriterKey) {
-        const loadedLocalKeyHex = autobase.local?.key?.toString('hex')
-        const savedLocalKeyHex = savedLocalWriterKey.toString('hex')
-        const localKeyMatch = loadedLocalKeyHex === savedLocalKeyHex
-
-        checks.push({
-            name: 'Local writer key match',
-            passed: localKeyMatch,
-            expected: savedLocalKeyHex.slice(0, 16) + '...',
-            actual: loadedLocalKeyHex?.slice(0, 16) + '...'
-        })
-    }
-
-    // 2. Verify autobase key matches saved key (if we had one)
-    if (savedBaseKey) {
-        const loadedBaseKeyHex = autobase.key?.toString('hex')
-        const savedBaseKeyHex = savedBaseKey.toString('hex')
-        const baseKeyMatch = loadedBaseKeyHex === savedBaseKeyHex
-
-        checks.push({
-            name: 'Autobase key match',
-            passed: baseKeyMatch,
-            expected: savedBaseKeyHex.slice(0, 16) + '...',
-            actual: loadedBaseKeyHex?.slice(0, 16) + '...'
-        })
-    }
-
-    // 3. Verify local hypercore has data (if it's a restart)
-    if (savedLocalWriterKey && autobase.local) {
-        await autobase.local.ready()
-        const hasData = autobase.local.length > 0
-
-        checks.push({
-            name: 'Local hypercore has persisted data',
-            passed: hasData,
-            expected: '> 0 entries',
-            actual: `${autobase.local.length} entries`
-        })
-    }
-
-    // 4. Verify storage path is accessible
-    try {
-        const storageExists = fs.existsSync(storagePath)
-        checks.push({
-            name: 'Storage path exists',
-            passed: storageExists,
-            expected: 'true',
-            actual: String(storageExists)
-        })
-    } catch (e) {
-        checks.push({
-            name: 'Storage path exists',
-            passed: false,
-            expected: 'true',
-            actual: `error: ${e.message}`
-        })
-    }
-
-    // Log all checks
-    let allPassed = true
-    for (const check of checks) {
-        const status = check.passed ? 'PASS' : 'FAIL'
-        console.error(`  [${status}] ${check.name}: expected=${check.expected}, actual=${check.actual}`)
-        if (!check.passed) allPassed = false
-    }
-
-    console.error(`=== INTEGRITY CHECK ${allPassed ? 'PASSED' : 'FAILED'} ===`)
-    console.error(`Storage path: ${storagePath}`)
-    console.error(`Autobase key: ${autobase.key?.toString('hex')}`)
-    console.error(`Local writer key: ${autobase.local?.key?.toString('hex')}`)
-    console.error(`Local writer length: ${autobase.local?.length}`)
-    console.error(`Autobase writable: ${autobase.writable}`)
-
-    return allPassed
-}
-
 // Persist and verify that an operation was written to disk
 // Returns true if flush succeeded and length is correct, false otherwise
 async function persistAndVerify (expectedLength, operationType) {
@@ -820,15 +653,6 @@ async function apply (nodes, view, host) {
     }
 }
 
-// Simple inline schema validation matching the mobile ListEntry
-function validateItem (item) {
-    if (typeof item !== 'object' || item === null) return false
-    if (typeof item.text !== 'string') return false
-    if (typeof item.isDone !== 'boolean') return false
-    if (typeof item.timeOfCompletion !== 'number') return false
-    return true
-}
-
 // Rebuild currentList by replaying all persisted operations from the local hypercore
 // This is called on startup to reconstruct state from disk
 async function rebuildListFromPersistedOps () {
@@ -928,135 +752,4 @@ async function rebuildListFromPersistedOps () {
 
     console.error(`rebuildListFromPersistedOps: rebuilt list with ${rebuiltList.length} items`)
     return rebuiltList
-}
-
-// Add item operation (backend creates the canonical item)
-async function addItem (text, listId) {
-    if (!autobase) {
-        console.error('addItem called before Autobase is initialized')
-        return false
-    }
-
-    if (!autobase.writable) {
-        console.error('addItem called but autobase is not writable yet - waiting to be added as writer')
-        // Notify frontend about not being writable
-        try {
-            const req = rpc.request(RPC_MESSAGE)
-            req.send(JSON.stringify({ type: 'not-writable', message: 'Waiting to be added as a writer by the host...' }))
-        } catch (e) {
-            console.error('Failed to send not-writable message:', e)
-        }
-        return false
-    }
-
-    console.error('command RPC_ADD addItem text', text)
-
-    const item = {
-        id: generateId(),                    // extra metadata, frontend can ignore
-        text,
-        isDone: false,
-        listId: listId || null,
-        timeOfCompletion: 0,
-        updatedAt: Date.now(),
-        timestamp: Date.now(),
-    }
-
-    const op = {
-        type: 'add',
-        value: item
-    }
-
-    // Get length before append to verify it increases
-    const lengthBefore = autobase.local.length
-
-    await autobase.append(op)
-
-    // Flush to disk and verify persistence
-    const persisted = await persistAndVerify(lengthBefore + 1, 'ADD')
-    if (!persisted) {
-        console.error('WARNING: Add operation may not have been persisted to disk!')
-    }
-
-    console.error('Added item:', text, '- persisted:', persisted)
-    return persisted
-}
-
-// Update item operation: AUTONOMOUS, NO BACKEND MEMORY
-async function updateItem (item) {
-    if (!autobase) {
-        console.error('updateItem called before Autobase is initialized')
-        return false
-    }
-
-    if (!autobase.writable) {
-        console.error('updateItem called but autobase is not writable yet')
-        try {
-            const req = rpc.request(RPC_MESSAGE)
-            req.send(JSON.stringify({ type: 'not-writable', message: 'Waiting to be added as a writer by the host...' }))
-        } catch (e) {
-            console.error('Failed to send not-writable message:', e)
-        }
-        return false
-    }
-
-    console.error('command RPC_UPDATE updateItem item', item)
-
-    const op = {
-        type: 'update',
-        value: item
-    }
-
-    // Get length before append to verify it increases
-    const lengthBefore = autobase.local.length
-
-    await autobase.append(op)
-
-    // Flush to disk and verify persistence
-    const persisted = await persistAndVerify(lengthBefore + 1, 'UPDATE')
-    if (!persisted) {
-        console.error('WARNING: Update operation may not have been persisted to disk!')
-    }
-
-    console.error('Updated item:', item.text, '- persisted:', persisted)
-    return persisted
-}
-
-// Delete item operation: AUTONOMOUS, NO BACKEND MEMORY
-async function deleteItem (item) {
-    if (!autobase) {
-        console.error('deleteItem called before Autobase is initialized')
-        return false
-    }
-
-    if (!autobase.writable) {
-        console.error('deleteItem called but autobase is not writable yet')
-        try {
-            const req = rpc.request(RPC_MESSAGE)
-            req.send(JSON.stringify({ type: 'not-writable', message: 'Waiting to be added as a writer by the host...' }))
-        } catch (e) {
-            console.error('Failed to send not-writable message:', e)
-        }
-        return false
-    }
-
-    console.error('command RPC_DELETE deleteItem item', item)
-
-    const op = {
-        type: 'delete',
-        value: item
-    }
-
-    // Get length before append to verify it increases
-    const lengthBefore = autobase.local.length
-
-    await autobase.append(op)
-
-    // Flush to disk and verify persistence
-    const persisted = await persistAndVerify(lengthBefore + 1, 'DELETE')
-    if (!persisted) {
-        console.error('WARNING: Delete operation may not have been persisted to disk!')
-    }
-
-    console.error('Deleted item:', item.text, '- persisted:', persisted)
-    return persisted
 }

@@ -1,0 +1,55 @@
+import fs from 'bare-fs'
+
+
+function saveAutobaseKey(key, keyFilePath) {
+    try {
+        const keyHex = key.toString('hex')
+        fs.writeFileSync(keyFilePath, keyHex)
+        console.error('Saved autobase key to file:', keyHex)
+    } catch (e) {
+        console.error('Failed to save autobase key:', e)
+    }
+}
+
+// Load autobase key from file if it exists
+function loadAutobaseKey(keyFilePath) {
+    try {
+        if (fs.existsSync(keyFilePath)) {
+            const keyHex = fs.readFileSync(keyFilePath, 'utf8').trim()
+            if (keyHex && keyHex.length === 64) {
+                console.error('Loaded autobase key from file:', keyHex)
+                return Buffer.from(keyHex, 'hex')
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load autobase key:', e)
+    }
+    return null
+}
+
+// Save local writer key to file for persistence
+function saveLocalWriterKey(key, localWriterKeyFilePath) {
+    try {
+        const keyHex = key.toString('hex')
+        fs.writeFileSync(localWriterKeyFilePath, keyHex)
+        console.error('Saved local writer key to file:', keyHex)
+    } catch (e) {
+        console.error('Failed to save local writer key:', e)
+    }
+}
+
+// Load local writer key from file if it exists
+function loadLocalWriterKey(localWriterKeyFilePath) {
+    try {
+        if (fs.existsSync(localWriterKeyFilePath)) {
+            const keyHex = fs.readFileSync(localWriterKeyFilePath, 'utf8').trim()
+            if (keyHex && keyHex.length === 64) {
+                console.error('Loaded local writer key from file:', keyHex)
+                return Buffer.from(keyHex, 'hex')
+            }
+        }
+    } catch (e) {
+        console.error('Failed to load local writer key:', e)
+    }
+    return null
+}
