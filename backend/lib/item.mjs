@@ -3,7 +3,7 @@
 import {RPC_MESSAGE} from "../../rpc-commands.mjs";
 import {generateId} from "./util.mjs";
 import { autobase, store, rpc } from '../backend.mjs'
-import {SYNC_LIST} from "../../app.android.js";
+import {SYNC_LIST} from "../../rpc-commands.mjs";
 
 export async function addItem (text, listId) {
     if (!autobase) {
@@ -146,7 +146,7 @@ export function validateItem (item) {
 
 // Send current list to frontend
 export function syncListToFrontend (currentList) {
-    if (!rpc) return
+    if (!rpc || !currentList) return
     try {
         const req = rpc.request(SYNC_LIST)
         req.send(JSON.stringify(currentList))
