@@ -2,7 +2,7 @@
 // Add item operation (backend creates the canonical item)
 import {RPC_MESSAGE} from "../../rpc-commands.mjs";
 import {generateId} from "./util.mjs";
-import { autobase, store, rpc } from '../backend.mjs'
+import { autobase, store, rpc } from './state.mjs'
 import {SYNC_LIST} from "../../rpc-commands.mjs";
 
 export async function addItem (text, listId) {
@@ -186,3 +186,5 @@ async function persistAndVerify (expectedLength, operationType) {
         return false
     }
 }
+
+
