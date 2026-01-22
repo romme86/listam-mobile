@@ -5,7 +5,8 @@ import { toByteArray } from 'base64-js'
 import { Worklet } from 'react-native-bare-kit'
 import RPC from 'bare-rpc'
 import b4a from 'b4a'
-import backendBundleB64 from '../app.ios.bundle.mjs'
+// import backendBundleB64 from '../app.ios.bundle.mjs'
+import backendBundleB64 from '../assets/backend.android.bundle.mjs'
 import {
     RPC_MESSAGE,
     RPC_RESET,
