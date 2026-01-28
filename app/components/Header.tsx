@@ -12,6 +12,7 @@ type HeaderProps = {
     onDeleteAll: () => void
     onShare: () => void
     onJoin: () => void
+    trialDaysRemaining?: number
 }
 
 export function Header({
@@ -21,6 +22,7 @@ export function Header({
     onDeleteAll,
     onShare,
     onJoin,
+    trialDaysRemaining,
 }: HeaderProps) {
     const peerCountLabel = peerCount > 99 ? '99+' : String(peerCount)
 
@@ -34,6 +36,11 @@ export function Header({
                     >
                         <Ionicons name="trash-outline" size={24} color="#333" />
                     </AnimatedIconButton>
+                    {trialDaysRemaining !== undefined && trialDaysRemaining <= 7 && (
+                        <Text style={{ fontSize: 11, color: '#999', marginLeft: 8 }}>
+                            {trialDaysRemaining} days left
+                        </Text>
+                    )}
                 </View>
 
                 <View style={headerStyles.rightSection}>

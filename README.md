@@ -43,3 +43,26 @@ Listam is split into two clearly separated layers:
 - Uses **Corestore + Autobase**
 - Handles persistence, replication, and rebuilds
 
+---
+
+## Building a Free Version (Disabling the Paywall)
+
+Listam includes a subscription paywall that appears after a 30-day trial. If you're building your own version of the app according to the open source philosophy, you can disable it entirely.
+
+Edit `app/hooks/useSubscription.ts` and modify the return statement at the end of the `useSubscription` function:
+
+```typescript
+return {
+    ...state,
+    shouldShowPaywall: false,  // Always false = no paywall
+    isSubscribed: true,        // Treat as always subscribed
+    purchase,
+    restore,
+    refresh: checkStatus,
+}
+```
+
+This works for both Android and iOS builds.
+
+---
+

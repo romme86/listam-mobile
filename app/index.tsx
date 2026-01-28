@@ -2,9 +2,11 @@ import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { View, Share, Alert, Animated } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { useWorklet, RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_JOIN_KEY } from './hooks/_useWorklet'
+import { useSubscription } from './hooks/useSubscription'
 import { Header } from './components/Header'
 import { JoinDialog } from './components/JoinDialog'
 import { JoiningOverlay, P2P_MESSAGES } from './components/JoiningOverlay'
+import { Paywall } from './components/Paywall'
 import InertialElasticList from './components/intertial_scroll'
 import { styles } from './components/_styles'
 import type { ListEntry } from './components/_types'
@@ -26,6 +28,8 @@ export default function App() {
         isJoiningRef,
         sendRPC,
     } = useWorklet()
+
+    const subscription = useSubscription()
 
     const [joinDialogVisible, setJoinDialogVisible] = useState(false)
     const [joinKeyInput, setJoinKeyInput] = useState('')
@@ -179,6 +183,19 @@ export default function App() {
         )
     }, [dataList, sendRPC, setDataList])
 
+    // Show paywall if trial expired and not subscribed
+    if (subscription.shouldShowPaywall) {
+        return (
+            <SafeAreaProvider>
+                <Paywall
+                    state={subscription}
+                    onPurchase={subscription.purchase}
+                    onRestore={subscription.restore}
+                />
+            </SafeAreaProvider>
+        )
+    }
+
     return (
         <SafeAreaProvider>
             <View style={styles.container}>
@@ -189,6 +206,7 @@ export default function App() {
                     onDeleteAll={handleDeleteAll}
                     onShare={handleShare}
                     onJoin={handleJoin}
+                    trialDaysRemaining={subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
                 />
                 <JoinDialog
                     visible={joinDialogVisible}
