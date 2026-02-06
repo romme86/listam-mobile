@@ -8,6 +8,7 @@ import { JoinDialog } from './components/JoinDialog'
 import { JoiningOverlay, P2P_MESSAGES } from './components/JoiningOverlay'
 import { Paywall } from './components/Paywall'
 import InertialElasticList from './components/intertial_scroll'
+import { VisualGridList } from './components/VisualGridList'
 import { styles } from './components/_styles'
 import type { ListEntry } from './components/_types'
 
@@ -34,7 +35,12 @@ export default function App() {
     const [joinDialogVisible, setJoinDialogVisible] = useState(false)
     const [joinKeyInput, setJoinKeyInput] = useState('')
     const [currentP2PMessage, setCurrentP2PMessage] = useState(0)
+    const [isGridView, setIsGridView] = useState(false)
     const blinkAnim = useRef(new Animated.Value(1)).current
+
+    const handleToggleView = useCallback(() => {
+        setIsGridView((prev) => !prev)
+    }, [])
 
     // Blinking animation when key is not ready
     useEffect(() => {
@@ -207,6 +213,8 @@ export default function App() {
                     onShare={handleShare}
                     onJoin={handleJoin}
                     trialDaysRemaining={subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
+                    isGridView={isGridView}
+                    onToggleView={handleToggleView}
                 />
                 <JoinDialog
                     visible={joinDialogVisible}
@@ -220,12 +228,21 @@ export default function App() {
                     currentMessageIndex={currentP2PMessage}
                     onCancel={handleJoiningCancel}
                 />
-                <InertialElasticList
-                    data={dataList.length === 0 ? DEFAULT_INSTRUCTIONS : dataList}
-                    onToggleDone={dataList.length === 0 ? () => {} : handleToggleDone}
-                    onDelete={dataList.length === 0 ? () => {} : handleDelete}
-                    onInsert={handleInsert}
-                />
+                {isGridView ? (
+                    <VisualGridList
+                        data={dataList.length === 0 ? DEFAULT_INSTRUCTIONS : dataList}
+                        onToggleDone={dataList.length === 0 ? () => {} : handleToggleDone}
+                        onDelete={dataList.length === 0 ? () => {} : handleDelete}
+                        onInsert={handleInsert}
+                    />
+                ) : (
+                    <InertialElasticList
+                        data={dataList.length === 0 ? DEFAULT_INSTRUCTIONS : dataList}
+                        onToggleDone={dataList.length === 0 ? () => {} : handleToggleDone}
+                        onDelete={dataList.length === 0 ? () => {} : handleDelete}
+                        onInsert={handleInsert}
+                    />
+                )}
             </View>
         </SafeAreaProvider>
     )

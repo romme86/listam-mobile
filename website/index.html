@@ -32,24 +32,25 @@
       },
     };
   </script>
-  <style>.hexagram-line {
-    height: 12px;
-    width: 100%;
-    border-radius: 9999px;
-    background-color: currentColor;
-    margin-bottom: 8px;
-  }
-  .hexagram-broken {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 8px;
-  }
-  .hexagram-broken span {
-    height: 12px;
-    width: 42%;
-    border-radius: 9999px;
-    background-color: currentColor;
-  }
+  <style type="text/tailwindcss">
+    .hexagram-line {
+      height: 12px;
+      width: 100%;
+      border-radius: 9999px;
+      background-color: currentColor;
+      margin-bottom: 8px;
+    }
+    .hexagram-broken {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .hexagram-broken span {
+      height: 12px;
+      width: 42%;
+      border-radius: 9999px;
+      background-color: currentColor;
+    }
   </style>
 </head>
 <body class="bg-background-light dark:bg-background-dark text-black dark:text-gray-100 font-sans antialiased transition-colors duration-300 min-h-screen flex flex-col items-center">
@@ -180,6 +181,46 @@
           <span class="text-xs font-mono text-gray-400">EXPLORING</span>
         </div>
       </div>
+      <div class="border border-gray-200 dark:border-gray-800 rounded-2xl p-6 hover:border-black dark:hover:border-white transition-colors duration-300 flex flex-col h-full bg-white dark:bg-background-dark">
+        <div class="mb-auto">
+          <span class="material-symbols-outlined text-3xl mb-4">notifications</span>
+          <h4 class="text-lg font-semibold mb-2">Push Notifications</h4>
+          <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">Stay updated when a collaborator adds or completes items in real-time without central servers.</p>
+        </div>
+        <div class="mt-6 pt-4 border-t border-gray-100 dark:border-gray-900">
+          <span class="text-xs font-mono text-gray-400">PLANNED</span>
+        </div>
+      </div>
+      <div class="border border-gray-200 dark:border-gray-800 rounded-2xl p-6 hover:border-black dark:hover:border-white transition-colors duration-300 flex flex-col h-full bg-white dark:bg-background-dark">
+        <div class="mb-auto">
+          <span class="material-symbols-outlined text-3xl mb-4">swap_vert</span>
+          <h4 class="text-lg font-semibold mb-2">Dynamic Ordering</h4>
+          <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">Automatically reorder lists based on your historical shopping patterns or shop layout.</p>
+        </div>
+        <div class="mt-6 pt-4 border-t border-gray-100 dark:border-gray-900">
+          <span class="text-xs font-mono text-gray-400">PLANNED</span>
+        </div>
+      </div>
+      <div class="border border-gray-200 dark:border-gray-800 rounded-2xl p-6 hover:border-black dark:hover:border-white transition-colors duration-300 flex flex-col h-full bg-white dark:bg-background-dark">
+        <div class="mb-auto">
+          <span class="material-symbols-outlined text-3xl mb-4">restaurant</span>
+          <h4 class="text-lg font-semibold mb-2">AI Meal Suggestions</h4>
+          <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">Intelligent meal planning that suggests recipes based on the items currently in your list.</p>
+        </div>
+        <div class="mt-6 pt-4 border-t border-gray-100 dark:border-gray-900">
+          <span class="text-xs font-mono text-gray-400">EXPLORING</span>
+        </div>
+      </div>
+      <div class="border border-gray-200 dark:border-gray-800 rounded-2xl p-6 hover:border-black dark:hover:border-white transition-colors duration-300 flex flex-col h-full bg-white dark:bg-background-dark">
+        <div class="mb-auto">
+          <span class="material-symbols-outlined text-3xl mb-4">location_on</span>
+          <h4 class="text-lg font-semibold mb-2">Area Offer Protocol</h4>
+          <p class="text-sm text-gray-500 dark:text-gray-400 leading-relaxed">Hyper-local P2P broadcast of supermarket discounts and offers available in your vicinity.</p>
+        </div>
+        <div class="mt-6 pt-4 border-t border-gray-100 dark:border-gray-900">
+          <span class="text-xs font-mono text-gray-400">EXPLORING</span>
+        </div>
+      </div>
     </div>
   </div>
   <div class="w-full bg-black dark:bg-white text-white dark:text-black rounded-3xl p-8 md:p-16 text-center relative overflow-hidden">
@@ -188,7 +229,8 @@
       <div class="flex flex-col md:flex-row justify-center items-center gap-8 mb-12">
         <div class="flex-1 w-full max-w-sm bg-white dark:bg-black text-black dark:text-white p-8 rounded-2xl border-2 border-transparent hover:border-gray-500 transition-all">
           <h4 class="text-xl font-bold mb-2">App Store</h4>
-          <div class="text-4xl font-mono font-bold mb-4">1 CHF<span class="text-sm font-sans font-normal text-gray-500">/year</span></div>
+          <div class="text-4xl font-mono font-bold mb-1">1 CHF<span class="text-sm font-sans font-normal text-gray-500">/year</span></div>
+          <div class="text-[10px] uppercase tracking-widest font-mono text-gray-400 mb-4">1 month free trial</div>
           <p class="text-sm text-gray-500 mb-6">Support development and get automatic updates.</p>
           <div class="flex flex-col gap-3">
             <button class="w-full py-3 px-6 bg-black dark:bg-white text-white dark:text-black rounded-lg font-bold hover:opacity-80 transition-opacity">
@@ -216,15 +258,12 @@
   </div>
   <div class="w-full mt-24 flex flex-col md:flex-row items-center gap-12 md:gap-16">
     <div class="w-32 md:w-40 flex-shrink-0 text-black dark:text-white opacity-90">
-      <div class="h-3 w-full rounded-full bg-current mb-2"></div>
-      <div class="h-3 w-full rounded-full bg-current mb-2"></div>
-      <div class="h-3 w-full rounded-full bg-current mb-2"></div>
-      <div class="h-3 w-full rounded-full bg-current mb-2"></div>
-      <div class="flex justify-between mb-2">
-        <span class="h-3 w-[42%] rounded-full bg-current"></span>
-        <span class="h-3 w-[42%] rounded-full bg-current"></span>
-      </div>
-      <div class="h-3 w-full rounded-full bg-current"></div>
+      <div class="hexagram-line"></div>
+      <div class="hexagram-line"></div>
+      <div class="hexagram-line"></div>
+      <div class="hexagram-line"></div>
+      <div class="hexagram-broken"><span></span><span></span></div>
+      <div class="hexagram-line"></div>
     </div>
     <div class="flex-1 text-center md:text-left">
       <h2 class="text-3xl font-bold mb-6 tracking-tight">The Meaning of the Logo</h2>
@@ -238,11 +277,12 @@
   </div>
   <footer class="mt-24 text-center text-sm text-gray-500 dark:text-gray-500">
     <div class="flex items-center justify-center gap-6 mb-4">
-      <a class="hover:text-black dark:hover:text-white transition-colors" href="https://listam.ch/privacy">Privacy</a>
-      <a class="hover:text-black dark:hover:text-white transition-colors" href="https://github.com/SayNode/listam">GitHub</a>
+      <a class="hover:text-black dark:hover:text-white transition-colors" href="#">Privacy</a>
+      <a class="hover:text-black dark:hover:text-white transition-colors" href="#">GitHub</a>
       <a class="hover:text-black dark:hover:text-white transition-colors" href="https://saynode.ch">Contact</a>
     </div>
     <p>© 2026 Saynode Operations AG</p>
   </footer>
 </main>
+
 </body></html>

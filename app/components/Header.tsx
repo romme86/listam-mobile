@@ -13,6 +13,8 @@ type HeaderProps = {
     onShare: () => void
     onJoin: () => void
     trialDaysRemaining?: number
+    isGridView?: boolean
+    onToggleView?: () => void
 }
 
 export function Header({
@@ -23,6 +25,8 @@ export function Header({
     onShare,
     onJoin,
     trialDaysRemaining,
+    isGridView,
+    onToggleView,
 }: HeaderProps) {
     const peerCountLabel = peerCount > 99 ? '99+' : String(peerCount)
 
@@ -36,6 +40,18 @@ export function Header({
                     >
                         <Ionicons name="trash-outline" size={24} color="#333" />
                     </AnimatedIconButton>
+                    {onToggleView && (
+                        <AnimatedIconButton
+                            style={headerStyles.iconButton}
+                            onPress={onToggleView}
+                        >
+                            <Ionicons
+                                name={isGridView ? 'list-outline' : 'grid-outline'}
+                                size={24}
+                                color="#333"
+                            />
+                        </AnimatedIconButton>
+                    )}
                     {trialDaysRemaining !== undefined && trialDaysRemaining <= 7 && (
                         <Text style={{ fontSize: 11, color: '#999', marginLeft: 8 }}>
                             {trialDaysRemaining} days left

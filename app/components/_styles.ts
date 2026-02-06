@@ -4,7 +4,7 @@ export const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#fff',
-        padding: 20,
+        padding: 10,
     },
     input: {
         height: 20,
@@ -35,12 +35,14 @@ export const headerStyles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         backgroundColor: '#fff',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        height: 60,
+        paddingHorizontal: 8,
+        paddingVertical: 10,
+        minHeight: 56,
     },
     leftSection: {
         flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     rightSection: {
         flexDirection: 'row',
@@ -48,7 +50,7 @@ export const headerStyles = StyleSheet.create({
         gap: 16,
     },
     iconButton: {
-        padding: 8,
+        padding: 4,
     },
     iconWithBadge: {
         position: 'relative',

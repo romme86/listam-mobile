@@ -17,8 +17,7 @@ import {
 } from 'react-native-iap'
 
 const TRIAL_START_KEY = '@lista_trial_start'
-// const TRIAL_DURATION_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
-const TRIAL_DURATION_MS = 10 * 1000 // 30 days
+const TRIAL_DURATION_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
 
 // Product IDs - create these in App Store Connect / Google Play Console
