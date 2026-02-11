@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  
+  <path d="M42 22 L68 122 L20 122 Z" fill="#F08B25"/>
+  <path d="M86 12 L114 116 L66 116 Z" fill="#E37A1E"/>
+  <ellipse cx="42" cy="18" rx="14" ry="8" fill="#3DA250" transform="rotate(-25 42 18)"/>
+  <ellipse cx="61" cy="14" rx="14" ry="8" fill="#3DA250" transform="rotate(10 61 14)"/>
+  <ellipse cx="84" cy="8" rx="14" ry="8" fill="#3DA250" transform="rotate(-15 84 8)"/>
+  <ellipse cx="102" cy="8" rx="14" ry="8" fill="#3DA250" transform="rotate(20 102 8)"/>
+    
+</svg>

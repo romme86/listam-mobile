@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useMemo } from 'react'
 import {
     View,
     Text,
@@ -10,6 +10,8 @@ import {
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import type { ListEntry } from './_types'
+import { groupByCategory, type IndexedEntry } from './categoryGrouping'
+import { CATEGORY_ICONS } from './categoryConstants'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const CARD_MARGIN = 6
@@ -56,20 +58,17 @@ export function VisualGridList({ data, onToggleDone, onDelete, onInsert }: Props
         setEditText('')
     }, [])
 
-    const activeItems = data.filter((item) => !item.isDone)
-    const doneItems = data.filter((item) => item.isDone)
+    const sections = useMemo(() => groupByCategory(data), [data])
 
-    const renderCard = (item: ListEntry, index: number, isDoneSection: boolean) => {
-        const actualIndex = isDoneSection
-            ? activeItems.length + doneItems.findIndex((d) => d === item)
-            : data.findIndex((d) => d === item)
+    const renderCard = (indexed: IndexedEntry, cardKey: number) => {
+        const { entry: item, originalIndex } = indexed
 
         return (
             <TouchableOpacity
-                key={`${item.text}-${item.timeOfCompletion}-${index}`}
+                key={`${item.text}-${item.timeOfCompletion}-${cardKey}`}
                 style={[styles.card, item.isDone && styles.cardDone]}
-                onPress={() => onToggleDone?.(actualIndex)}
-                onLongPress={() => onDelete?.(actualIndex)}
+                onPress={() => onToggleDone?.(originalIndex)}
+                onLongPress={() => onDelete?.(originalIndex)}
                 delayLongPress={500}
             >
                 <View style={styles.iconContainer}>
@@ -94,13 +93,13 @@ export function VisualGridList({ data, onToggleDone, onDelete, onInsert }: Props
         )
     }
 
-    const renderRow = (items: ListEntry[], startIndex: number, isDoneSection: boolean) => {
+    const renderRows = (items: IndexedEntry[]) => {
         const rows: React.ReactElement[] = []
         for (let i = 0; i < items.length; i += NUM_COLUMNS) {
             const rowItems = items.slice(i, i + NUM_COLUMNS)
             rows.push(
-                <View key={`row-${startIndex + i}`} style={styles.row}>
-                    {rowItems.map((item, idx) => renderCard(item, i + idx, isDoneSection))}
+                <View key={`row-${i}`} style={styles.row}>
+                    {rowItems.map((indexed, idx) => renderCard(indexed, i + idx))}
                     {rowItems.length < NUM_COLUMNS &&
                         Array(NUM_COLUMNS - rowItems.length)
                             .fill(null)
@@ -134,19 +133,19 @@ export function VisualGridList({ data, onToggleDone, onDelete, onInsert }: Props
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
-                    {activeItems.length > 0 && (
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>To Get</Text>
-                            {renderRow(activeItems, 0, false)}
+                    {sections.map((section) => (
+                        <View key={section.category} style={styles.section}>
+                            <View style={styles.categoryHeader}>
+                                <Ionicons
+                                    name={(CATEGORY_ICONS[section.category] || 'basket-outline') as any}
+                                    size={18}
+                                    color="#555"
+                                />
+                                <Text style={styles.categoryTitle}>{section.category.toUpperCase()}</Text>
+                            </View>
+                            {renderRows(section.items)}
                         </View>
-                    )}
-
-                    {doneItems.length > 0 && (
-                        <View style={styles.section}>
-                            <Text style={styles.sectionTitle}>Got It</Text>
-                            {renderRow(doneItems, activeItems.length, true)}
-                        </View>
-                    )}
+                    ))}
 
                     {data.length === 0 && (
                         <View style={styles.emptyState}>
@@ -187,12 +186,18 @@ const styles = StyleSheet.create({
     section: {
         marginBottom: 24,
     },
-    sectionTitle: {
-        fontSize: 20,
+    categoryHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 10,
+        marginLeft: 4,
+    },
+    categoryTitle: {
+        fontSize: 14,
         fontWeight: '700',
         color: '#333',
-        marginBottom: 12,
-        marginLeft: 4,
+        marginLeft: 6,
+        letterSpacing: 0.5,
     },
     row: {
         flexDirection: 'row',
