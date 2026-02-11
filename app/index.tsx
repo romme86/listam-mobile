@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { View, Share, Alert, Animated } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useWorklet, RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_JOIN_KEY } from './hooks/_useWorklet'
 import { useSubscription } from './hooks/useSubscription'
 import { Header } from './components/Header'
@@ -11,6 +12,9 @@ import InertialElasticList from './components/intertial_scroll'
 import { VisualGridList } from './components/VisualGridList'
 import { styles } from './components/_styles'
 import type { ListEntry } from './components/_types'
+
+const PREF_GRID_VIEW = '@lista_grid_view'
+const PREF_CATEGORIES = '@lista_categories'
 
 const DEFAULT_INSTRUCTIONS: ListEntry[] = [
     { text: 'Double tap to add new', isDone: false, timeOfCompletion: 0 },
@@ -36,10 +40,29 @@ export default function App() {
     const [joinKeyInput, setJoinKeyInput] = useState('')
     const [currentP2PMessage, setCurrentP2PMessage] = useState(0)
     const [isGridView, setIsGridView] = useState(false)
+    const [categoriesEnabled, setCategoriesEnabled] = useState(true)
+    const [menuVisible, setMenuVisible] = useState(false)
     const blinkAnim = useRef(new Animated.Value(1)).current
 
+    useEffect(() => {
+        AsyncStorage.multiGet([PREF_GRID_VIEW, PREF_CATEGORIES]).then(([[, grid], [, cats]]) => {
+            if (grid !== null) setIsGridView(grid === 'true')
+            if (cats !== null) setCategoriesEnabled(cats === 'true')
+        })
+    }, [])
+
     const handleToggleView = useCallback(() => {
-        setIsGridView((prev) => !prev)
+        setIsGridView((prev) => {
+            AsyncStorage.setItem(PREF_GRID_VIEW, String(!prev))
+            return !prev
+        })
+    }, [])
+
+    const handleToggleCategories = useCallback(() => {
+        setCategoriesEnabled((prev) => {
+            AsyncStorage.setItem(PREF_CATEGORIES, String(!prev))
+            return !prev
+        })
     }, [])
 
     // Blinking animation when key is not ready
@@ -209,12 +232,16 @@ export default function App() {
                     autobaseInviteKey={autobaseInviteKey}
                     peerCount={peerCount}
                     blinkAnim={blinkAnim}
-                    onDeleteAll={handleDeleteAll}
                     onShare={handleShare}
                     onJoin={handleJoin}
                     trialDaysRemaining={subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
+                    menuVisible={menuVisible}
+                    onMenuToggle={() => setMenuVisible(v => !v)}
+                    onDeleteAll={handleDeleteAll}
                     isGridView={isGridView}
                     onToggleView={handleToggleView}
+                    categoriesEnabled={categoriesEnabled}
+                    onToggleCategories={handleToggleCategories}
                 />
                 <JoinDialog
                     visible={joinDialogVisible}
@@ -234,6 +261,7 @@ export default function App() {
                         onToggleDone={dataList.length === 0 ? () => {} : handleToggleDone}
                         onDelete={dataList.length === 0 ? () => {} : handleDelete}
                         onInsert={handleInsert}
+                        categoriesEnabled={categoriesEnabled}
                     />
                 ) : (
                     <InertialElasticList
@@ -241,6 +269,7 @@ export default function App() {
                         onToggleDone={dataList.length === 0 ? () => {} : handleToggleDone}
                         onDelete={dataList.length === 0 ? () => {} : handleDelete}
                         onInsert={handleInsert}
+                        categoriesEnabled={categoriesEnabled}
                     />
                 )}
             </View>

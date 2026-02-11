@@ -27,6 +27,7 @@ type Props = {
     onDelete?: (index: number) => void
     onUpdate?: (index: number, text: string) => void
     onInsert?: (index: number, text: string) => void
+    categoriesEnabled?: boolean
 }
 
 export default function InertialElasticList({
@@ -34,6 +35,7 @@ export default function InertialElasticList({
     onToggleDone,
     onDelete,
     onInsert,
+    categoriesEnabled = true,
 }: Props) {
     const scrollY = useRef(new Animated.Value(0)).current
     const [isAddingItem, setIsAddingItem] = useState(false)
@@ -84,6 +86,16 @@ export default function InertialElasticList({
     }, [])
 
     const flatData = useMemo((): FlatListItem[] => {
+        if (!categoriesEnabled) {
+            return data.map((entry, i) => ({
+                type: 'item' as const,
+                entry,
+                originalIndex: i,
+                visualIndex: i,
+                key: `item-${i}-${entry.text}-${entry.timeOfCompletion}`,
+            }))
+        }
+
         const sections = groupByCategory(data)
         const items: FlatListItem[] = []
         let visualIndex = 0
@@ -109,7 +121,7 @@ export default function InertialElasticList({
         }
 
         return items
-    }, [data])
+    }, [data, categoriesEnabled])
 
     const renderItem = useCallback(({ item }: { item: FlatListItem }) => {
         if (item.type === 'header') {

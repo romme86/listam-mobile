@@ -8,6 +8,7 @@ import {
     View,
     StyleSheet,
 } from 'react-native'
+import * as Haptics from 'expo-haptics'
 import type { ListEntry } from './_types'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
@@ -56,10 +57,13 @@ export function ListItem({
     }, [item.text, item.timeOfCompletion, panX])
 
     const handleSingleTap = useCallback(() => {
-        if (onToggleDone) {
-            onToggleDone(index)
+        if (!onToggleDone) return
+
+        if (!item.isDone) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
         }
-    }, [onToggleDone, index])
+        onToggleDone(index)
+    }, [onToggleDone, index, item.isDone])
 
     const handleDoubleTap = useCallback(() => {
         onStartEdit(index)

@@ -1,34 +1,91 @@
-import React from 'react'
-import { View, Text, Animated } from 'react-native'
+import React, { useEffect, useRef } from 'react'
+import {
+    View,
+    Text,
+    Animated,
+    Modal,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    Switch,
+    StyleSheet,
+    Dimensions,
+} from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { AnimatedIconButton } from './AnimatedIconButton'
 import { headerStyles } from './_styles'
 
+const DRAWER_WIDTH = 280
+const { height: SCREEN_HEIGHT } = Dimensions.get('window')
+
 type HeaderProps = {
     autobaseInviteKey: string
     peerCount: number
     blinkAnim: Animated.Value
-    onDeleteAll: () => void
     onShare: () => void
     onJoin: () => void
     trialDaysRemaining?: number
-    isGridView?: boolean
-    onToggleView?: () => void
+    menuVisible: boolean
+    onMenuToggle: () => void
+    onDeleteAll: () => void
+    isGridView: boolean
+    onToggleView: () => void
+    categoriesEnabled: boolean
+    onToggleCategories: () => void
 }
 
 export function Header({
     autobaseInviteKey,
     peerCount,
     blinkAnim,
-    onDeleteAll,
     onShare,
     onJoin,
     trialDaysRemaining,
+    menuVisible,
+    onMenuToggle,
+    onDeleteAll,
     isGridView,
     onToggleView,
+    categoriesEnabled,
+    onToggleCategories,
 }: HeaderProps) {
     const peerCountLabel = peerCount > 99 ? '99+' : String(peerCount)
+    const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current
+    const overlayOpacity = useRef(new Animated.Value(0)).current
+
+    useEffect(() => {
+        if (menuVisible) {
+            Animated.parallel([
+                Animated.timing(slideAnim, {
+                    toValue: 0,
+                    duration: 250,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(overlayOpacity, {
+                    toValue: 1,
+                    duration: 250,
+                    useNativeDriver: true,
+                }),
+            ]).start()
+        } else {
+            Animated.parallel([
+                Animated.timing(slideAnim, {
+                    toValue: -DRAWER_WIDTH,
+                    duration: 200,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(overlayOpacity, {
+                    toValue: 0,
+                    duration: 200,
+                    useNativeDriver: true,
+                }),
+            ]).start()
+        }
+    }, [menuVisible, slideAnim, overlayOpacity])
+
+    const closeMenu = () => {
+        if (menuVisible) onMenuToggle()
+    }
 
     return (
         <SafeAreaView style={headerStyles.safeArea} edges={['top']}>
@@ -36,22 +93,10 @@ export function Header({
                 <View style={headerStyles.leftSection}>
                     <AnimatedIconButton
                         style={headerStyles.iconButton}
-                        onPress={onDeleteAll}
+                        onPress={onMenuToggle}
                     >
-                        <Ionicons name="trash-outline" size={24} color="#333" />
+                        <Ionicons name="menu-outline" size={24} color="#333" />
                     </AnimatedIconButton>
-                    {onToggleView && (
-                        <AnimatedIconButton
-                            style={headerStyles.iconButton}
-                            onPress={onToggleView}
-                        >
-                            <Ionicons
-                                name={isGridView ? 'list-outline' : 'grid-outline'}
-                                size={24}
-                                color="#333"
-                            />
-                        </AnimatedIconButton>
-                    )}
                     {trialDaysRemaining !== undefined && trialDaysRemaining <= 7 && (
                         <Text style={{ fontSize: 11, color: '#999', marginLeft: 8 }}>
                             {trialDaysRemaining} days left
@@ -88,6 +133,128 @@ export function Header({
                     </AnimatedIconButton>
                 </View>
             </View>
+
+            <Modal
+                visible={menuVisible}
+                transparent
+                animationType="none"
+                onRequestClose={closeMenu}
+            >
+                <View style={drawerStyles.modalContainer}>
+                    <TouchableWithoutFeedback onPress={closeMenu}>
+                        <Animated.View
+                            style={[
+                                drawerStyles.overlay,
+                                { opacity: overlayOpacity },
+                            ]}
+                        />
+                    </TouchableWithoutFeedback>
+
+                    <Animated.View
+                        style={[
+                            drawerStyles.drawer,
+                            { transform: [{ translateX: slideAnim }] },
+                        ]}
+                    >
+                        <View style={drawerStyles.drawerContent}>
+                            {/* View Mode */}
+                            <TouchableOpacity
+                                style={drawerStyles.menuRow}
+                                onPress={() => {
+                                    onToggleView()
+                                    closeMenu()
+                                }}
+                                activeOpacity={0.6}
+                            >
+                                <Ionicons
+                                    name={isGridView ? 'list-outline' : 'grid-outline'}
+                                    size={22}
+                                    color="#333"
+                                />
+                                <Text style={drawerStyles.menuLabel}>
+                                    {isGridView ? 'List View' : 'Grid View'}
+                                </Text>
+                            </TouchableOpacity>
+
+                            {/* Categories */}
+                            <View style={drawerStyles.menuRow}>
+                                <Ionicons name="pricetags-outline" size={22} color="#333" />
+                                <Text style={drawerStyles.menuLabel}>Categories</Text>
+                                <Switch
+                                    value={categoriesEnabled}
+                                    onValueChange={onToggleCategories}
+                                    trackColor={{ false: '#ccc', true: '#333' }}
+                                    thumbColor="#fff"
+                                    style={drawerStyles.switch}
+                                />
+                            </View>
+
+                            <View style={drawerStyles.separator} />
+
+                            {/* Delete All */}
+                            <TouchableOpacity
+                                style={drawerStyles.menuRow}
+                                onPress={() => {
+                                    onDeleteAll()
+                                    closeMenu()
+                                }}
+                                activeOpacity={0.6}
+                            >
+                                <Ionicons name="trash-outline" size={22} color="#d00" />
+                                <Text style={[drawerStyles.menuLabel, { color: '#d00' }]}>
+                                    Delete All
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Animated.View>
+                </View>
+            </Modal>
         </SafeAreaView>
     )
 }
+
+const drawerStyles = StyleSheet.create({
+    modalContainer: {
+        flex: 1,
+    },
+    overlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.4)',
+    },
+    drawer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: DRAWER_WIDTH,
+        height: SCREEN_HEIGHT,
+        backgroundColor: '#fff',
+        shadowColor: '#000',
+        shadowOffset: { width: 2, height: 0 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+        elevation: 10,
+    },
+    drawerContent: {
+        paddingTop: 80,
+        paddingHorizontal: 20,
+    },
+    menuRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 14,
+    },
+    menuLabel: {
+        fontSize: 16,
+        color: '#333',
+        marginLeft: 14,
+        flex: 1,
+    },
+    switch: {
+        marginLeft: 'auto',
+    },
+    separator: {
+        height: 1,
+        backgroundColor: '#eee',
+        marginVertical: 8,
+    },
+})

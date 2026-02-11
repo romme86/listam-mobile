@@ -2,7 +2,6 @@ import React, { useState, useCallback, useMemo } from 'react'
 import {
     View,
     Text,
-    Image,
     StyleSheet,
     ScrollView,
     TouchableOpacity,
@@ -13,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons'
 import type { ListEntry } from './_types'
 import { groupByCategory, type IndexedEntry } from './categoryGrouping'
 import { CATEGORY_ICONS } from './categoryConstants'
-import { getIconForItem } from './itemIconMap'
+import { GridCard } from './GridCard'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const CARD_MARGIN = 6
@@ -25,9 +24,10 @@ type Props = {
     onToggleDone?: (index: number) => void
     onDelete?: (index: number) => void
     onInsert?: (index: number, text: string) => void
+    categoriesEnabled?: boolean
 }
 
-export function VisualGridList({ data, onToggleDone, onDelete, onInsert }: Props) {
+export function VisualGridList({ data, onToggleDone, onDelete, onInsert, categoriesEnabled = true }: Props) {
     const [isAddingItem, setIsAddingItem] = useState(false)
     const [editText, setEditText] = useState('')
 
@@ -60,40 +60,24 @@ export function VisualGridList({ data, onToggleDone, onDelete, onInsert }: Props
         setEditText('')
     }, [])
 
-    const sections = useMemo(() => groupByCategory(data), [data])
+    const sections = useMemo(() => {
+        if (categoriesEnabled) return groupByCategory(data)
+        return [{
+            category: '',
+            items: data.map((entry, i) => ({ entry, originalIndex: i })),
+        }]
+    }, [data, categoriesEnabled])
 
-    const renderCard = (indexed: IndexedEntry, cardKey: number) => {
-        const { entry: item, originalIndex } = indexed
-
-        return (
-            <TouchableOpacity
-                key={`${item.text}-${item.timeOfCompletion}-${cardKey}`}
-                style={[styles.card, item.isDone && styles.cardDone]}
-                onPress={() => onToggleDone?.(originalIndex)}
-                onLongPress={() => onDelete?.(originalIndex)}
-                delayLongPress={500}
-            >
-                <View style={styles.iconContainer}>
-                    <Image
-                        source={getIconForItem(item.text).source}
-                        style={[styles.cardIcon, item.isDone && styles.cardIconDone]}
-                        resizeMode="contain"
-                    />
-                </View>
-                <Text
-                    style={[styles.cardText, item.isDone && styles.cardTextDone]}
-                    numberOfLines={2}
-                >
-                    {item.text}
-                </Text>
-                {item.isDone && (
-                    <View style={styles.checkmark}>
-                        <Ionicons name="checkmark-circle" size={18} color="#333" />
-                    </View>
-                )}
-            </TouchableOpacity>
-        )
-    }
+    const renderCard = (indexed: IndexedEntry, cardKey: number) => (
+        <GridCard
+            key={`${indexed.entry.text}-${indexed.entry.timeOfCompletion}-${cardKey}`}
+            item={indexed.entry}
+            originalIndex={indexed.originalIndex}
+            cardKey={cardKey}
+            onToggleDone={onToggleDone}
+            onDelete={onDelete}
+        />
+    )
 
     const renderRows = (items: IndexedEntry[]) => {
         const rows: React.ReactElement[] = []
@@ -136,15 +120,17 @@ export function VisualGridList({ data, onToggleDone, onDelete, onInsert }: Props
                     showsVerticalScrollIndicator={false}
                 >
                     {sections.map((section) => (
-                        <View key={section.category} style={styles.section}>
-                            <View style={styles.categoryHeader}>
-                                <Ionicons
-                                    name={(CATEGORY_ICONS[section.category] || 'basket-outline') as any}
-                                    size={18}
-                                    color="#555"
-                                />
-                                <Text style={styles.categoryTitle}>{section.category.toUpperCase()}</Text>
-                            </View>
+                        <View key={section.category || '_flat'} style={styles.section}>
+                            {section.category !== '' && (
+                                <View style={styles.categoryHeader}>
+                                    <Ionicons
+                                        name={(CATEGORY_ICONS[section.category] || 'basket-outline') as any}
+                                        size={18}
+                                        color="#555"
+                                    />
+                                    <Text style={styles.categoryTitle}>{section.category.toUpperCase()}</Text>
+                                </View>
+                            )}
                             {renderRows(section.items)}
                         </View>
                     ))}
@@ -204,49 +190,6 @@ const styles = StyleSheet.create({
     row: {
         flexDirection: 'row',
         marginBottom: CARD_MARGIN,
-    },
-    card: {
-        width: CARD_WIDTH,
-        aspectRatio: 1,
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        paddingHorizontal: 4,
-        paddingTop: 4,
-        paddingBottom: 2,
-        marginRight: CARD_MARGIN,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#e0e0e0',
-    },
-    cardDone: {
-        backgroundColor: '#fafafa',
-        opacity: 0.6,
-    },
-    iconContainer: {
-        marginBottom: 2,
-    },
-    cardIcon: {
-        width: 76,
-        height: 76,
-    },
-    cardIconDone: {
-        opacity: 0.4,
-    },
-    cardText: {
-        fontSize: 11,
-        fontWeight: '600',
-        color: '#333',
-        textAlign: 'center',
-    },
-    cardTextDone: {
-        color: '#999',
-        textDecorationLine: 'line-through',
-    },
-    checkmark: {
-        position: 'absolute',
-        top: 8,
-        right: 8,
     },
     emptyCard: {
         width: CARD_WIDTH,
