@@ -5,7 +5,6 @@
 export let autobase = null
 export let store = null
 export let swarm = null
-export let chatSwarm = null
 export let discovery = null
 
 // RPC instance
@@ -14,7 +13,12 @@ export let rpc = null
 // Keys and topics
 export let baseKey = null
 export let currentTopic = null
-export let chatTopic = null
+export let encryptionKey = null       // Buffer — Autobase encryption key
+
+// Blind pairing
+export let pairing = null             // BlindPairing instance
+export let pairingMember = null       // BlindPairing member (host-side handler)
+export let currentInvite = null       // { id, invite, publicKey, expires } or null
 
 // In-memory data
 export let currentList = []
@@ -42,12 +46,14 @@ export const DEFAULT_LIST = [
 export function setAutobase(val) { autobase = val }
 export function setStore(val) { store = val }
 export function setSwarm(val) { swarm = val }
-export function setChatSwarm(val) { chatSwarm = val }
 export function setDiscovery(val) { discovery = val }
 export function setRpc(val) { rpc = val }
 export function setBaseKey(val) { baseKey = val }
 export function setCurrentTopic(val) { currentTopic = val }
-export function setChatTopic(val) { chatTopic = val }
+export function setEncryptionKey(val) { encryptionKey = val }
+export function setPairing(val) { pairing = val }
+export function setPairingMember(val) { pairingMember = val }
+export function setCurrentInvite(val) { currentInvite = val }
 export function setCurrentList(val) { currentList = val }
 export function setPeerCount(val) { peerCount = val }
 export function setAddedStaticPeers(val) { addedStaticPeers = val }

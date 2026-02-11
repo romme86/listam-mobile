@@ -22,6 +22,7 @@
     "bare-fs": "^4.4.4",
     "bare-rpc": "^0.2.12",
     "base64-js": "^1.5.1",
+    "blind-pairing": "^2.3.1",
     "blind-peering": "^1.13.0",
     "corestore": "^7.5.0",
     "expo": "~54.0.31",
@@ -47,7 +48,8 @@
     "react-native-iap": "^14.7.7",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "5.6.2",
-    "react-native-worklets": "0.5.1"
+    "react-native-worklets": "0.5.1",
+    "z32": "^1.1.0"
   },
   "devDependencies": {
     "@react-native-community/cli": "latest",

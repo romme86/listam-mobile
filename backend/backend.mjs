@@ -11,26 +11,29 @@ import {
     RPC_UPDATE_FROM_BACKEND,
     RPC_DELETE_FROM_BACKEND,
     SYNC_LIST,
-    RPC_REQUEST_SYNC
+    RPC_REQUEST_SYNC,
+    RPC_CREATE_INVITE
 } from '../rpc-commands.mjs'
 import b4a from 'b4a'
 import {syncListToFrontend, validateItem, addItem, updateItem, deleteItem} from './lib/item.mjs'
 const { IPC } = BareKit
-import {loadAutobaseKey, saveAutobaseKey} from "./lib/key.mjs";
-import {initAutobase, joinNewBase} from "./lib/network.mjs";
+import {loadAutobaseKey, saveAutobaseKey, loadEncryptionKey} from "./lib/key.mjs"
+import {initAutobase, joinViaInvite, createInvite} from "./lib/network.mjs"
 import {
     autobase,
     store,
     swarm,
-    chatSwarm,
     discovery,
+    pairing,
     rpc,
     currentList,
     baseKey,
     setRpc,
-    setCurrentList, setBaseKey
-} from "./lib/state.mjs";
-import fs from "bare-fs";
+    setCurrentList,
+    setBaseKey,
+    setEncryptionKey
+} from "./lib/state.mjs"
+import fs from "bare-fs"
 
 const INSTANCE_ID = Math.random().toString(36).slice(2, 8)
 console.error('[INFO] BACKEND INSTANCE:', INSTANCE_ID)
@@ -49,6 +52,8 @@ export const peerKeysString = Bare.argv[1] || '' // Comma-separated peer keys
 const baseKeyHex = Bare.argv[2] || '' // Optional Autobase key (to join an existing base)
 export const keyFilePath = baseDir ? join(baseDir, 'lista-autobase-key.txt') : './autobase-key.txt';
 const localWriterKeyFilePath = baseDir ? join(baseDir, 'lista-local-writer-key.txt') : './local-writer-key.txt';
+export const encKeyFilePath = baseDir ? join(baseDir, 'lista-encryption-key.txt') : './encryption-key.txt';
+export const inviteFilePath = baseDir ? join(baseDir, 'lista-invite.json') : './invite.json';
 
 const LOCK_PATH = baseDir ? join(baseDir, 'lista.lock') : './lista.lock'
 
@@ -90,6 +95,14 @@ if (!baseKey) {
     setBaseKey(loadAutobaseKey(keyFilePath))
 }
 
+// Load encryption key if we have a base key (for restart persistence)
+if (baseKey) {
+    const loadedEncKey = loadEncryptionKey(encKeyFilePath)
+    if (loadedEncKey) {
+        setEncryptionKey(loadedEncKey)
+    }
+}
+
 // Create RPC server
 let rpcGenerated = new RPC(IPC, async (req, error) => {
     console.error('[INFO] Got a request from react', req)
@@ -119,15 +132,27 @@ let rpcGenerated = new RPC(IPC, async (req, error) => {
                     console.error('[WARNING] RPC_GET_KEY requested before Autobase is ready')
                     break
                 }
-                const keyReq = rpc.request(RPC_GET_KEY)
-                keyReq.send(autobase.local.key.toString('hex'))
+                const z32Invite = createInvite()
+                if (z32Invite) {
+                    const keyReq = rpc.request(RPC_GET_KEY)
+                    keyReq.send(z32Invite)
+                }
                 break
             }
             case RPC_JOIN_KEY: {
                 console.error('[INFO] Command RPC_JOIN_KEY')
                 const data = JSON.parse(req.data.toString())
-                console.error('[INFO] Joining new base key from RPC:', data.key)
-                await joinNewBase(data.key)
+                console.error('[INFO] Joining via invite from RPC:', data.key)
+                await joinViaInvite(data.key)
+                break
+            }
+            case RPC_CREATE_INVITE: {
+                console.error('[INFO] Command RPC_CREATE_INVITE')
+                const z32Invite = createInvite()
+                if (z32Invite && rpc) {
+                    const keyReq = rpc.request(RPC_GET_KEY)
+                    keyReq.send(z32Invite)
+                }
                 break
             }
             case RPC_REQUEST_SYNC: {
@@ -156,6 +181,13 @@ await initAutobase(baseKey).then(() => {
 // Cleanup on teardown
 Bare.on('teardown', async () => {
     console.error('[INFO] Backend shutting down...')
+    if (pairing) {
+        try {
+            await pairing.close()
+        } catch (e) {
+            console.error('[ERROR] Error closing blind pairing:', e)
+        }
+    }
     if (swarm) {
         swarm.removeAllListeners('connection')
         try {
@@ -169,13 +201,6 @@ Bare.on('teardown', async () => {
             await autobase.close()
         } catch (e) {
             console.error('[ERROR] Error closing autobase:', e)
-        }
-    }
-    if (chatSwarm) {
-        try {
-            await chatSwarm.destroy()
-        } catch (e) {
-            console.error('[ERROR] Error destroying chat swarm:', e)
         }
     }
     if (discovery) {
@@ -216,7 +241,7 @@ export async function apply (nodes, view, host) {
     for (const { value } of nodes) {
         if (!value) continue
 
-        // Handle writer membership updates coming from handshake
+        // Handle writer membership updates coming from blind pairing
         if (value.type === 'add-writer' && typeof value.key === 'string') {
             try {
                 const writerKey = Buffer.from(value.key, 'hex')

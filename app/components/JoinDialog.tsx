@@ -26,14 +26,14 @@ export function JoinDialog({
         >
             <View style={dialogStyles.overlay}>
                 <View style={dialogStyles.dialog}>
-                    <Text style={dialogStyles.title}>Join with Invite Key</Text>
-                    <Text style={dialogStyles.subtitle}>Paste the invite key below</Text>
+                    <Text style={dialogStyles.title}>Join with Invite Code</Text>
+                    <Text style={dialogStyles.subtitle}>Paste the invite code below</Text>
 
                     <TextInput
                         style={dialogStyles.input}
                         value={joinKeyInput}
                         onChangeText={setJoinKeyInput}
-                        placeholder="Enter invite key..."
+                        placeholder="Enter invite code..."
                         placeholderTextColor="#999"
                         multiline={true}
                         autoFocus={true}

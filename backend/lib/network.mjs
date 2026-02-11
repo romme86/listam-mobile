@@ -1,17 +1,18 @@
-import Hyperswarm from "hyperswarm";
-import fs from "bare-fs";
-import {apply, open, storagePath, peerKeysString, keyFilePath} from "../backend.mjs";
-import {saveAutobaseKey} from "./key.mjs";
-import {RPC_MESSAGE, RPC_GET_KEY, RPC_RESET, SYNC_LIST} from "../../rpc-commands.mjs";
-import Corestore from "corestore";
-import Autobase from "autobase";
-import b4a from "b4a";
-import { randomBytes } from "hypercore-crypto";
+import Hyperswarm from "hyperswarm"
+import fs from "bare-fs"
+import BlindPairing from "blind-pairing"
+import z32 from "z32"
+import { apply, open, storagePath, peerKeysString, keyFilePath, encKeyFilePath, inviteFilePath } from "../backend.mjs"
+import { saveAutobaseKey, saveEncryptionKey, saveInvite, deleteInvite } from "./key.mjs"
+import { RPC_MESSAGE, RPC_GET_KEY, RPC_RESET, SYNC_LIST } from "../../rpc-commands.mjs"
+import Corestore from "corestore"
+import Autobase from "autobase"
+import b4a from "b4a"
+import { randomBytes } from "hypercore-crypto"
 import {
     autobase,
     rpc,
     addedStaticPeers,
-    chatSwarm,
     swarm,
     baseKey,
     store,
@@ -19,116 +20,97 @@ import {
     knownWriters,
     peerCount,
     currentList,
+    pairing,
+    currentInvite,
+    encryptionKey,
     setAutobase,
     setAddedStaticPeers,
-    setChatSwarm,
     setSwarm,
     setDiscovery,
     setPeerCount,
     setStore,
-    setBaseKey
+    setBaseKey,
+    setPairing,
+    setPairingMember,
+    setCurrentInvite,
+    setEncryptionKey
 } from "./state.mjs"
-import {rebuildListFromPersistedOps, syncListToFrontend} from "./item.mjs"
+import { rebuildListFromPersistedOps, syncListToFrontend } from "./item.mjs"
 
 let _initPromise = null
 
-export function sendHandshakeMessage (conn, msg) {
-    const line = JSON.stringify(msg) + '\n'
-    conn.write(line)
+export function createInvite() {
+    if (!autobase) return null
+
+    // Return existing invite if not yet consumed
+    if (currentInvite) return z32.encode(currentInvite.invite)
+
+    const inv = BlindPairing.createInvite(autobase.key)
+    setCurrentInvite(inv)
+    saveInvite(inv, inviteFilePath)
+
+    return z32.encode(inv.invite)
 }
 
-export async function handleHandshakeMessage (msg) {
-    if (!autobase) return
-    if (!msg || msg.type !== 'writer-key') return
+export function setupBlindPairing() {
+    if (!autobase || !swarm) return
 
-    const remoteKeyHex = msg.key
-    if (!remoteKeyHex || typeof remoteKeyHex !== 'string') return
+    setPairing(new BlindPairing(swarm))
 
-    if (knownWriters.has(remoteKeyHex)) return
-    knownWriters.add(remoteKeyHex)
+    setPairingMember(pairing.addMember({
+        discoveryKey: autobase.discoveryKey,
+        onadd: async (candidate) => {
+            // Match invite
+            if (!currentInvite || !b4a.equals(currentInvite.id, candidate.inviteId)) return
 
-    // Only a writer can add other writers.
-    if (!autobase.writable) {
-        console.error('[WARNING] Not writable here, cannot add remote writer yet')
-        return
-    }
+            // Open with invite's public key
+            candidate.open(currentInvite.publicKey)
 
-    console.error('[INFO] Adding remote writer via autobase:', remoteKeyHex)
+            // Get joiner's writer key from userData
+            const writerKeyHex = candidate.userData.toString('hex')
 
-    await autobase.append({
-        type: 'add-writer',
-        key: remoteKeyHex
-    })
-}
-
-export async function setupHandshakeChannel (conn) {
-    if (!autobase) {
-        console.error('[WARNING] setupHandshakeChannel called before Autobase is initialized')
-        return
-    }
-
-    // Send our writer key immediately
-    await autobase.ready()
-    const myWriterKeyHex = autobase.local.key.toString('hex')
-    sendHandshakeMessage(conn, {
-        type: 'writer-key',
-        key: myWriterKeyHex
-    })
-
-    let buffer = ''
-    conn.on('data', (chunk) => {
-        buffer += chunk.toString()
-        let idx
-        while ((idx = buffer.indexOf('\n')) !== -1) {
-            const line = buffer.slice(0, idx)
-            buffer = buffer.slice(idx + 1)
-            if (!line.trim()) continue
-
-            // Fast-path: hypercore protocol frames and other binary garbage
-            // are not going to start with '{', so just ignore them.
-            if (line[0] !== '{') {
-                continue
+            // Add as writer
+            if (autobase.writable) {
+                await autobase.append({ type: 'add-writer', key: writerKeyHex })
             }
 
-            let msg
-            try {
-                msg = JSON.parse(line)
-            } catch (e) {
-                console.error('[WARNING] Invalid JSON from peer (handshake, ignored):', line)
-                continue
-            }
+            // Send our base key + encryption key
+            candidate.confirm({
+                key: autobase.key,
+                encryptionKey: autobase.encryptionKey
+            })
 
-            handleHandshakeMessage(msg)
+            // Consume invite (one-time use)
+            setCurrentInvite(null)
+            deleteInvite(inviteFilePath)
+
+            // Track peer + auto-create next invite
+            setPeerCount(peerCount + 1)
+            broadcastPeerCount()
+
+            // Create a fresh invite for the next joiner
+            const newZ32 = createInvite()
+            if (newZ32 && rpc) {
+                const req = rpc.request(RPC_GET_KEY)
+                req.send(newZ32)
+            }
         }
-    })
+    }))
 }
-
-export function setupChatSwarm (chatTopic) {
-    if (!autobase) {
-        console.error('[WARNING] setupChatSwarm called before Autobase is initialized')
-        return
-    }
-    setChatSwarm(new Hyperswarm())
-    console.error('[INFO] Setting up chat swarm with topic:', chatTopic.toString('hex'))
-    chatSwarm.on('connection', (conn, info) => {
-        console.error('[INFO] Handshake connection (chat swarm) with peer', info?.publicKey?.toString('hex'),'prioritized', info?.prioritized)
-        conn.on('error', (err) => {
-            console.error('[ERROR] Chat swarm connection error:', err)
-        })
-        setupHandshakeChannel(conn)
-    })
-
-    chatSwarm.on('error', (err) => {
-        console.error('[ERROR] Chat swarm error:', err)
-    })
-
-    chatSwarm.join(chatTopic, { server: true, client: true })
-    console.error('[INFO] Handshake chat swarm joined on topic:', chatTopic.toString('hex'))
-}
-
 
 async function tearDownAutobaseSwarmStore() {
-    // 1. Clean up previous Autobase instance (if any)
+    // 1. Clean up BlindPairing
+    if (pairing) {
+        try {
+            await pairing.close()
+        } catch (e) {
+            console.error('[ERROR] Error closing blind pairing:', e)
+        }
+        setPairing(null)
+        setPairingMember(null)
+    }
+
+    // 2. Clean up previous Autobase instance (if any)
     if (autobase) {
         try {
             autobase.removeAllListeners('append')
@@ -144,7 +126,7 @@ async function tearDownAutobaseSwarmStore() {
         setAutobase(null)
     }
 
-    // 2. Tear down networking bound to old store
+    // 3. Tear down networking bound to old store
     if (discovery) {
         try {
             await discovery.destroy()
@@ -153,16 +135,17 @@ async function tearDownAutobaseSwarmStore() {
         }
         setDiscovery(null)
     }
-    if (chatSwarm) {
+
+    if (swarm) {
         try {
-            await chatSwarm.destroy()
+            await swarm.destroy()
         } catch (e) {
-            console.error('[ERROR] Error destroying chat swarm:', e)
+            console.error('[ERROR] Error destroying swarm:', e)
         }
-        setChatSwarm(null)
+        setSwarm(null)
     }
 
-    // 3. Close old store
+    // 4. Close old store
     if (store) {
         try {
             await store.close()
@@ -172,7 +155,7 @@ async function tearDownAutobaseSwarmStore() {
     }
 }
 
-export async function initAutobase (newBaseKey) {
+export async function initAutobase(newBaseKey) {
     if (_initPromise) {
         console.error('[WARNING] initAutobase already running — returning existing init promise')
         return _initPromise
@@ -180,8 +163,7 @@ export async function initAutobase (newBaseKey) {
 
     _initPromise = (async () => {
 
-
-        await tearDownAutobaseSwarmStore();
+        await tearDownAutobaseSwarmStore()
 
         // Use per-base storage path to avoid conflicts when joining different bases
         const keyPrefix = newBaseKey ? newBaseKey.toString('hex').slice(0, 8) : 'local'
@@ -194,12 +176,18 @@ export async function initAutobase (newBaseKey) {
             '[INFO] Initializing a new autobase with key:',
             baseKey ? baseKey.toString('hex') : '(new base)'
         )
-        const autobaseOpts = { apply, open, valueEncoding: 'json' }
+
+        const autobaseOpts = {
+            apply, open,
+            valueEncoding: 'json',
+            encrypt: true,
+            encryptionKey: encryptionKey || undefined
+        }
         setAutobase(new Autobase(store, baseKey, autobaseOpts))
         console.error('[INFO] Calling autobase.ready()...')
-        try{
+        try {
             await autobase.ready()
-        } catch(e){
+        } catch (e) {
             const msg = String(e?.stack || e?.message || e)
             if (msg.includes("reading 'signers'") || msg.includes('autobase/lib/store.js')) {
                 console.error('[ERROR] Autobase appears corrupted. Wiping local state and recreating a new base...')
@@ -209,7 +197,7 @@ export async function initAutobase (newBaseKey) {
                 _initPromise = null
                 return initAutobase(null)
             }
-            throw e;
+            throw e
         }
         console.error(
             '[INFO] autobase.ready() resolved. Autobase ready, writable?',
@@ -219,22 +207,25 @@ export async function initAutobase (newBaseKey) {
         )
 
         // Save the autobase key for persistence across restarts
-        // Only save if we're the creator (writable) - guests should rejoin manually
         if (autobase.key && autobase.writable) {
             saveAutobaseKey(autobase.key, keyFilePath)
         }
 
-        if (autobase) {
-            const req = rpc.request(RPC_GET_KEY)
-            req.send(autobase.key?.toString('hex'))
+        // Save encryption key after autobase is ready
+        if (autobase.encryptionKey && autobase.writable) {
+            setEncryptionKey(autobase.encryptionKey)
+            saveEncryptionKey(autobase.encryptionKey, encKeyFilePath)
         }
+
         autobase.on('append', async () => {
             console.error('[INFO] New data appended, updating view...')
         })
+
         // Load existing items from view and sync to frontend
         await autobase.update()
         const rebuiltList = await rebuildListFromPersistedOps()
         syncListToFrontend(rebuiltList)
+
         // Add static peers only once
         if (!addedStaticPeers && peerKeysString) {
             const peerKeys = peerKeysString.split(',').filter(k => k.trim())
@@ -251,13 +242,15 @@ export async function initAutobase (newBaseKey) {
             }
             setAddedStaticPeers(true)
         }
+
         // Reset peer count on new base
         setPeerCount(0)
         broadcastPeerCount()
-        // --- Update replication swarm topic for this base ---
-        const firstLocalAutobaseKey = randomBytes(32)
-        const topic = autobase.key || firstLocalAutobaseKey
+
+        // Use discoveryKey as swarm topic (NOT autobase.key)
+        const topic = autobase.discoveryKey
         console.error('[INFO] Discovery topic (replication swarm):', topic.toString('hex'))
+
         // Switch discovery to new topic
         if (discovery) {
             try {
@@ -266,6 +259,7 @@ export async function initAutobase (newBaseKey) {
                 console.error('[ERROR] Error destroying previous discovery:', e)
             }
         }
+
         setSwarm(new Hyperswarm())
         swarm.on('error', (err) => {
             console.error('[ERROR] Replication swarm error:', err)
@@ -275,7 +269,7 @@ export async function initAutobase (newBaseKey) {
             conn.on('error', (err) => {
                 console.error('[ERROR] Replication connection error:', err)
             })
-            setPeerCount(peerCount+1)
+            setPeerCount(peerCount + 1)
             broadcastPeerCount()
             conn.on('close', () => {
                 setPeerCount(Math.max(0, peerCount - 1))
@@ -290,16 +284,16 @@ export async function initAutobase (newBaseKey) {
         setDiscovery(swarm.join(topic, { server: true, client: true }))
         await discovery.flushed()
         console.error('[INFO] Joined replication swarm for current base')
-        // Restart chat swarm with new topic
-        if (chatSwarm) {
-            try {
-                await chatSwarm.destroy()
-            } catch (e) {
-                console.error('[ERROR] Error destroying previous chat swarm:', e)
-            }
-            setChatSwarm(null)
+
+        // Set up blind pairing for accepting joiners
+        setupBlindPairing()
+
+        // Create invite and send to frontend
+        const z32Invite = createInvite()
+        if (z32Invite && rpc) {
+            const req = rpc.request(RPC_GET_KEY)
+            req.send(z32Invite)
         }
-        setupChatSwarm(baseKey != null ? baseKey : autobase.key)
     })()
 
     try {
@@ -311,40 +305,128 @@ export async function initAutobase (newBaseKey) {
 
 let _joinPromise = null
 
-export async function joinNewBase (baseKeyHexStr) {
-
+export async function joinViaInvite(z32InviteStr) {
     if (_joinPromise) {
-        console.error('[WARNING] joinNewBase already running — returning existing join promise')
+        console.error('[WARNING] joinViaInvite already running — returning existing join promise')
         return _joinPromise
     }
 
     _joinPromise = (async () => {
-
-        if (!baseKeyHexStr || typeof baseKeyHexStr !== 'string') {
-            console.error('[ERROR] joinNewBase: invalid baseKey', baseKeyHexStr)
-            return
-        }
-
-        // Save current list to restore on failure
         const previousList = [...currentList]
 
         try {
-            const newKey = Buffer.from(baseKeyHexStr.trim(), 'hex')
-            if (newKey.length !== 32) {
-                console.error('[ERROR] joinNewBase: baseKey must be 32 bytes, got', newKey.length)
-                return
-            }
-            console.error('[INFO] Joining new Autobase key at runtime:', baseKeyHexStr.trim())
-            // Clear frontend list before joining new base
+            // 1. Tear down existing
+            await tearDownAutobaseSwarmStore()
             if (rpc) {
                 const resetReq = rpc.request(RPC_RESET)
                 resetReq.send('')
             }
-            await initAutobase(newKey)
-            console.error('[INFO] Autobase ready 320')
+
+            // 2. Fresh store
+            const joinStoragePath = `${storagePath}-joining`
+            setStore(new Corestore(joinStoragePath))
+            await store.ready()
+
+            // 3. Fresh swarm
+            setSwarm(new Hyperswarm({
+                keyPair: await store.createKeyPair('hyperswarm')
+            }))
+            swarm.on('connection', (conn) => {
+                store.replicate(conn)  // store-level replication during pairing
+            })
+
+            // 4. Get local writer key (before Autobase exists)
+            const localCore = Autobase.getLocalCore(store)
+            await localCore.ready()
+            const localWriterKey = localCore.key
+            await localCore.close()
+
+            // 5. Blind pairing as candidate
+            const joinPairing = new BlindPairing(swarm)
+
+            const result = await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    candidate.close()
+                    reject(new Error('Pairing timed out'))
+                }, 120000)  // 2 min timeout
+
+                const candidate = joinPairing.addCandidate({
+                    invite: z32.decode(z32InviteStr),
+                    userData: localWriterKey,
+                    onadd: async (paired) => {
+                        clearTimeout(timeout)
+                        resolve(paired)
+                        candidate.close()
+                    }
+                })
+            })
+
+            // 6. Pairing succeeded — result = { key, encryptionKey }
+            await joinPairing.close()
+
+            // 7. Now init autobase with the received key + encryption
+            setBaseKey(result.key)
+            setEncryptionKey(result.encryptionKey)
+            saveAutobaseKey(result.key, keyFilePath)
+            saveEncryptionKey(result.encryptionKey, encKeyFilePath)
+
+            // Re-init with proper autobase replication
+            // Remove store-level replication, switch to autobase-level
+            swarm.removeAllListeners('connection')
+
+            const autobaseOpts = {
+                apply, open,
+                valueEncoding: 'json',
+                encrypt: true,
+                encryptionKey: result.encryptionKey
+            }
+            setAutobase(new Autobase(store, result.key, autobaseOpts))
+            await autobase.ready()
+
+            // Set up autobase replication on swarm
+            swarm.on('connection', (conn) => {
+                conn.on('error', (err) => console.error('[ERROR]', err))
+                setPeerCount(peerCount + 1)
+                broadcastPeerCount()
+                conn.on('close', () => {
+                    setPeerCount(Math.max(0, peerCount - 1))
+                    broadcastPeerCount()
+                })
+                autobase.replicate(conn)
+            })
+
+            // Replicate autobase over connections that already exist from pairing
+            for (const conn of swarm.connections) {
+                conn.on('error', (err) => console.error('[ERROR]', err))
+                conn.on('close', () => {
+                    setPeerCount(Math.max(0, peerCount - 1))
+                    broadcastPeerCount()
+                })
+                autobase.replicate(conn)
+            }
+            setPeerCount(swarm.connections.size)
+            broadcastPeerCount()
+
+            // Join discovery topic
+            setDiscovery(swarm.join(autobase.discoveryKey, { server: true, client: true }))
+            await discovery.flushed()
+
+            // Set up blind pairing for future joiners
+            setupBlindPairing()
+
+            // Rebuild list
+            await autobase.update()
+            const rebuiltList = await rebuildListFromPersistedOps()
+            syncListToFrontend(rebuiltList)
+
+            // Send invite to frontend
+            const z32Invite = createInvite()
+            if (z32Invite && rpc) {
+                const req = rpc.request(RPC_GET_KEY)
+                req.send(z32Invite)
+            }
         } catch (e) {
-            console.error('[ERROR] joinNewBase failed:', e)
-            // Restore previous list on failure
+            console.error('[ERROR] joinViaInvite failed:', e)
             if (rpc && previousList.length > 0) {
                 const syncReq = rpc.request(SYNC_LIST)
                 syncReq.send(JSON.stringify(previousList))
@@ -352,15 +434,11 @@ export async function joinNewBase (baseKeyHexStr) {
         }
     })()
 
-    try {
-        return await _joinPromise
-    } finally {
-        _joinPromise = null
-    }
-
+    try { return await _joinPromise }
+    finally { _joinPromise = null }
 }
 
-function broadcastPeerCount () {
+function broadcastPeerCount() {
     if (!rpc) return
     try {
         const req = rpc.request(RPC_MESSAGE)
@@ -370,7 +448,7 @@ function broadcastPeerCount () {
     }
 }
 
-function rmrfSafe (p) {
+function rmrfSafe(p) {
     try {
         if (fs.existsSync(p)) fs.rmSync(p, { recursive: true, force: true })
     } catch (e) {
