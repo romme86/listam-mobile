@@ -165,9 +165,7 @@ export async function initAutobase(newBaseKey) {
 
         await tearDownAutobaseSwarmStore()
 
-        // Use per-base storage path to avoid conflicts when joining different bases
-        const keyPrefix = newBaseKey ? newBaseKey.toString('hex').slice(0, 8) : 'local'
-        const baseStoragePath = `${storagePath}-${keyPrefix}`
+        const baseStoragePath = `${storagePath}-local`
 
         setStore(new Corestore(baseStoragePath))
         await store.ready()
@@ -322,8 +320,9 @@ export async function joinViaInvite(z32InviteStr) {
                 resetReq.send('')
             }
 
-            // 2. Fresh store
-            const joinStoragePath = `${storagePath}-joining`
+            // 2. Fresh store — wipe old data so the new base starts clean
+            const joinStoragePath = `${storagePath}-local`
+            rmrfSafe(joinStoragePath)
             setStore(new Corestore(joinStoragePath))
             await store.ready()
 

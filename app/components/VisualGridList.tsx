@@ -2,6 +2,7 @@ import React, { useState, useCallback, useMemo } from 'react'
 import {
     View,
     Text,
+    Image,
     StyleSheet,
     ScrollView,
     TouchableOpacity,
@@ -12,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons'
 import type { ListEntry } from './_types'
 import { groupByCategory, type IndexedEntry } from './categoryGrouping'
 import { CATEGORY_ICONS } from './categoryConstants'
+import { getIconForItem } from './itemIconMap'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const CARD_MARGIN = 6
@@ -72,10 +74,10 @@ export function VisualGridList({ data, onToggleDone, onDelete, onInsert }: Props
                 delayLongPress={500}
             >
                 <View style={styles.iconContainer}>
-                    <Ionicons
-                        name="basket-outline"
-                        size={32}
-                        color={item.isDone ? '#bbb' : '#333'}
+                    <Image
+                        source={getIconForItem(item.text).source}
+                        style={[styles.cardIcon, item.isDone && styles.cardIconDone]}
+                        resizeMode="contain"
                     />
                 </View>
                 <Text
@@ -206,9 +208,11 @@ const styles = StyleSheet.create({
     card: {
         width: CARD_WIDTH,
         aspectRatio: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#fff',
         borderRadius: 12,
-        padding: 8,
+        paddingHorizontal: 4,
+        paddingTop: 4,
+        paddingBottom: 2,
         marginRight: CARD_MARGIN,
         justifyContent: 'center',
         alignItems: 'center',
@@ -220,7 +224,14 @@ const styles = StyleSheet.create({
         opacity: 0.6,
     },
     iconContainer: {
-        marginBottom: 6,
+        marginBottom: 2,
+    },
+    cardIcon: {
+        width: 76,
+        height: 76,
+    },
+    cardIconDone: {
+        opacity: 0.4,
     },
     cardText: {
         fontSize: 11,
