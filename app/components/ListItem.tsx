@@ -17,6 +17,7 @@ const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.2
 type ListItemProps = {
     item: ListEntry
     index: number
+    visualIndex?: number
     scrollY: Animated.Value
     totalItemHeight: number
     onToggleDone?: (index: number) => void
@@ -33,6 +34,7 @@ type ListItemProps = {
 export function ListItem({
     item,
     index,
+    visualIndex,
     scrollY,
     totalItemHeight,
     onToggleDone,
@@ -135,10 +137,11 @@ export function ListItem({
         },
     }), [panX, onDelete, index])
 
+    const scrollIndex = visualIndex ?? index
     const inputRange = [
-        (index - 2) * totalItemHeight,
-        index * totalItemHeight,
-        (index + 2) * totalItemHeight,
+        (scrollIndex - 2) * totalItemHeight,
+        scrollIndex * totalItemHeight,
+        (scrollIndex + 2) * totalItemHeight,
     ]
 
     const textScale = scrollY.interpolate({

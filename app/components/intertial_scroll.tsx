@@ -1,22 +1,25 @@
-import React, { useRef, useState, useCallback } from 'react'
+import React, { useRef, useState, useCallback, useMemo } from 'react'
 import {
     Animated,
     Dimensions,
     StyleSheet,
-    FlatListProps,
     TouchableOpacity,
     TextInput,
     View,
+    Text,
 } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 import type { ListEntry } from './_types'
 import { ListItem, ITEM_HEIGHT, SPACING } from './ListItem'
+import { groupByCategory } from './categoryGrouping'
+import { CATEGORY_ICONS } from './categoryConstants'
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window')
 const TOTAL_ITEM_HEIGHT = ITEM_HEIGHT + SPACING
 
-const getItemKey = (item: ListEntry, index: number): string => {
-    return `${item.text}-${item.timeOfCompletion}-${index}`
-}
+type FlatListItem =
+    | { type: 'header'; category: string; key: string }
+    | { type: 'item'; entry: ListEntry; originalIndex: number; visualIndex: number; key: string }
 
 type Props = {
     data: ListEntry[]
@@ -80,11 +83,50 @@ export default function InertialElasticList({
         setEditText('')
     }, [])
 
-    const renderItem: FlatListProps<ListEntry>['renderItem'] = useCallback(({ item, index }: { item: ListEntry; index: number }) => {
+    const flatData = useMemo((): FlatListItem[] => {
+        const sections = groupByCategory(data)
+        const items: FlatListItem[] = []
+        let visualIndex = 0
+
+        for (const section of sections) {
+            items.push({
+                type: 'header',
+                category: section.category,
+                key: `header-${section.category}`,
+            })
+            visualIndex++
+
+            for (const indexed of section.items) {
+                items.push({
+                    type: 'item',
+                    entry: indexed.entry,
+                    originalIndex: indexed.originalIndex,
+                    visualIndex,
+                    key: `item-${indexed.originalIndex}-${indexed.entry.text}-${indexed.entry.timeOfCompletion}`,
+                })
+                visualIndex++
+            }
+        }
+
+        return items
+    }, [data])
+
+    const renderItem = useCallback(({ item }: { item: FlatListItem }) => {
+        if (item.type === 'header') {
+            const iconName = CATEGORY_ICONS[item.category] || 'basket-outline'
+            return (
+                <View style={headerStyles.container}>
+                    <Ionicons name={iconName as any} size={16} color="#555" />
+                    <Text style={headerStyles.title}>{item.category.toUpperCase()}</Text>
+                </View>
+            )
+        }
+
         return (
             <ListItem
-                item={item}
-                index={index}
+                item={item.entry}
+                index={item.originalIndex}
+                visualIndex={item.visualIndex}
                 scrollY={scrollY}
                 totalItemHeight={TOTAL_ITEM_HEIGHT}
                 onToggleDone={onToggleDone}
@@ -100,9 +142,13 @@ export default function InertialElasticList({
         )
     }, [scrollY, onToggleDone, onDelete, onInsert, handleStartEdit, handleSubmitEdit, handleCancelEdit])
 
-    const keyExtractor = useCallback((item: ListEntry, index: number) => {
-        return getItemKey(item, index)
-    }, [])
+    const keyExtractor = useCallback((item: FlatListItem) => item.key, [])
+
+    const getItemLayout = useCallback((_: any, index: number) => ({
+        length: TOTAL_ITEM_HEIGHT,
+        offset: TOTAL_ITEM_HEIGHT * index,
+        index,
+    }), [])
 
     return (
         <View style={styles.container}>
@@ -126,9 +172,10 @@ export default function InertialElasticList({
                 onPress={handleListPress}
             >
                 <Animated.FlatList
-                    data={data}
+                    data={flatData}
                     keyExtractor={keyExtractor}
                     renderItem={renderItem}
+                    getItemLayout={getItemLayout}
                     showsVerticalScrollIndicator={false}
                     decelerationRate="fast"
                     bounces={true}
@@ -160,5 +207,21 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#222',
         fontWeight: '600',
+    },
+})
+
+const headerStyles = StyleSheet.create({
+    container: {
+        height: ITEM_HEIGHT + SPACING,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingLeft: 20,
+    },
+    title: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#555',
+        marginLeft: 6,
+        letterSpacing: 0.5,
     },
 })

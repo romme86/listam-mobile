@@ -1,0 +1,82 @@
+[
+  {
+    "rank": "1",
+    "category": "Fresh produce",
+    "item": "Apples",
+    "slug": "apples",
+    "svgPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/svg/apples.svg",
+    "pngPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/png/128/apples.png"
+  },
+  {
+    "rank": "2",
+    "category": "Fresh produce",
+    "item": "Asparagus",
+    "slug": "asparagus",
+    "svgPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/svg/asparagus.svg",
+    "pngPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/png/128/asparagus.png"
+  },
+  {
+    "rank": "3",
+    "category": "Fresh produce",
+    "item": "Avocado",
+    "slug": "avocado",
+    "svgPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/svg/avocado.svg",
+    "pngPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/png/128/avocado.png"
+  },
+  {
+    "rank": "4",
+    "category": "Fresh produce",
+    "item": "Bananas",
+    "slug": "bananas",
+    "svgPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/svg/bananas.svg",
+    "pngPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/png/128/bananas.png"
+  },
+  {
+    "rank": "5",
+    "category": "Fresh produce",
+    "item": "Beetroot",
+    "slug": "beetroot",
+    "svgPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/svg/beetroot.svg",
+    "pngPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/png/128/beetroot.png"
+  },
+  {
+    "rank": "6",
+    "category": "Fresh produce",
+    "item": "Bell peppers",
+    "slug": "bell-peppers",
+    "svgPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/svg/bell-peppers.svg",
+    "pngPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/png/128/bell-peppers.png"
+  },
+  {
+    "rank": "7",
+    "category": "Fresh produce",
+    "item": "Blueberries",
+    "slug": "blueberries",
+    "svgPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/svg/blueberries.svg",
+    "pngPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/png/128/blueberries.png"
+  },
+  {
+    "rank": "8",
+    "category": "Fresh produce",
+    "item": "Broccoli",
+    "slug": "broccoli",
+    "svgPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/svg/broccoli.svg",
+    "pngPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/png/128/broccoli.png"
+  },
+  {
+    "rank": "9",
+    "category": "Fresh produce",
+    "item": "Cabbage",
+    "slug": "cabbage",
+    "svgPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/svg/cabbage.svg",
+    "pngPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/png/128/cabbage.png"
+  },
+  {
+    "rank": "10",
+    "category": "Fresh produce",
+    "item": "Carrots",
+    "slug": "carrots",
+    "svgPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/svg/carrots.svg",
+    "pngPath": "/Users/saynode/Documents/GitHub/lista/assets/grocery-icons/png/128/carrots.png"
+  }
+]
