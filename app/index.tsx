@@ -8,6 +8,9 @@ import { Header } from './components/Header'
 import { JoinDialog } from './components/JoinDialog'
 import { JoiningOverlay, P2P_MESSAGES } from './components/JoiningOverlay'
 import { Paywall } from './components/Paywall'
+import { LoyaltyCardScanner } from './components/LoyaltyCardScanner'
+import { LoyaltyCardViewer } from './components/LoyaltyCardViewer'
+import type { LoyaltyCard } from './components/LoyaltyCardScanner'
 import InertialElasticList from './components/intertial_scroll'
 import { VisualGridList } from './components/VisualGridList'
 import { styles } from './components/_styles'
@@ -15,6 +18,7 @@ import type { ListEntry } from './components/_types'
 
 const PREF_GRID_VIEW = '@lista_grid_view'
 const PREF_CATEGORIES = '@lista_categories'
+const PREF_LOYALTY_CARDS = '@lista_loyalty_cards'
 
 const DEFAULT_INSTRUCTIONS: ListEntry[] = [
     { text: 'Double tap to add new', isDone: false, timeOfCompletion: 0 },
@@ -42,12 +46,18 @@ export default function App() {
     const [isGridView, setIsGridView] = useState(false)
     const [categoriesEnabled, setCategoriesEnabled] = useState(true)
     const [menuVisible, setMenuVisible] = useState(false)
+    const [loyaltyCards, setLoyaltyCards] = useState<LoyaltyCard[]>([])
+    const [scannerVisible, setScannerVisible] = useState(false)
+    const [selectedCard, setSelectedCard] = useState<LoyaltyCard | null>(null)
     const blinkAnim = useRef(new Animated.Value(1)).current
 
     useEffect(() => {
-        AsyncStorage.multiGet([PREF_GRID_VIEW, PREF_CATEGORIES]).then(([[, grid], [, cats]]) => {
+        AsyncStorage.multiGet([PREF_GRID_VIEW, PREF_CATEGORIES, PREF_LOYALTY_CARDS]).then(([[, grid], [, cats], [, cards]]) => {
             if (grid !== null) setIsGridView(grid === 'true')
             if (cats !== null) setCategoriesEnabled(cats === 'true')
+            if (cards !== null) {
+                try { setLoyaltyCards(JSON.parse(cards)) } catch {}
+            }
         })
     }, [])
 
@@ -63,6 +73,27 @@ export default function App() {
             AsyncStorage.setItem(PREF_CATEGORIES, String(!prev))
             return !prev
         })
+    }, [])
+
+    const handleCardScanned = useCallback((card: LoyaltyCard) => {
+        setLoyaltyCards((prev) => {
+            const next = [...prev, card]
+            AsyncStorage.setItem(PREF_LOYALTY_CARDS, JSON.stringify(next))
+            return next
+        })
+        setScannerVisible(false)
+    }, [])
+
+    const handleDeleteCard = useCallback((id: string) => {
+        setLoyaltyCards((prev) => {
+            const next = prev.filter((c) => c.id !== id)
+            AsyncStorage.setItem(PREF_LOYALTY_CARDS, JSON.stringify(next))
+            return next
+        })
+    }, [])
+
+    const handleSelectCard = useCallback((card: LoyaltyCard) => {
+        setSelectedCard(card)
     }, [])
 
     // Blinking animation when key is not ready
@@ -242,6 +273,9 @@ export default function App() {
                     onToggleView={handleToggleView}
                     categoriesEnabled={categoriesEnabled}
                     onToggleCategories={handleToggleCategories}
+                    loyaltyCards={loyaltyCards}
+                    onScanCard={() => setScannerVisible(true)}
+                    onSelectCard={handleSelectCard}
                 />
                 <JoinDialog
                     visible={joinDialogVisible}
@@ -272,6 +306,17 @@ export default function App() {
                         categoriesEnabled={categoriesEnabled}
                     />
                 )}
+                <LoyaltyCardScanner
+                    visible={scannerVisible}
+                    onClose={() => setScannerVisible(false)}
+                    onCardScanned={handleCardScanned}
+                />
+                <LoyaltyCardViewer
+                    visible={selectedCard !== null}
+                    card={selectedCard}
+                    onClose={() => setSelectedCard(null)}
+                    onDelete={handleDeleteCard}
+                />
             </View>
         </SafeAreaProvider>
     )

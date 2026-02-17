@@ -283,6 +283,19 @@ export async function apply (nodes, view, host) {
                 continue
             }
             console.error('[INFO] Applying delete operation for item:', value.value)
+            // Rebuild view without the deleted item
+            const deleteLength = view.length
+            const keepItems = []
+            for (let i = 0; i < deleteLength; i++) {
+                const existing = await view.get(i)
+                if (existing && existing.text !== value.value.text) {
+                    keepItems.push(existing)
+                }
+            }
+            await view.truncate(0)
+            for (const kept of keepItems) {
+                await view.append(kept)
+            }
             // Update in-memory list
             setCurrentList(currentList.filter(i => i.text !== value.value.text))
             const deleteReq = rpc.request(RPC_DELETE_FROM_BACKEND)
@@ -296,6 +309,21 @@ export async function apply (nodes, view, host) {
                 continue
             }
             console.error('[INFO] Applying update operation for item:', value.value)
+            // Update the item in the view
+            const updateLength = view.length
+            const updatedItems = []
+            for (let i = 0; i < updateLength; i++) {
+                const existing = await view.get(i)
+                if (existing && existing.text === value.value.text) {
+                    updatedItems.push(value.value)
+                } else if (existing) {
+                    updatedItems.push(existing)
+                }
+            }
+            await view.truncate(0)
+            for (const updated of updatedItems) {
+                await view.append(updated)
+            }
             // Update in-memory list
             setCurrentList(currentList.map(i =>
                 i.text === value.value.text ? value.value : i

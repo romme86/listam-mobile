@@ -227,7 +227,7 @@ const styles = StyleSheet.create({
         width: SCREEN_WIDTH - 40,
     },
     text: {
-        fontSize: 14,
+        fontSize: 20,
         color: '#222',
         fontWeight: '600',
         transformOrigin: 'left center',
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
         textDecorationLine: 'line-through',
     },
     editInput: {
-        fontSize: 14,
+        fontSize: 20,
         color: '#222',
         fontWeight: '600',
         width: '100%',

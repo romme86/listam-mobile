@@ -9,14 +9,25 @@ import {
     Switch,
     StyleSheet,
     Dimensions,
+    ScrollView,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { AnimatedIconButton } from './AnimatedIconButton'
 import { headerStyles } from './_styles'
+import type { LoyaltyCard } from './LoyaltyCardScanner'
 
 const DRAWER_WIDTH = 280
 const { height: SCREEN_HEIGHT } = Dimensions.get('window')
+
+function cardColor(name: string): string {
+    let hash = 0
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash)
+    }
+    const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e']
+    return colors[Math.abs(hash) % colors.length]
+}
 
 type HeaderProps = {
     autobaseInviteKey: string
@@ -32,6 +43,9 @@ type HeaderProps = {
     onToggleView: () => void
     categoriesEnabled: boolean
     onToggleCategories: () => void
+    loyaltyCards: LoyaltyCard[]
+    onScanCard: () => void
+    onSelectCard: (card: LoyaltyCard) => void
 }
 
 export function Header({
@@ -48,6 +62,9 @@ export function Header({
     onToggleView,
     categoriesEnabled,
     onToggleCategories,
+    loyaltyCards,
+    onScanCard,
+    onSelectCard,
 }: HeaderProps) {
     const peerCountLabel = peerCount > 99 ? '99+' : String(peerCount)
     const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current
@@ -103,6 +120,28 @@ export function Header({
                         </Text>
                     )}
                 </View>
+
+                {loyaltyCards.length > 0 && (
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={loyaltyStyles.scrollContent}
+                        style={loyaltyStyles.scroll}
+                    >
+                        {loyaltyCards.map((card) => (
+                            <TouchableOpacity
+                                key={card.id}
+                                style={[loyaltyStyles.cardCircle, { backgroundColor: cardColor(card.name) }]}
+                                onPress={() => onSelectCard(card)}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={loyaltyStyles.cardLetter}>
+                                    {card.name.charAt(0).toUpperCase()}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                )}
 
                 <View style={headerStyles.rightSection}>
                     <View style={headerStyles.iconWithBadge}>
@@ -189,6 +228,19 @@ export function Header({
                                 />
                             </View>
 
+                            {/* Scan Loyalty Card */}
+                            <TouchableOpacity
+                                style={drawerStyles.menuRow}
+                                onPress={() => {
+                                    onScanCard()
+                                    closeMenu()
+                                }}
+                                activeOpacity={0.6}
+                            >
+                                <Ionicons name="card-outline" size={22} color="#333" />
+                                <Text style={drawerStyles.menuLabel}>Scan Loyalty Card</Text>
+                            </TouchableOpacity>
+
                             <View style={drawerStyles.separator} />
 
                             {/* Delete All */}
@@ -256,5 +308,28 @@ const drawerStyles = StyleSheet.create({
         height: 1,
         backgroundColor: '#eee',
         marginVertical: 8,
+    },
+})
+
+const loyaltyStyles = StyleSheet.create({
+    scroll: {
+        flexShrink: 1,
+        marginHorizontal: 8,
+    },
+    scrollContent: {
+        alignItems: 'center',
+        gap: 6,
+    },
+    cardCircle: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    cardLetter: {
+        color: '#fff',
+        fontSize: 13,
+        fontWeight: '700',
     },
 })

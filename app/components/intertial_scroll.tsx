@@ -3,7 +3,6 @@ import {
     Animated,
     Dimensions,
     StyleSheet,
-    TouchableOpacity,
     TextInput,
     View,
     Text,
@@ -178,11 +177,7 @@ export default function InertialElasticList({
                     />
                 </View>
             )}
-            <TouchableOpacity
-                style={styles.container}
-                activeOpacity={1}
-                onPress={handleListPress}
-            >
+            <View style={styles.container} onTouchEnd={handleListPress}>
                 <Animated.FlatList
                     data={flatData}
                     keyExtractor={keyExtractor}
@@ -201,7 +196,7 @@ export default function InertialElasticList({
                         paddingVertical: SCREEN_HEIGHT / 3,
                     }}
                 />
-            </TouchableOpacity>
+            </View>
         </View>
     )
 }

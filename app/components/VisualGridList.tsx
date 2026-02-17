@@ -4,7 +4,6 @@ import {
     Text,
     StyleSheet,
     ScrollView,
-    TouchableOpacity,
     TextInput,
     Dimensions,
 } from 'react-native'
@@ -114,7 +113,7 @@ export function VisualGridList({ data, onToggleDone, onDelete, onInsert, categor
                     />
                 </View>
             )}
-            <TouchableOpacity activeOpacity={1} onPress={handlePress} style={styles.scrollContainer}>
+            <View style={styles.scrollContainer} onTouchEnd={handlePress}>
                 <ScrollView
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
@@ -142,7 +141,7 @@ export function VisualGridList({ data, onToggleDone, onDelete, onInsert, categor
                         </View>
                     )}
                 </ScrollView>
-            </TouchableOpacity>
+            </View>
         </View>
     )
 }
