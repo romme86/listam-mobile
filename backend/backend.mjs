@@ -12,13 +12,14 @@ import {
     RPC_DELETE_FROM_BACKEND,
     SYNC_LIST,
     RPC_REQUEST_SYNC,
-    RPC_CREATE_INVITE
+    RPC_CREATE_INVITE,
+    RPC_NUKE
 } from '../rpc-commands.mjs'
 import b4a from 'b4a'
 import {syncListToFrontend, validateItem, addItem, updateItem, deleteItem} from './lib/item.mjs'
 const { IPC } = BareKit
 import {loadAutobaseKey, saveAutobaseKey, loadEncryptionKey} from "./lib/key.mjs"
-import {initAutobase, joinViaInvite, createInvite} from "./lib/network.mjs"
+import {initAutobase, joinViaInvite, createInvite, nukeData} from "./lib/network.mjs"
 import {
     autobase,
     store,
@@ -160,6 +161,11 @@ let rpcGenerated = new RPC(IPC, async (req, error) => {
                 syncListToFrontend()
                 break
             }
+            case RPC_NUKE: {
+                console.error('[INFO] Command RPC_NUKE - wiping all data and reinitializing')
+                await nukeData()
+                break
+            }
         }
     } catch (err) {
         console.error('[ERROR] Error handling RPC request:', err)
@@ -237,6 +243,10 @@ export function open (store) {
 }
 
 export async function apply (nodes, view, host) {
+    if (autobase?.closing) {
+        console.error('[WARNING] Apply called while Autobase is closing; skipping.')
+        return
+    }
     console.error('[INFO] Apply started')
     for (const { value } of nodes) {
         if (!value) continue
@@ -268,9 +278,7 @@ export async function apply (nodes, view, host) {
                 continue
             }
             console.error('[INFO] Applying add operation for item:', value.value)
-            // Persist item to view
-            await view.append(value.value)
-            // Update in-memory list
+            await view.append({ op: 'add', ...value.value })
             setCurrentList([value.value, ...currentList.filter(i => i.text !== value.value.text)])
             const addReq = rpc.request(RPC_ADD_FROM_BACKEND)
             addReq.send(JSON.stringify(value.value))
@@ -283,20 +291,7 @@ export async function apply (nodes, view, host) {
                 continue
             }
             console.error('[INFO] Applying delete operation for item:', value.value)
-            // Rebuild view without the deleted item
-            const deleteLength = view.length
-            const keepItems = []
-            for (let i = 0; i < deleteLength; i++) {
-                const existing = await view.get(i)
-                if (existing && existing.text !== value.value.text) {
-                    keepItems.push(existing)
-                }
-            }
-            await view.truncate(0)
-            for (const kept of keepItems) {
-                await view.append(kept)
-            }
-            // Update in-memory list
+            await view.append({ op: 'delete', text: value.value.text })
             setCurrentList(currentList.filter(i => i.text !== value.value.text))
             const deleteReq = rpc.request(RPC_DELETE_FROM_BACKEND)
             deleteReq.send(JSON.stringify(value.value))
@@ -309,22 +304,7 @@ export async function apply (nodes, view, host) {
                 continue
             }
             console.error('[INFO] Applying update operation for item:', value.value)
-            // Update the item in the view
-            const updateLength = view.length
-            const updatedItems = []
-            for (let i = 0; i < updateLength; i++) {
-                const existing = await view.get(i)
-                if (existing && existing.text === value.value.text) {
-                    updatedItems.push(value.value)
-                } else if (existing) {
-                    updatedItems.push(existing)
-                }
-            }
-            await view.truncate(0)
-            for (const updated of updatedItems) {
-                await view.append(updated)
-            }
-            // Update in-memory list
+            await view.append({ op: 'update', ...value.value })
             setCurrentList(currentList.map(i =>
                 i.text === value.value.text ? value.value : i
             ))

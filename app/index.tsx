@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { View, Share, Alert, Animated } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useWorklet, RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_JOIN_KEY } from './hooks/_useWorklet'
+import { useWorklet, RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_JOIN_KEY, RPC_NUKE } from './hooks/_useWorklet'
 import { useSubscription } from './hooks/useSubscription'
 import { Header } from './components/Header'
 import { JoinDialog } from './components/JoinDialog'
@@ -243,6 +243,24 @@ export default function App() {
         )
     }, [dataList, sendRPC, setDataList])
 
+    const handleNukeData = useCallback(() => {
+        Alert.alert(
+            'Nuke Data',
+            'This will permanently delete all data and generate a new identity. Any connected peers will be disconnected. This cannot be undone.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Nuke',
+                    style: 'destructive',
+                    onPress: () => {
+                        setDataList([])
+                        sendRPC(RPC_NUKE)
+                    },
+                },
+            ]
+        )
+    }, [sendRPC, setDataList])
+
     // Show paywall if trial expired and not subscribed
     if (subscription.shouldShowPaywall) {
         return (
@@ -269,6 +287,7 @@ export default function App() {
                     menuVisible={menuVisible}
                     onMenuToggle={() => setMenuVisible(v => !v)}
                     onDeleteAll={handleDeleteAll}
+                    onNukeData={handleNukeData}
                     isGridView={isGridView}
                     onToggleView={handleToggleView}
                     categoriesEnabled={categoriesEnabled}

@@ -1,18 +1,37 @@
 import type { ListEntry } from './_types'
 import { CATEGORY_ORDER } from './categoryConstants'
-import { getCategoryForItem } from './categoryLookup'
+import { getCategoryForItem, detectDominantLanguage } from './categoryLookup'
+import { CATEGORY_TRANSLATIONS, type SupportedLang } from './categoryTranslations'
 
 export type IndexedEntry = { entry: ListEntry; originalIndex: number }
-export type CategorySection = { category: string; items: IndexedEntry[] }
+export type CategorySection = {
+    /** Canonical English key — use for icon lookups */
+    canonicalKey: string
+    /** Translated display name in the dominant language */
+    category: string
+    items: IndexedEntry[]
+}
+
+/**
+ * Returns the display name for a canonical category key in the given language.
+ * Falls back to English, then the key itself.
+ */
+export function getDisplayCategoryName(canonicalKey: string, lang: SupportedLang): string {
+    return CATEGORY_TRANSLATIONS[canonicalKey]?.[lang]
+        ?? CATEGORY_TRANSLATIONS[canonicalKey]?.en
+        ?? canonicalKey
+}
 
 export function groupByCategory(data: ListEntry[]): CategorySection[] {
     if (!data || data.length === 0) return []
+
+    const lang = detectDominantLanguage(data.map(e => e?.text ?? ''))
 
     const categoryMap = new Map<string, IndexedEntry[]>()
 
     for (let i = 0; i < data.length; i++) {
         const entry = data[i]
-        const category = getCategoryForItem(entry?.text)
+        const category = getCategoryForItem(entry?.text, lang)
 
         if (!categoryMap.has(category)) {
             categoryMap.set(category, [])
@@ -28,20 +47,28 @@ export function groupByCategory(data: ListEntry[]): CategorySection[] {
         })
     }
 
-    // Sort sections by CATEGORY_ORDER
+    // Sort sections by CATEGORY_ORDER, translating keys to display names
     const sections: CategorySection[] = []
-    for (const category of CATEGORY_ORDER) {
-        const items = categoryMap.get(category)
+    for (const canonicalCategory of CATEGORY_ORDER) {
+        const items = categoryMap.get(canonicalCategory)
         if (items && items.length > 0) {
-            sections.push({ category, items })
-            categoryMap.delete(category)
+            sections.push({
+                canonicalKey: canonicalCategory,
+                category: getDisplayCategoryName(canonicalCategory, lang),
+                items,
+            })
+            categoryMap.delete(canonicalCategory)
         }
     }
 
-    // Add any remaining categories not in CATEGORY_ORDER (shouldn't happen, but defensive)
-    for (const [category, items] of categoryMap) {
+    // Add remaining categories not in CATEGORY_ORDER
+    for (const [canonicalCategory, items] of categoryMap) {
         if (items.length > 0) {
-            sections.push({ category, items })
+            sections.push({
+                canonicalKey: canonicalCategory,
+                category: getDisplayCategoryName(canonicalCategory, lang),
+                items,
+            })
         }
     }
 

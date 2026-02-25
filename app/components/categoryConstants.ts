@@ -13,6 +13,9 @@ export const CATEGORY_ORDER: string[] = [
     'Snacks',
     'Beverages',
     'Frozen Foods',
+    'Ready Meals',
+    'International Foods',
+    'Health & Organic',
     'Personal Care',
     'Household & Cleaning',
     'Baby Items',
@@ -23,7 +26,7 @@ export const CATEGORY_ORDER: string[] = [
 export const CATEGORY_ICONS: Record<string, string> = {
     'Fruits': 'nutrition-outline',
     'Vegetables': 'leaf-outline',
-    'Bread & Bakery': 'bread-outline', // Ionicons doesn't have bread, using custom fallback below
+    'Bread & Bakery': 'bread-outline',
     'Deli': 'restaurant-outline',
     'Meat': 'flame-outline',
     'Fish & Seafood': 'fish-outline',
@@ -35,6 +38,9 @@ export const CATEGORY_ICONS: Record<string, string> = {
     'Snacks': 'fast-food-outline',
     'Beverages': 'beer-outline',
     'Frozen Foods': 'snow-outline',
+    'Ready Meals': 'time-outline',
+    'International Foods': 'globe-outline',
+    'Health & Organic': 'heart-outline',
     'Personal Care': 'body-outline',
     'Household & Cleaning': 'home-outline',
     'Baby Items': 'happy-outline',

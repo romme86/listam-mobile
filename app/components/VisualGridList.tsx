@@ -49,7 +49,6 @@ export function VisualGridList({ data, onToggleDone, onDelete, onInsert, categor
     const handleSubmit = useCallback(() => {
         if (editText.trim() && onInsert) {
             onInsert(0, editText)
-            setIsAddingItem(false)
             setEditText('')
         }
     }, [editText, onInsert])
@@ -62,6 +61,7 @@ export function VisualGridList({ data, onToggleDone, onDelete, onInsert, categor
     const sections = useMemo(() => {
         if (categoriesEnabled) return groupByCategory(data)
         return [{
+            canonicalKey: '',
             category: '',
             items: data.map((entry, i) => ({ entry, originalIndex: i })),
         }]
@@ -107,6 +107,7 @@ export function VisualGridList({ data, onToggleDone, onDelete, onInsert, categor
                         onChangeText={setEditText}
                         onSubmitEditing={handleSubmit}
                         onBlur={handleCancel}
+                        blurOnSubmit={false}
                         placeholder="Enter new item..."
                         placeholderTextColor="#888"
                         autoFocus
@@ -123,7 +124,7 @@ export function VisualGridList({ data, onToggleDone, onDelete, onInsert, categor
                             {section.category !== '' && (
                                 <View style={styles.categoryHeader}>
                                     <Ionicons
-                                        name={(CATEGORY_ICONS[section.category] || 'basket-outline') as any}
+                                        name={(CATEGORY_ICONS[section.canonicalKey] || 'basket-outline') as any}
                                         size={18}
                                         color="#555"
                                     />

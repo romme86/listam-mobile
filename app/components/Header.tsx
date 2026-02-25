@@ -39,6 +39,7 @@ type HeaderProps = {
     menuVisible: boolean
     onMenuToggle: () => void
     onDeleteAll: () => void
+    onNukeData: () => void
     isGridView: boolean
     onToggleView: () => void
     categoriesEnabled: boolean
@@ -58,6 +59,7 @@ export function Header({
     menuVisible,
     onMenuToggle,
     onDeleteAll,
+    onNukeData,
     isGridView,
     onToggleView,
     categoriesEnabled,
@@ -255,6 +257,21 @@ export function Header({
                                 <Ionicons name="trash-outline" size={22} color="#d00" />
                                 <Text style={[drawerStyles.menuLabel, { color: '#d00' }]}>
                                     Delete All
+                                </Text>
+                            </TouchableOpacity>
+
+                            {/* Nuke Data */}
+                            <TouchableOpacity
+                                style={drawerStyles.menuRow}
+                                onPress={() => {
+                                    onNukeData()
+                                    closeMenu()
+                                }}
+                                activeOpacity={0.6}
+                            >
+                                <Ionicons name="nuclear-outline" size={22} color="#d00" />
+                                <Text style={[drawerStyles.menuLabel, { color: '#d00' }]}>
+                                    Nuke Data
                                 </Text>
                             </TouchableOpacity>
                         </View>

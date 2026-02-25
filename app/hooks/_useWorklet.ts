@@ -20,6 +20,7 @@ import {
     RPC_JOIN_KEY,
     SYNC_LIST,
     RPC_CREATE_INVITE,
+    RPC_NUKE,
 } from '../../rpc-commands.mjs'
 import type { ListEntry } from '@/app/components/_types'
 
@@ -121,6 +122,7 @@ export function useWorklet(): UseWorkletResult {
             if (reqFromBackend.command === RPC_RESET) {
                 console.log('RPC RESET')
                 setDataList(() => [])
+                setAutobaseInviteKey('')
             }
             if (reqFromBackend.command === SYNC_LIST) {
                 console.log('SYNC_LIST')
@@ -210,4 +212,4 @@ export function useWorklet(): UseWorkletResult {
     }
 }
 
-export { RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_JOIN_KEY, RPC_CREATE_INVITE }
+export { RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_JOIN_KEY, RPC_CREATE_INVITE, RPC_NUKE }

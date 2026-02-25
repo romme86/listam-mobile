@@ -33,7 +33,9 @@ import {
     setPairing,
     setPairingMember,
     setCurrentInvite,
-    setEncryptionKey
+    setEncryptionKey,
+    setCurrentList,
+    clearKnownWriters
 } from "./state.mjs"
 import { rebuildListFromPersistedOps, syncListToFrontend } from "./item.mjs"
 
@@ -435,6 +437,38 @@ export async function joinViaInvite(z32InviteStr) {
 
     try { return await _joinPromise }
     finally { _joinPromise = null }
+}
+
+export async function nukeData() {
+    console.error('[INFO] NUKE: starting full wipe and reinit')
+
+    // 1. Tear down autobase, swarm, store, pairing
+    await tearDownAutobaseSwarmStore()
+
+    // 2. Delete all persisted files
+    const baseStoragePath = `${storagePath}-local`
+    rmrfSafe(baseStoragePath)
+    rmrfSafe(keyFilePath)
+    rmrfSafe(encKeyFilePath)
+    rmrfSafe(inviteFilePath)
+
+    // 3. Reset in-memory state
+    setBaseKey(null)
+    setEncryptionKey(null)
+    setCurrentInvite(null)
+    setCurrentList([])
+    clearKnownWriters()
+    setAddedStaticPeers(false)
+
+    // 4. Tell frontend to clear its list
+    if (rpc) {
+        const resetReq = rpc.request(RPC_RESET)
+        resetReq.send('')
+    }
+
+    // 5. Fresh autobase — new keys, new invite
+    console.error('[INFO] NUKE: reinitializing fresh autobase')
+    return initAutobase(null)
 }
 
 function broadcastPeerCount() {

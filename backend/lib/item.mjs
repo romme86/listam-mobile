@@ -220,23 +220,28 @@ export async function rebuildListFromPersistedOps() {
         return []
     }
 
-    const rebuiltList = []
     const view = autobase.view
     const length = view.length
+    const itemMap = new Map()
 
-    console.error(`[INFO] rebuildListFromPersistedOps: reading ${length} entries from merged view...`)
+    console.error(`[INFO] rebuildListFromPersistedOps: replaying ${length} entries from view...`)
 
     for (let i = 0; i < length; i++) {
         try {
-            const item = await view.get(i)
-            if (!item) {
-                console.error(`[WARNING] entry ${i}: null/undefined`)
-                continue
-            }
+            const entry = await view.get(i)
+            if (!entry) continue
 
-            if (item.text !== undefined && validateItem(item)) {
-                rebuiltList.push(item)
-                console.error(`[INFO] entry ${i}: "${item.text}"`)
+            if (entry.op === 'delete') {
+                itemMap.delete(entry.text)
+                console.error(`[INFO] entry ${i}: replay delete "${entry.text}"`)
+            } else if (entry.op === 'add' || entry.op === 'update') {
+                const { op, ...item } = entry
+                itemMap.set(item.text, item)
+                console.error(`[INFO] entry ${i}: replay ${entry.op} "${item.text}"`)
+            } else if (entry.text !== undefined && validateItem(entry)) {
+                // Backward compat: old view entries without op field
+                itemMap.set(entry.text, entry)
+                console.error(`[INFO] entry ${i}: legacy item "${entry.text}"`)
             } else {
                 console.error(`[WARNING] entry ${i}: unknown format`)
             }
@@ -245,6 +250,7 @@ export async function rebuildListFromPersistedOps() {
         }
     }
 
+    const rebuiltList = Array.from(itemMap.values())
     console.error(`[INFO] rebuildListFromPersistedOps: rebuilt list with ${rebuiltList.length} items`)
     return rebuiltList
 }

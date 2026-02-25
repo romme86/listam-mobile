@@ -17,7 +17,7 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window')
 const TOTAL_ITEM_HEIGHT = ITEM_HEIGHT + SPACING
 
 type FlatListItem =
-    | { type: 'header'; category: string; key: string }
+    | { type: 'header'; category: string; canonicalKey: string; key: string }
     | { type: 'item'; entry: ListEntry; originalIndex: number; visualIndex: number; key: string }
 
 type Props = {
@@ -40,7 +40,6 @@ export default function InertialElasticList({
     const [isAddingItem, setIsAddingItem] = useState(false)
     const [editText, setEditText] = useState('')
     const listLastTap = useRef<number>(0)
-    const isSubmittingRef = useRef(false)
 
     const handleListDoubleTap = useCallback(() => {
         setIsAddingItem(true)
@@ -66,20 +65,12 @@ export default function InertialElasticList({
 
     const handleSubmitEdit = useCallback(() => {
         if (editText.trim()) {
-            isSubmittingRef.current = true
-            if (onInsert) {
-                onInsert(0, editText)
-            }
-            setIsAddingItem(false)
+            if (onInsert) onInsert(0, editText)
             setEditText('')
-            setTimeout(() => {
-                isSubmittingRef.current = false
-            }, 100)
         }
     }, [editText, onInsert])
 
     const handleCancelEdit = useCallback(() => {
-        if (isSubmittingRef.current) return
         setIsAddingItem(false)
         setEditText('')
     }, [])
@@ -103,7 +94,8 @@ export default function InertialElasticList({
             items.push({
                 type: 'header',
                 category: section.category,
-                key: `header-${section.category}`,
+                canonicalKey: section.canonicalKey,
+                key: `header-${section.canonicalKey}`,
             })
             visualIndex++
 
@@ -124,7 +116,7 @@ export default function InertialElasticList({
 
     const renderItem = useCallback(({ item }: { item: FlatListItem }) => {
         if (item.type === 'header') {
-            const iconName = CATEGORY_ICONS[item.category] || 'basket-outline'
+            const iconName = CATEGORY_ICONS[item.canonicalKey] || 'basket-outline'
             return (
                 <View style={headerStyles.container}>
                     <Ionicons name={iconName as any} size={16} color="#555" />
@@ -171,6 +163,7 @@ export default function InertialElasticList({
                         onChangeText={setEditText}
                         onSubmitEditing={handleSubmitEdit}
                         onBlur={handleCancelEdit}
+                        blurOnSubmit={false}
                         placeholder="Enter new item..."
                         placeholderTextColor="#888"
                         autoFocus
