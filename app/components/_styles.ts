@@ -40,14 +40,13 @@ export const headerStyles = StyleSheet.create({
         minHeight: 56,
     },
     leftSection: {
-        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
     },
     rightSection: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 16,
+        gap: 8,
     },
     iconButton: {
         padding: 4,

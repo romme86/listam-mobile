@@ -7,9 +7,9 @@ import {
     TouchableOpacity,
     TouchableWithoutFeedback,
     Switch,
+    ScrollView,
     StyleSheet,
     Dimensions,
-    ScrollView,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -19,6 +19,10 @@ import type { LoyaltyCard } from './LoyaltyCardScanner'
 
 const DRAWER_WIDTH = 280
 const { height: SCREEN_HEIGHT } = Dimensions.get('window')
+const HEADER_ICON_SIZE = 22
+const HEADER_TEXT_SIZE = 12
+const GRID_SIZE_OPTIONS = ['small', 'medium', 'normal'] as const
+const LIST_TEXT_SIZE_OPTIONS = ['small', 'medium', 'normal'] as const
 
 function cardColor(name: string): string {
     let hash = 0
@@ -44,9 +48,55 @@ type HeaderProps = {
     onToggleView: () => void
     categoriesEnabled: boolean
     onToggleCategories: () => void
+    gridIconSize: 'small' | 'medium' | 'normal'
+    onGridIconSizeChange: (size: 'small' | 'medium' | 'normal') => void
+    listTextSize: 'small' | 'medium' | 'normal'
+    onListTextSizeChange: (size: 'small' | 'medium' | 'normal') => void
     loyaltyCards: LoyaltyCard[]
     onScanCard: () => void
     onSelectCard: (card: LoyaltyCard) => void
+}
+
+function LoyaltyCardChip({
+    card,
+    onPress,
+    compact = false,
+}: {
+    card: LoyaltyCard
+    onPress?: () => void
+    compact?: boolean
+}) {
+    const content = (
+        <View
+            style={[
+                loyaltyStyles.cardChip,
+                compact && loyaltyStyles.cardChipCompact,
+                { backgroundColor: cardColor(card.name) },
+            ]}
+        >
+            <Ionicons
+                name="card-outline"
+                size={compact ? 16 : HEADER_ICON_SIZE}
+                color="#fff"
+            />
+            <Text
+                style={[
+                    loyaltyStyles.cardLetter,
+                    compact && loyaltyStyles.cardLetterCompact,
+                ]}
+            >
+                {card.name.charAt(0).toUpperCase()}
+            </Text>
+        </View>
+    )
+
+    if (!onPress) return content
+
+    return (
+        <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+            {content}
+        </TouchableOpacity>
+    )
 }
 
 export function Header({
@@ -64,11 +114,16 @@ export function Header({
     onToggleView,
     categoriesEnabled,
     onToggleCategories,
+    gridIconSize,
+    onGridIconSizeChange,
+    listTextSize,
+    onListTextSizeChange,
     loyaltyCards,
     onScanCard,
     onSelectCard,
 }: HeaderProps) {
     const peerCountLabel = peerCount > 99 ? '99+' : String(peerCount)
+    const primaryLoyaltyCard = loyaltyCards[0] ?? null
     const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current
     const overlayOpacity = useRef(new Animated.Value(0)).current
 
@@ -114,44 +169,35 @@ export function Header({
                         style={headerStyles.iconButton}
                         onPress={onMenuToggle}
                     >
-                        <Ionicons name="menu-outline" size={24} color="#333" />
+                        <Ionicons name="menu-outline" size={HEADER_ICON_SIZE} color="#333" />
                     </AnimatedIconButton>
                     {trialDaysRemaining !== undefined && trialDaysRemaining <= 7 && (
-                        <Text style={{ fontSize: 11, color: '#999', marginLeft: 8 }}>
+                        <Text style={{ fontSize: HEADER_TEXT_SIZE, color: '#999', marginLeft: 8 }}>
                             {trialDaysRemaining} days left
                         </Text>
                     )}
                 </View>
 
-                {loyaltyCards.length > 0 && (
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={loyaltyStyles.scrollContent}
-                        style={loyaltyStyles.scroll}
-                    >
-                        {loyaltyCards.map((card) => (
-                            <TouchableOpacity
-                                key={card.id}
-                                style={[loyaltyStyles.cardCircle, { backgroundColor: cardColor(card.name) }]}
-                                onPress={() => onSelectCard(card)}
-                                activeOpacity={0.7}
-                            >
-                                <Text style={loyaltyStyles.cardLetter}>
-                                    {card.name.charAt(0).toUpperCase()}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-                )}
-
                 <View style={headerStyles.rightSection}>
+                    <AnimatedIconButton
+                        style={headerStyles.iconButton}
+                        onPress={() => {
+                            if (primaryLoyaltyCard) {
+                                onSelectCard(primaryLoyaltyCard)
+                            } else {
+                                onScanCard()
+                            }
+                        }}
+                    >
+                        <Ionicons name="card-outline" size={HEADER_ICON_SIZE} color="#333" />
+                    </AnimatedIconButton>
+
                     <View style={headerStyles.iconWithBadge}>
                         <AnimatedIconButton
                             style={headerStyles.iconButton}
                             onPress={onShare}
                         >
-                            <Ionicons name="share-outline" size={24} color="#333" />
+                            <Ionicons name="share-outline" size={HEADER_ICON_SIZE} color="#333" />
                         </AnimatedIconButton>
                         {!autobaseInviteKey ? (
                             <Animated.View style={[headerStyles.badge, headerStyles.orangeBadge, { opacity: blinkAnim }]} />
@@ -170,7 +216,7 @@ export function Header({
                         style={headerStyles.iconButton}
                         onPress={onJoin}
                     >
-                        <Ionicons name="person-add-outline" size={24} color="#333" />
+                        <Ionicons name="person-add-outline" size={HEADER_ICON_SIZE} color="#333" />
                     </AnimatedIconButton>
                 </View>
             </View>
@@ -197,7 +243,11 @@ export function Header({
                             { transform: [{ translateX: slideAnim }] },
                         ]}
                     >
-                        <View style={drawerStyles.drawerContent}>
+                        <ScrollView
+                            style={drawerStyles.drawerScroll}
+                            contentContainerStyle={drawerStyles.drawerContent}
+                            showsVerticalScrollIndicator={false}
+                        >
                             {/* View Mode */}
                             <TouchableOpacity
                                 style={drawerStyles.menuRow}
@@ -230,6 +280,58 @@ export function Header({
                                 />
                             </View>
 
+                            <View style={drawerStyles.settingGroup}>
+                                <Text style={drawerStyles.settingTitle}>Grid Icon Size</Text>
+                                <View style={drawerStyles.optionRow}>
+                                    {GRID_SIZE_OPTIONS.map((option) => (
+                                        <TouchableOpacity
+                                            key={option}
+                                            style={[
+                                                drawerStyles.optionButton,
+                                                gridIconSize === option && drawerStyles.optionButtonActive,
+                                            ]}
+                                            onPress={() => onGridIconSizeChange(option)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text
+                                                style={[
+                                                    drawerStyles.optionLabel,
+                                                    gridIconSize === option && drawerStyles.optionLabelActive,
+                                                ]}
+                                            >
+                                                {option[0].toUpperCase() + option.slice(1)}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+
+                            <View style={drawerStyles.settingGroup}>
+                                <Text style={drawerStyles.settingTitle}>List Text Size</Text>
+                                <View style={drawerStyles.optionRow}>
+                                    {LIST_TEXT_SIZE_OPTIONS.map((option) => (
+                                        <TouchableOpacity
+                                            key={option}
+                                            style={[
+                                                drawerStyles.optionButton,
+                                                listTextSize === option && drawerStyles.optionButtonActive,
+                                            ]}
+                                            onPress={() => onListTextSizeChange(option)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text
+                                                style={[
+                                                    drawerStyles.optionLabel,
+                                                    listTextSize === option && drawerStyles.optionLabelActive,
+                                                ]}
+                                            >
+                                                {option[0].toUpperCase() + option.slice(1)}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+
                             {/* Scan Loyalty Card */}
                             <TouchableOpacity
                                 style={drawerStyles.menuRow}
@@ -242,6 +344,21 @@ export function Header({
                                 <Ionicons name="card-outline" size={22} color="#333" />
                                 <Text style={drawerStyles.menuLabel}>Scan Loyalty Card</Text>
                             </TouchableOpacity>
+
+                            {loyaltyCards.map((card) => (
+                                <TouchableOpacity
+                                    key={card.id}
+                                    style={drawerStyles.menuRow}
+                                    onPress={() => {
+                                        onSelectCard(card)
+                                        closeMenu()
+                                    }}
+                                    activeOpacity={0.6}
+                                >
+                                    <Ionicons name="card-outline" size={22} color="#333" />
+                                    <Text style={drawerStyles.menuLabel}>{card.name}</Text>
+                                </TouchableOpacity>
+                            ))}
 
                             <View style={drawerStyles.separator} />
 
@@ -274,7 +391,7 @@ export function Header({
                                     Nuke Data
                                 </Text>
                             </TouchableOpacity>
-                        </View>
+                        </ScrollView>
                     </Animated.View>
                 </View>
             </Modal>
@@ -306,6 +423,10 @@ const drawerStyles = StyleSheet.create({
     drawerContent: {
         paddingTop: 80,
         paddingHorizontal: 20,
+        paddingBottom: 32,
+    },
+    drawerScroll: {
+        flex: 1,
     },
     menuRow: {
         flexDirection: 'row',
@@ -326,27 +447,66 @@ const drawerStyles = StyleSheet.create({
         backgroundColor: '#eee',
         marginVertical: 8,
     },
+    settingGroup: {
+        paddingVertical: 10,
+    },
+    settingTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#333',
+        marginBottom: 10,
+    },
+    optionRow: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    optionButton: {
+        flex: 1,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#ddd',
+        paddingVertical: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#fff',
+    },
+    optionButtonActive: {
+        backgroundColor: '#333',
+        borderColor: '#333',
+    },
+    optionLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#333',
+    },
+    optionLabelActive: {
+        color: '#fff',
+    },
 })
 
 const loyaltyStyles = StyleSheet.create({
-    scroll: {
-        flexShrink: 1,
-        marginHorizontal: 8,
-    },
-    scrollContent: {
-        alignItems: 'center',
-        gap: 6,
-    },
-    cardCircle: {
-        width: 28,
-        height: 28,
-        borderRadius: 14,
+    cardChip: {
+        minWidth: 52,
+        height: 30,
+        borderRadius: 15,
+        paddingHorizontal: 10,
+        flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',
+        gap: 4,
+    },
+    cardChipCompact: {
+        minWidth: 40,
+        height: 24,
+        borderRadius: 12,
+        paddingHorizontal: 8,
     },
     cardLetter: {
         color: '#fff',
         fontSize: 13,
         fontWeight: '700',
+    },
+    cardLetterCompact: {
+        fontSize: 11,
     },
 })

@@ -27,6 +27,13 @@ type Props = {
     onUpdate?: (index: number, text: string) => void
     onInsert?: (index: number, text: string) => void
     categoriesEnabled?: boolean
+    listTextSize?: 'small' | 'medium' | 'normal'
+}
+
+function getListTextScale(size: 'small' | 'medium' | 'normal') {
+    if (size === 'small') return 0.6
+    if (size === 'medium') return 0.8
+    return 1
 }
 
 export default function InertialElasticList({
@@ -35,11 +42,13 @@ export default function InertialElasticList({
     onDelete,
     onInsert,
     categoriesEnabled = true,
+    listTextSize = 'normal',
 }: Props) {
     const scrollY = useRef(new Animated.Value(0)).current
     const [isAddingItem, setIsAddingItem] = useState(false)
     const [editText, setEditText] = useState('')
     const listLastTap = useRef<number>(0)
+    const textScaleFactor = getListTextScale(listTextSize)
 
     const handleListDoubleTap = useCallback(() => {
         setIsAddingItem(true)
@@ -120,7 +129,9 @@ export default function InertialElasticList({
             return (
                 <View style={headerStyles.container}>
                     <Ionicons name={iconName as any} size={16} color="#555" />
-                    <Text style={headerStyles.title}>{item.category.toUpperCase()}</Text>
+                    <Text style={[headerStyles.title, { fontSize: 13 * textScaleFactor }]}>
+                        {item.category.toUpperCase()}
+                    </Text>
                 </View>
             )
         }
@@ -141,9 +152,10 @@ export default function InertialElasticList({
                 onStartEdit={handleStartEdit}
                 onSubmitEdit={handleSubmitEdit}
                 onCancelEdit={handleCancelEdit}
+                textScaleFactor={textScaleFactor}
             />
         )
-    }, [scrollY, onToggleDone, onDelete, onInsert, handleStartEdit, handleSubmitEdit, handleCancelEdit])
+    }, [scrollY, onToggleDone, onDelete, onInsert, handleStartEdit, handleSubmitEdit, handleCancelEdit, textScaleFactor])
 
     const keyExtractor = useCallback((item: FlatListItem) => item.key, [])
 
@@ -158,7 +170,7 @@ export default function InertialElasticList({
             {isAddingItem && (
                 <View style={styles.topInputContainer}>
                     <TextInput
-                        style={styles.topInput}
+                        style={[styles.topInput, { fontSize: 16 * textScaleFactor }]}
                         value={editText}
                         onChangeText={setEditText}
                         onSubmitEditing={handleSubmitEdit}

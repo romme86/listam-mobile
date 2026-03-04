@@ -6,29 +6,27 @@ import {
     Image,
     StyleSheet,
     TouchableOpacity,
-    Dimensions,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import type { ListEntry } from './_types'
 import { getIconForItem } from './itemIconMap'
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const CARD_MARGIN = 6
-const NUM_COLUMNS = 3
-const CARD_WIDTH = (SCREEN_WIDTH - 20 - CARD_MARGIN * (NUM_COLUMNS + 1)) / NUM_COLUMNS
 
 type GridCardProps = {
     item: ListEntry
     originalIndex: number
     cardKey: number
+    cardWidth: number
     onToggleDone?: (index: number) => void
     onDelete?: (index: number) => void
 }
 
-export function GridCard({ item, originalIndex, cardKey, onToggleDone, onDelete }: GridCardProps) {
+export function GridCard({ item, originalIndex, cardKey, cardWidth, onToggleDone, onDelete }: GridCardProps) {
     const bubbleScale = useRef(new Animated.Value(1)).current
     const bubbleOpacity = useRef(new Animated.Value(0)).current
+    const iconSize = Math.max(28, Math.min(cardWidth * 0.68, 76))
 
     const handlePress = useCallback(() => {
         if (!item.isDone) {
@@ -63,7 +61,7 @@ export function GridCard({ item, originalIndex, cardKey, onToggleDone, onDelete 
 
     return (
         <TouchableOpacity
-            style={[styles.card, item.isDone && styles.cardDone]}
+            style={[styles.card, { width: cardWidth }, item.isDone && styles.cardDone]}
             onPress={handlePress}
             onLongPress={() => onDelete?.(originalIndex)}
             delayLongPress={500}
@@ -71,12 +69,16 @@ export function GridCard({ item, originalIndex, cardKey, onToggleDone, onDelete 
             <View style={styles.iconContainer}>
                 <Image
                     source={getIconForItem(item.text).source}
-                    style={[styles.cardIcon, item.isDone && styles.cardIconDone]}
+                    style={[styles.cardIcon, { width: iconSize, height: iconSize }, item.isDone && styles.cardIconDone]}
                     resizeMode="contain"
                 />
             </View>
             <Text
-                style={[styles.cardText, item.isDone && styles.cardTextDone]}
+                style={[
+                    styles.cardText,
+                    { fontSize: Math.max(8, Math.min(cardWidth * 0.12, 11)) },
+                    item.isDone && styles.cardTextDone,
+                ]}
                 numberOfLines={2}
             >
                 {item.text}
@@ -102,7 +104,6 @@ export function GridCard({ item, originalIndex, cardKey, onToggleDone, onDelete 
 
 const styles = StyleSheet.create({
     card: {
-        width: CARD_WIDTH,
         aspectRatio: 1,
         backgroundColor: '#fff',
         borderRadius: 12,
@@ -123,8 +124,6 @@ const styles = StyleSheet.create({
         marginBottom: 2,
     },
     cardIcon: {
-        width: 76,
-        height: 76,
     },
     cardIconDone: {
         opacity: 0.4,

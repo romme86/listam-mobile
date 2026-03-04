@@ -102,13 +102,20 @@ export function useWorklet(): UseWorkletResult {
                         if (payload.type === 'peer-count') {
                             const count = typeof payload.count === 'number' ? payload.count : 0
                             setPeerCount(count)
-                            if (isJoiningRef.current && count > 0) {
-                                isJoiningRef.current = false
-                                setIsJoining(false)
-                                Alert.alert('Success!', 'Connected to peer successfully. Your lists are now synced.')
-                            }
                         } else if (payload.type === 'not-writable') {
                             Alert.alert('Please wait', payload.message || 'You are not yet authorized to modify the list. Please wait a moment.')
+                        } else if (payload.type === 'join-success') {
+                            if (isJoiningRef.current) {
+                                isJoiningRef.current = false
+                                setIsJoining(false)
+                            }
+                            Alert.alert('Success!', 'Connected to peer successfully. Your lists are now synced.')
+                        } else if (payload.type === 'join-error') {
+                            if (isJoiningRef.current) {
+                                isJoiningRef.current = false
+                                setIsJoining(false)
+                            }
+                            Alert.alert('Connection failed', payload.message || 'Could not connect to this invite. Please try again.')
                         } else {
                             console.log('RPC_MESSAGE payload (unhandled type):', payload)
                         }

@@ -15,8 +15,12 @@ import { GridCard } from './GridCard'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const CARD_MARGIN = 6
-const NUM_COLUMNS = 3
-const CARD_WIDTH = (SCREEN_WIDTH - 20 - CARD_MARGIN * (NUM_COLUMNS + 1)) / NUM_COLUMNS
+
+function getNumColumns(size: 'small' | 'medium' | 'normal') {
+    if (size === 'small') return 5
+    if (size === 'medium') return 4
+    return 3
+}
 
 type Props = {
     data: ListEntry[]
@@ -24,11 +28,24 @@ type Props = {
     onDelete?: (index: number) => void
     onInsert?: (index: number, text: string) => void
     categoriesEnabled?: boolean
+    gridIconSize?: 'small' | 'medium' | 'normal'
 }
 
-export function VisualGridList({ data, onToggleDone, onDelete, onInsert, categoriesEnabled = true }: Props) {
+export function VisualGridList({
+    data,
+    onToggleDone,
+    onDelete,
+    onInsert,
+    categoriesEnabled = true,
+    gridIconSize = 'normal',
+}: Props) {
     const [isAddingItem, setIsAddingItem] = useState(false)
     const [editText, setEditText] = useState('')
+    const numColumns = getNumColumns(gridIconSize)
+    const cardWidth = useMemo(
+        () => (SCREEN_WIDTH - 20 - CARD_MARGIN * (numColumns + 1)) / numColumns,
+        [numColumns]
+    )
 
     const handleDoubleTap = useCallback(() => {
         setIsAddingItem(true)
@@ -73,6 +90,7 @@ export function VisualGridList({ data, onToggleDone, onDelete, onInsert, categor
             item={indexed.entry}
             originalIndex={indexed.originalIndex}
             cardKey={cardKey}
+            cardWidth={cardWidth}
             onToggleDone={onToggleDone}
             onDelete={onDelete}
         />
@@ -80,16 +98,16 @@ export function VisualGridList({ data, onToggleDone, onDelete, onInsert, categor
 
     const renderRows = (items: IndexedEntry[]) => {
         const rows: React.ReactElement[] = []
-        for (let i = 0; i < items.length; i += NUM_COLUMNS) {
-            const rowItems = items.slice(i, i + NUM_COLUMNS)
+        for (let i = 0; i < items.length; i += numColumns) {
+            const rowItems = items.slice(i, i + numColumns)
             rows.push(
                 <View key={`row-${i}`} style={styles.row}>
                     {rowItems.map((indexed, idx) => renderCard(indexed, i + idx))}
-                    {rowItems.length < NUM_COLUMNS &&
-                        Array(NUM_COLUMNS - rowItems.length)
+                    {rowItems.length < numColumns &&
+                        Array(numColumns - rowItems.length)
                             .fill(null)
                             .map((_, idx) => (
-                                <View key={`empty-${idx}`} style={styles.emptyCard} />
+                                <View key={`empty-${idx}`} style={{ width: cardWidth, marginRight: CARD_MARGIN }} />
                             ))}
                 </View>
             )
@@ -190,10 +208,6 @@ const styles = StyleSheet.create({
     row: {
         flexDirection: 'row',
         marginBottom: CARD_MARGIN,
-    },
-    emptyCard: {
-        width: CARD_WIDTH,
-        marginRight: CARD_MARGIN,
     },
     emptyState: {
         flex: 1,

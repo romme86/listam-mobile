@@ -30,6 +30,7 @@ type ListItemProps = {
     onStartEdit: (index: number) => void
     onSubmitEdit: () => void
     onCancelEdit: () => void
+    textScaleFactor?: number
 }
 
 export function ListItem({
@@ -46,6 +47,7 @@ export function ListItem({
     onStartEdit,
     onSubmitEdit,
     onCancelEdit,
+    textScaleFactor = 1,
 }: ListItemProps) {
     const panX = useRef(new Animated.Value(0)).current
     const lastTapRef = useRef<number>(0)
@@ -162,6 +164,7 @@ export function ListItem({
 
     const textStyle = [
         styles.text,
+        { fontSize: 20 * textScaleFactor },
         item.isDone && styles.doneText,
         { transform: [{ scale: textScale }] }
     ]
@@ -170,7 +173,7 @@ export function ListItem({
         return (
             <Animated.View style={[styles.item, { opacity }]}>
                 <TextInput
-                    style={styles.editInput}
+                    style={[styles.editInput, { fontSize: 20 * textScaleFactor }]}
                     value={editText}
                     onChangeText={setEditText}
                     onSubmitEditing={onSubmitEdit}

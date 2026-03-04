@@ -4,7 +4,7 @@ import BlindPairing from "blind-pairing"
 import z32 from "z32"
 import { apply, open, storagePath, peerKeysString, keyFilePath, encKeyFilePath, inviteFilePath } from "../backend.mjs"
 import { saveAutobaseKey, saveEncryptionKey, saveInvite, deleteInvite } from "./key.mjs"
-import { RPC_MESSAGE, RPC_GET_KEY, RPC_RESET, SYNC_LIST } from "../../rpc-commands.mjs"
+import { RPC_MESSAGE, RPC_GET_KEY, SYNC_LIST } from "../../rpc-commands.mjs"
 import Corestore from "corestore"
 import Autobase from "autobase"
 import b4a from "b4a"
@@ -40,15 +40,18 @@ import {
 import { rebuildListFromPersistedOps, syncListToFrontend } from "./item.mjs"
 
 let _initPromise = null
+const INVITE_MAX_USES = 10
+let inviteUsesRemaining = 0
 
 export function createInvite() {
     if (!autobase) return null
 
-    // Return existing invite if not yet consumed
-    if (currentInvite) return z32.encode(currentInvite.invite)
+    // Return existing invite while it still has available uses
+    if (currentInvite && inviteUsesRemaining > 0) return z32.encode(currentInvite.invite)
 
     const inv = BlindPairing.createInvite(autobase.key)
     setCurrentInvite(inv)
+    inviteUsesRemaining = INVITE_MAX_USES
     saveInvite(inv, inviteFilePath)
 
     return z32.encode(inv.invite)
@@ -82,19 +85,22 @@ export function setupBlindPairing() {
                 encryptionKey: autobase.encryptionKey
             })
 
-            // Consume invite (one-time use)
-            setCurrentInvite(null)
-            deleteInvite(inviteFilePath)
+            // Allow multiple successful pairings per invite for smoother retries.
+            inviteUsesRemaining = Math.max(0, inviteUsesRemaining - 1)
 
             // Track peer + auto-create next invite
             setPeerCount(peerCount + 1)
             broadcastPeerCount()
 
-            // Create a fresh invite for the next joiner
-            const newZ32 = createInvite()
-            if (newZ32 && rpc) {
-                const req = rpc.request(RPC_GET_KEY)
-                req.send(newZ32)
+            // Rotate invite only after the usage budget is exhausted.
+            if (inviteUsesRemaining <= 0) {
+                setCurrentInvite(null)
+                deleteInvite(inviteFilePath)
+                const newZ32 = createInvite()
+                if (newZ32 && rpc) {
+                    const req = rpc.request(RPC_GET_KEY)
+                    req.send(newZ32)
+                }
             }
         }
     }))
@@ -313,46 +319,49 @@ export async function joinViaInvite(z32InviteStr) {
 
     _joinPromise = (async () => {
         const previousList = [...currentList]
+        const previousBaseKey = baseKey ? Buffer.from(baseKey) : null
+        const previousEncryptionKey = encryptionKey ? Buffer.from(encryptionKey) : null
+        const normalizedInvite = normalizeInviteCode(z32InviteStr)
+        const mainStoragePath = `${storagePath}-local`
+        const tempStoragePath = `${storagePath}-join-temp-${Date.now()}`
+        let tempStore = null
+        let tempSwarm = null
+        let tempPairing = null
+        let commitStarted = false
 
         try {
-            // 1. Tear down existing
-            await tearDownAutobaseSwarmStore()
-            if (rpc) {
-                const resetReq = rpc.request(RPC_RESET)
-                resetReq.send('')
+            if (!normalizedInvite) {
+                throw new Error('Invite is empty or invalid')
             }
 
-            // 2. Fresh store — wipe old data so the new base starts clean
-            const joinStoragePath = `${storagePath}-local`
-            rmrfSafe(joinStoragePath)
-            setStore(new Corestore(joinStoragePath))
-            await store.ready()
-
-            // 3. Fresh swarm
-            setSwarm(new Hyperswarm({
-                keyPair: await store.createKeyPair('hyperswarm')
-            }))
-            swarm.on('connection', (conn) => {
-                store.replicate(conn)  // store-level replication during pairing
+            // 1. Pair in an isolated temporary environment.
+            tempStore = new Corestore(tempStoragePath)
+            await tempStore.ready()
+            tempSwarm = new Hyperswarm({
+                keyPair: await tempStore.createKeyPair('hyperswarm')
+            })
+            tempSwarm.on('connection', (conn) => {
+                tempStore.replicate(conn)
             })
 
-            // 4. Get local writer key (before Autobase exists)
-            const localCore = Autobase.getLocalCore(store)
+            // 2. Use a temp local writer key for blind pairing userData.
+            const localCore = Autobase.getLocalCore(tempStore)
             await localCore.ready()
             const localWriterKey = localCore.key
             await localCore.close()
 
-            // 5. Blind pairing as candidate
-            const joinPairing = new BlindPairing(swarm)
+            // 3. Blind pairing as candidate.
+            tempPairing = new BlindPairing(tempSwarm)
 
             const result = await new Promise((resolve, reject) => {
+                let candidate = null
                 const timeout = setTimeout(() => {
-                    candidate.close()
+                    if (candidate) candidate.close()
                     reject(new Error('Pairing timed out'))
                 }, 120000)  // 2 min timeout
 
-                const candidate = joinPairing.addCandidate({
-                    invite: z32.decode(z32InviteStr),
+                candidate = tempPairing.addCandidate({
+                    invite: z32.decode(normalizedInvite),
                     userData: localWriterKey,
                     onadd: async (paired) => {
                         clearTimeout(timeout)
@@ -362,18 +371,23 @@ export async function joinViaInvite(z32InviteStr) {
                 })
             })
 
-            // 6. Pairing succeeded — result = { key, encryptionKey }
-            await joinPairing.close()
+            if (!result?.key || !result?.encryptionKey) {
+                throw new Error('Pairing returned incomplete credentials')
+            }
 
-            // 7. Now init autobase with the received key + encryption
+            // 4. Pairing succeeded. Commit by switching to the joined base.
+            commitStarted = true
+            await tearDownAutobaseSwarmStore()
             setBaseKey(result.key)
             setEncryptionKey(result.encryptionKey)
-            saveAutobaseKey(result.key, keyFilePath)
-            saveEncryptionKey(result.encryptionKey, encKeyFilePath)
-
-            // Re-init with proper autobase replication
-            // Remove store-level replication, switch to autobase-level
-            swarm.removeAllListeners('connection')
+            setStore(new Corestore(mainStoragePath))
+            await store.ready()
+            setSwarm(new Hyperswarm({
+                keyPair: await store.createKeyPair('hyperswarm')
+            }))
+            swarm.on('error', (err) => {
+                console.error('[ERROR] Replication swarm error:', err)
+            })
 
             const autobaseOpts = {
                 apply, open,
@@ -395,16 +409,6 @@ export async function joinViaInvite(z32InviteStr) {
                 })
                 autobase.replicate(conn)
             })
-
-            // Replicate autobase over connections that already exist from pairing
-            for (const conn of swarm.connections) {
-                conn.on('error', (err) => console.error('[ERROR]', err))
-                conn.on('close', () => {
-                    setPeerCount(Math.max(0, peerCount - 1))
-                    broadcastPeerCount()
-                })
-                autobase.replicate(conn)
-            }
             setPeerCount(swarm.connections.size)
             broadcastPeerCount()
 
@@ -419,6 +423,8 @@ export async function joinViaInvite(z32InviteStr) {
             await autobase.update()
             const rebuiltList = await rebuildListFromPersistedOps()
             syncListToFrontend(rebuiltList)
+            saveAutobaseKey(result.key, keyFilePath)
+            saveEncryptionKey(result.encryptionKey, encKeyFilePath)
 
             // Send invite to frontend
             const z32Invite = createInvite()
@@ -426,12 +432,42 @@ export async function joinViaInvite(z32InviteStr) {
                 const req = rpc.request(RPC_GET_KEY)
                 req.send(z32Invite)
             }
+            broadcastMessage({ type: 'join-success' })
         } catch (e) {
             console.error('[ERROR] joinViaInvite failed:', e)
+            broadcastMessage({
+                type: 'join-error',
+                message: e?.message || 'Failed to join peer'
+            })
             if (rpc && previousList.length > 0) {
                 const syncReq = rpc.request(SYNC_LIST)
                 syncReq.send(JSON.stringify(previousList))
             }
+            if (commitStarted) {
+                try {
+                    setEncryptionKey(previousEncryptionKey)
+                    await initAutobase(previousBaseKey)
+                } catch (rollbackError) {
+                    console.error('[ERROR] Failed to rollback previous session after join failure:', rollbackError)
+                }
+            }
+        } finally {
+            try {
+                if (tempPairing) await tempPairing.close()
+            } catch (err) {
+                console.error('[ERROR] Failed to close temp pairing:', err)
+            }
+            try {
+                if (tempSwarm) await tempSwarm.destroy()
+            } catch (err) {
+                console.error('[ERROR] Failed to close temp swarm:', err)
+            }
+            try {
+                if (tempStore) await tempStore.close()
+            } catch (err) {
+                console.error('[ERROR] Failed to close temp store:', err)
+            }
+            rmrfSafe(tempStoragePath)
         }
     })()
 
@@ -472,12 +508,16 @@ export async function nukeData() {
 }
 
 function broadcastPeerCount() {
+    broadcastMessage({ type: 'peer-count', count: peerCount })
+}
+
+function broadcastMessage(payload) {
     if (!rpc) return
     try {
         const req = rpc.request(RPC_MESSAGE)
-        req.send(JSON.stringify({ type: 'peer-count', count: peerCount }))
+        req.send(JSON.stringify(payload))
     } catch (e) {
-        console.error('[ERROR] Failed to broadcast peer count', e)
+        console.error('[ERROR] Failed to broadcast message', e)
     }
 }
 
@@ -487,4 +527,9 @@ function rmrfSafe(p) {
     } catch (e) {
         console.error('[ERROR] rmrfSafe failed for', p, e)
     }
+}
+
+function normalizeInviteCode(raw) {
+    if (typeof raw !== 'string') return ''
+    return raw.trim().replace(/\s+/g, '')
 }

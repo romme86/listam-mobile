@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { View, Share, Alert, Animated } from 'react-native'
+import * as Linking from 'expo-linking'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { useWorklet, RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_JOIN_KEY, RPC_NUKE } from './hooks/_useWorklet'
@@ -19,6 +20,8 @@ import type { ListEntry } from './components/_types'
 const PREF_GRID_VIEW = '@lista_grid_view'
 const PREF_CATEGORIES = '@lista_categories'
 const PREF_LOYALTY_CARDS = '@lista_loyalty_cards'
+const PREF_GRID_ICON_SIZE = '@lista_grid_icon_size'
+const PREF_LIST_TEXT_SIZE = '@lista_list_text_size'
 
 const DEFAULT_INSTRUCTIONS: ListEntry[] = [
     { text: 'Double tap to add new', isDone: false, timeOfCompletion: 0 },
@@ -32,6 +35,7 @@ export default function App() {
         setDataList,
         autobaseInviteKey,
         peerCount,
+        isWorkletReady,
         isJoining,
         setIsJoining,
         isJoiningRef,
@@ -45,16 +49,63 @@ export default function App() {
     const [currentP2PMessage, setCurrentP2PMessage] = useState(0)
     const [isGridView, setIsGridView] = useState(false)
     const [categoriesEnabled, setCategoriesEnabled] = useState(true)
+    const [gridIconSize, setGridIconSize] = useState<'small' | 'medium' | 'normal'>('normal')
+    const [listTextSize, setListTextSize] = useState<'small' | 'medium' | 'normal'>('normal')
     const [menuVisible, setMenuVisible] = useState(false)
     const [loyaltyCards, setLoyaltyCards] = useState<LoyaltyCard[]>([])
     const [scannerVisible, setScannerVisible] = useState(false)
     const [selectedCard, setSelectedCard] = useState<LoyaltyCard | null>(null)
     const blinkAnim = useRef(new Animated.Value(1)).current
+    const lastAutoJoinInviteRef = useRef('')
+    const pendingDeepLinkInviteRef = useRef('')
+
+    const normalizeInvite = useCallback((raw: string) => {
+        if (typeof raw !== 'string') return ''
+        return raw.trim().replace(/\s+/g, '')
+    }, [])
+
+    const extractInviteFromInput = useCallback((raw: string) => {
+        const trimmed = raw.trim()
+        if (!trimmed) return ''
+        if (trimmed.includes('://')) {
+            const parsed = Linking.parse(trimmed)
+            const inviteParam = parsed.queryParams?.invite
+            if (typeof inviteParam === 'string') {
+                return normalizeInvite(inviteParam)
+            }
+        }
+        return normalizeInvite(trimmed)
+    }, [normalizeInvite])
+
+    const startJoinWithInvite = useCallback((rawInvite: string) => {
+        const invite = extractInviteFromInput(rawInvite)
+        if (!invite) {
+            Alert.alert('Error', 'Please enter a valid invite key or invite link')
+            return false
+        }
+        if (!isWorkletReady) {
+            pendingDeepLinkInviteRef.current = invite
+            return true
+        }
+        setIsJoining(true)
+        setCurrentP2PMessage(0)
+        isJoiningRef.current = true
+        sendRPC(RPC_JOIN_KEY, JSON.stringify({ key: invite }))
+        return true
+    }, [extractInviteFromInput, isJoiningRef, isWorkletReady, sendRPC, setIsJoining])
 
     useEffect(() => {
-        AsyncStorage.multiGet([PREF_GRID_VIEW, PREF_CATEGORIES, PREF_LOYALTY_CARDS]).then(([[, grid], [, cats], [, cards]]) => {
+        AsyncStorage.multiGet([
+            PREF_GRID_VIEW,
+            PREF_CATEGORIES,
+            PREF_LOYALTY_CARDS,
+            PREF_GRID_ICON_SIZE,
+            PREF_LIST_TEXT_SIZE,
+        ]).then(([[, grid], [, cats], [, cards], [, gridSize], [, textSize]]) => {
             if (grid !== null) setIsGridView(grid === 'true')
             if (cats !== null) setCategoriesEnabled(cats === 'true')
+            if (gridSize === 'small' || gridSize === 'medium' || gridSize === 'normal') setGridIconSize(gridSize)
+            if (textSize === 'small' || textSize === 'medium' || textSize === 'normal') setListTextSize(textSize)
             if (cards !== null) {
                 try { setLoyaltyCards(JSON.parse(cards)) } catch {}
             }
@@ -73,6 +124,16 @@ export default function App() {
             AsyncStorage.setItem(PREF_CATEGORIES, String(!prev))
             return !prev
         })
+    }, [])
+
+    const handleGridIconSizeChange = useCallback((size: 'small' | 'medium' | 'normal') => {
+        setGridIconSize(size)
+        AsyncStorage.setItem(PREF_GRID_ICON_SIZE, size)
+    }, [])
+
+    const handleListTextSizeChange = useCallback((size: 'small' | 'medium' | 'normal') => {
+        setListTextSize(size)
+        AsyncStorage.setItem(PREF_LIST_TEXT_SIZE, size)
     }, [])
 
     const handleCardScanned = useCallback((card: LoyaltyCard) => {
@@ -119,6 +180,39 @@ export default function App() {
             blinkAnim.setValue(1)
         }
     }, [autobaseInviteKey, blinkAnim])
+
+    useEffect(() => {
+        const handleIncomingUrl = (url: string | null) => {
+            if (!url) return
+            const invite = extractInviteFromInput(url)
+            if (!invite) return
+            if (lastAutoJoinInviteRef.current === invite) return
+            lastAutoJoinInviteRef.current = invite
+            startJoinWithInvite(invite)
+        }
+
+        Linking.getInitialURL().then((url) => {
+            handleIncomingUrl(url)
+        }).catch((error) => {
+            console.log('Failed to read initial URL', error)
+        })
+
+        const subscription = Linking.addEventListener('url', ({ url }) => {
+            handleIncomingUrl(url)
+        })
+
+        return () => {
+            subscription.remove()
+        }
+    }, [extractInviteFromInput, startJoinWithInvite])
+
+    useEffect(() => {
+        if (!isWorkletReady) return
+        if (!pendingDeepLinkInviteRef.current) return
+        const invite = pendingDeepLinkInviteRef.current
+        pendingDeepLinkInviteRef.current = ''
+        startJoinWithInvite(invite)
+    }, [isWorkletReady, startJoinWithInvite])
 
     // Rotate P2P messages while joining
     useEffect(() => {
@@ -184,9 +278,13 @@ export default function App() {
         }
 
         try {
+            const inviteLink = Linking.createURL('/join', {
+                scheme: 'ch.saynode.listam',
+                queryParams: { invite: autobaseInviteKey }
+            })
             await Share.share({
-                message: autobaseInviteKey,
-                title: 'Share Invite Key'
+                message: inviteLink,
+                title: 'Join my Listam list'
             })
         } catch (error) {
             console.log('Error sharing:', error)
@@ -203,15 +301,12 @@ export default function App() {
             return
         }
 
-        setIsJoining(true)
-        setCurrentP2PMessage(0)
-        isJoiningRef.current = true
-
-        sendRPC(RPC_JOIN_KEY, JSON.stringify({ key: joinKeyInput }))
+        const didStartJoin = startJoinWithInvite(joinKeyInput)
+        if (!didStartJoin) return
 
         setJoinDialogVisible(false)
         setJoinKeyInput('')
-    }, [joinKeyInput, sendRPC, setIsJoining, isJoiningRef])
+    }, [joinKeyInput, startJoinWithInvite])
 
     const handleJoinCancel = useCallback(() => {
         setJoinDialogVisible(false)
@@ -292,6 +387,10 @@ export default function App() {
                     onToggleView={handleToggleView}
                     categoriesEnabled={categoriesEnabled}
                     onToggleCategories={handleToggleCategories}
+                    gridIconSize={gridIconSize}
+                    onGridIconSizeChange={handleGridIconSizeChange}
+                    listTextSize={listTextSize}
+                    onListTextSizeChange={handleListTextSizeChange}
                     loyaltyCards={loyaltyCards}
                     onScanCard={() => setScannerVisible(true)}
                     onSelectCard={handleSelectCard}
@@ -315,6 +414,7 @@ export default function App() {
                         onDelete={dataList.length === 0 ? () => {} : handleDelete}
                         onInsert={handleInsert}
                         categoriesEnabled={categoriesEnabled}
+                        gridIconSize={gridIconSize}
                     />
                 ) : (
                     <InertialElasticList
@@ -323,6 +423,7 @@ export default function App() {
                         onDelete={dataList.length === 0 ? () => {} : handleDelete}
                         onInsert={handleInsert}
                         categoriesEnabled={categoriesEnabled}
+                        listTextSize={listTextSize}
                     />
                 )}
                 <LoyaltyCardScanner
