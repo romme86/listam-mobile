@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { AnimatedIconButton } from './AnimatedIconButton'
 import { headerStyles } from './_styles'
 import type { LoyaltyCard } from './LoyaltyCardScanner'
+import type { ItemIconVariant } from './itemIconMap'
 
 const DRAWER_WIDTH = 280
 const { height: SCREEN_HEIGHT } = Dimensions.get('window')
@@ -23,6 +24,7 @@ const HEADER_ICON_SIZE = 22
 const HEADER_TEXT_SIZE = 12
 const GRID_SIZE_OPTIONS = ['small', 'medium', 'normal'] as const
 const LIST_TEXT_SIZE_OPTIONS = ['small', 'medium', 'normal'] as const
+const ITEM_ICON_VARIANT_OPTIONS: ItemIconVariant[] = ['illustrated', 'minimal']
 
 function cardColor(name: string): string {
     let hash = 0
@@ -54,6 +56,8 @@ type HeaderProps = {
     onGridIconSizeChange: (size: 'small' | 'medium' | 'normal') => void
     listTextSize: 'small' | 'medium' | 'normal'
     onListTextSizeChange: (size: 'small' | 'medium' | 'normal') => void
+    itemIconVariant: ItemIconVariant
+    onItemIconVariantChange: (variant: ItemIconVariant) => void
     loyaltyCards: LoyaltyCard[]
     onScanCard: () => void
     onSelectCard: (card: LoyaltyCard) => void
@@ -122,6 +126,8 @@ export function Header({
     onGridIconSizeChange,
     listTextSize,
     onListTextSizeChange,
+    itemIconVariant,
+    onItemIconVariantChange,
     loyaltyCards,
     onScanCard,
     onSelectCard,
@@ -342,6 +348,32 @@ export function Header({
                                                 ]}
                                             >
                                                 {option[0].toUpperCase() + option.slice(1)}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+
+                            <View style={drawerStyles.settingGroup}>
+                                <Text style={drawerStyles.settingTitle}>Item Icons</Text>
+                                <View style={drawerStyles.optionRow}>
+                                    {ITEM_ICON_VARIANT_OPTIONS.map((option) => (
+                                        <TouchableOpacity
+                                            key={option}
+                                            style={[
+                                                drawerStyles.optionButton,
+                                                itemIconVariant === option && drawerStyles.optionButtonActive,
+                                            ]}
+                                            onPress={() => onItemIconVariantChange(option)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text
+                                                style={[
+                                                    drawerStyles.optionLabel,
+                                                    itemIconVariant === option && drawerStyles.optionLabelActive,
+                                                ]}
+                                            >
+                                                {option === 'illustrated' ? 'Illustrated' : 'Minimalistic'}
                                             </Text>
                                         </TouchableOpacity>
                                     ))}

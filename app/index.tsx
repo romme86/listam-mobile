@@ -14,6 +14,7 @@ import { LoyaltyCardViewer } from './components/LoyaltyCardViewer'
 import type { LoyaltyCard } from './components/LoyaltyCardScanner'
 import InertialElasticList from './components/intertial_scroll'
 import { VisualGridList } from './components/VisualGridList'
+import type { ItemIconVariant } from './components/itemIconMap'
 import { styles } from './components/_styles'
 import type { ListEntry } from './components/_types'
 
@@ -23,6 +24,7 @@ const PREF_LOYALTY_CARDS = '@lista_loyalty_cards'
 const PREF_GRID_ICON_SIZE = '@lista_grid_icon_size'
 const PREF_LIST_TEXT_SIZE = '@lista_list_text_size'
 const PREF_CATEGORY_HEADERS = '@lista_category_headers'
+const PREF_ITEM_ICON_VARIANT = '@lista_item_icon_variant'
 
 const DEFAULT_INSTRUCTIONS: ListEntry[] = [
     { text: 'Double tap to add new', isDone: false, timeOfCompletion: 0 },
@@ -53,6 +55,7 @@ export default function App() {
     const [categoryHeadersVisible, setCategoryHeadersVisible] = useState(true)
     const [gridIconSize, setGridIconSize] = useState<'small' | 'medium' | 'normal'>('normal')
     const [listTextSize, setListTextSize] = useState<'small' | 'medium' | 'normal'>('normal')
+    const [itemIconVariant, setItemIconVariant] = useState<ItemIconVariant>('illustrated')
     const [menuVisible, setMenuVisible] = useState(false)
     const [loyaltyCards, setLoyaltyCards] = useState<LoyaltyCard[]>([])
     const [scannerVisible, setScannerVisible] = useState(false)
@@ -104,12 +107,14 @@ export default function App() {
             PREF_GRID_ICON_SIZE,
             PREF_LIST_TEXT_SIZE,
             PREF_CATEGORY_HEADERS,
-        ]).then(([[, grid], [, cats], [, cards], [, gridSize], [, textSize], [, categoryHeaders]]) => {
+            PREF_ITEM_ICON_VARIANT,
+        ]).then(([[, grid], [, cats], [, cards], [, gridSize], [, textSize], [, categoryHeaders], [, iconVariant]]) => {
             if (grid !== null) setIsGridView(grid === 'true')
             if (cats !== null) setCategoriesEnabled(cats === 'true')
             if (gridSize === 'small' || gridSize === 'medium' || gridSize === 'normal') setGridIconSize(gridSize)
             if (textSize === 'small' || textSize === 'medium' || textSize === 'normal') setListTextSize(textSize)
             if (categoryHeaders !== null) setCategoryHeadersVisible(categoryHeaders === 'true')
+            if (iconVariant === 'illustrated' || iconVariant === 'minimal') setItemIconVariant(iconVariant)
             if (cards !== null) {
                 try { setLoyaltyCards(JSON.parse(cards)) } catch {}
             }
@@ -138,6 +143,11 @@ export default function App() {
     const handleListTextSizeChange = useCallback((size: 'small' | 'medium' | 'normal') => {
         setListTextSize(size)
         AsyncStorage.setItem(PREF_LIST_TEXT_SIZE, size)
+    }, [])
+
+    const handleItemIconVariantChange = useCallback((variant: ItemIconVariant) => {
+        setItemIconVariant(variant)
+        AsyncStorage.setItem(PREF_ITEM_ICON_VARIANT, variant)
     }, [])
 
     const handleToggleCategoryHeaders = useCallback(() => {
@@ -289,12 +299,9 @@ export default function App() {
         }
 
         try {
-            const inviteLink = Linking.createURL('/join', {
-                scheme: 'ch.saynode.listam',
-                queryParams: { invite: autobaseInviteKey }
-            })
+            const inviteLink = `https://listam.ch/join?invite=${encodeURIComponent(autobaseInviteKey)}`
             await Share.share({
-                message: inviteLink,
+                message: `Join my Listam list:\n${inviteLink}\n\nInvite code: ${autobaseInviteKey}`,
                 title: 'Join my Listam list'
             })
         } catch (error) {
@@ -404,6 +411,8 @@ export default function App() {
                     onGridIconSizeChange={handleGridIconSizeChange}
                     listTextSize={listTextSize}
                     onListTextSizeChange={handleListTextSizeChange}
+                    itemIconVariant={itemIconVariant}
+                    onItemIconVariantChange={handleItemIconVariantChange}
                     loyaltyCards={loyaltyCards}
                     onScanCard={() => setScannerVisible(true)}
                     onSelectCard={handleSelectCard}
@@ -429,6 +438,7 @@ export default function App() {
                         categoriesEnabled={categoriesEnabled}
                         categoryHeadersVisible={categoryHeadersVisible}
                         gridIconSize={gridIconSize}
+                        itemIconVariant={itemIconVariant}
                     />
                 ) : (
                     <InertialElasticList

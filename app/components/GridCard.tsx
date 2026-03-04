@@ -10,7 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import * as Haptics from 'expo-haptics'
 import type { ListEntry } from './_types'
-import { getIconForItem } from './itemIconMap'
+import { getIconForItem, type ItemIconVariant } from './itemIconMap'
 
 const CARD_MARGIN = 6
 
@@ -21,9 +21,18 @@ type GridCardProps = {
     cardWidth: number
     onToggleDone?: (index: number) => void
     onDelete?: (index: number) => void
+    itemIconVariant?: ItemIconVariant
 }
 
-export function GridCard({ item, originalIndex, cardKey, cardWidth, onToggleDone, onDelete }: GridCardProps) {
+export function GridCard({
+    item,
+    originalIndex,
+    cardKey,
+    cardWidth,
+    onToggleDone,
+    onDelete,
+    itemIconVariant = 'illustrated',
+}: GridCardProps) {
     const bubbleScale = useRef(new Animated.Value(1)).current
     const bubbleOpacity = useRef(new Animated.Value(0)).current
     const iconSize = Math.max(28, Math.min(cardWidth * 0.68, 76))
@@ -68,7 +77,7 @@ export function GridCard({ item, originalIndex, cardKey, cardWidth, onToggleDone
         >
             <View style={styles.iconContainer}>
                 <Image
-                    source={getIconForItem(item.text).source}
+                    source={getIconForItem(item.text, itemIconVariant).source}
                     style={[styles.cardIcon, { width: iconSize, height: iconSize }, item.isDone && styles.cardIconDone]}
                     resizeMode="contain"
                 />

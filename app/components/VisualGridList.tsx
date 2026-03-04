@@ -12,6 +12,7 @@ import type { ListEntry } from './_types'
 import { groupByCategory, type IndexedEntry } from './categoryGrouping'
 import { CATEGORY_ICONS } from './categoryConstants'
 import { GridCard } from './GridCard'
+import type { ItemIconVariant } from './itemIconMap'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const CARD_MARGIN = 6
@@ -30,6 +31,7 @@ type Props = {
     categoriesEnabled?: boolean
     categoryHeadersVisible?: boolean
     gridIconSize?: 'small' | 'medium' | 'normal'
+    itemIconVariant?: ItemIconVariant
 }
 
 export function VisualGridList({
@@ -40,6 +42,7 @@ export function VisualGridList({
     categoriesEnabled = true,
     categoryHeadersVisible = true,
     gridIconSize = 'normal',
+    itemIconVariant = 'illustrated',
 }: Props) {
     const [isAddingItem, setIsAddingItem] = useState(false)
     const [editText, setEditText] = useState('')
@@ -95,6 +98,7 @@ export function VisualGridList({
             cardWidth={cardWidth}
             onToggleDone={onToggleDone}
             onDelete={onDelete}
+            itemIconVariant={itemIconVariant}
         />
     )
 

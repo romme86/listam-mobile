@@ -92,6 +92,27 @@
     <p class="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-16 font-light text-center max-w-lg">
       A minimalist, peer-to-peer grocery list for you and your friends.
     </p>
+    <section id="invite-cta" class="hidden w-full mb-12">
+      <div class="rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-black p-8 md:p-10 text-center">
+        <p class="text-xs uppercase tracking-[0.2em] text-gray-500 dark:text-gray-400 mb-4 font-mono">Invite Link</p>
+        <h2 class="text-3xl md:text-4xl font-bold tracking-tight mb-4">Open this list in Listam</h2>
+        <p class="text-base md:text-lg text-gray-600 dark:text-gray-400 mb-4">
+          If the app is installed, it should open automatically. If not, use the button below.
+        </p>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-8">
+          Invite code: <span id="invite-code" class="font-mono text-black dark:text-white"></span>
+        </p>
+        <div class="flex flex-col md:flex-row gap-3 justify-center items-center">
+          <a id="open-app-link" class="w-full md:w-auto inline-flex items-center justify-center py-3 px-6 bg-black dark:bg-white text-white dark:text-black rounded-lg font-bold hover:opacity-80 transition-opacity" href="#">
+            Open in Listam
+          </a>
+          <button id="copy-invite-button" class="w-full md:w-auto inline-flex items-center justify-center py-3 px-6 bg-surface-light dark:bg-surface-dark text-black dark:text-white rounded-lg font-bold hover:opacity-80 transition-opacity" type="button">
+            Copy Invite Code
+          </button>
+        </div>
+        <p id="invite-status" class="text-sm text-gray-500 dark:text-gray-400 mt-6"></p>
+      </div>
+    </section>
     <div class="relative w-full max-w-sm mx-auto mb-24">
       <div class="bg-background-light dark:bg-black border border-gray-200 dark:border-gray-800 rounded-[2.5rem] p-6 shadow-2xl dark:shadow-none overflow-hidden relative">
         <div class="flex justify-between items-center mb-8 px-1">
@@ -307,6 +328,62 @@
     </footer>
 
 
+    <script>
+      (function () {
+        const params = new URLSearchParams(window.location.search);
+        const invite = (params.get('invite') || '').trim();
+        const isJoinPath = window.location.pathname === '/join' || window.location.pathname === '/join/';
+        if (!invite || !isJoinPath) return;
+
+        const appUrl = `ch.saynode.listam://join?invite=${encodeURIComponent(invite)}`;
+        const inviteCta = document.getElementById('invite-cta');
+        const inviteCode = document.getElementById('invite-code');
+        const openAppLink = document.getElementById('open-app-link');
+        const copyInviteButton = document.getElementById('copy-invite-button');
+        const inviteStatus = document.getElementById('invite-status');
+
+        if (!inviteCta || !inviteCode || !openAppLink || !copyInviteButton || !inviteStatus) return;
+
+        inviteCta.classList.remove('hidden');
+        inviteCode.textContent = invite;
+        openAppLink.href = appUrl;
+        document.title = 'Join a Listam List';
+
+        let pageHidden = false;
+        document.addEventListener('visibilitychange', function () {
+          if (document.hidden) pageHidden = true;
+        });
+
+        const attemptOpen = function () {
+          window.location.href = appUrl;
+          window.setTimeout(function () {
+            if (!pageHidden) {
+              inviteStatus.textContent = 'If nothing happened, tap "Open in Listam".';
+            }
+          }, 1200);
+        };
+
+        openAppLink.addEventListener('click', function (event) {
+          event.preventDefault();
+          attemptOpen();
+        });
+
+        copyInviteButton.addEventListener('click', async function () {
+          try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              await navigator.clipboard.writeText(invite);
+              inviteStatus.textContent = 'Invite code copied.';
+            } else {
+              inviteStatus.textContent = 'Copy manually: ' + invite;
+            }
+          } catch (_) {
+            inviteStatus.textContent = 'Copy manually: ' + invite;
+          }
+        });
+
+        window.setTimeout(attemptOpen, 250);
+      })();
+    </script>
     <script>
       document.addEventListener('DOMContentLoaded', function() {
         const loadEl = document.querySelector('#load');
