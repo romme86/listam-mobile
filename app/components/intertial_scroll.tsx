@@ -27,6 +27,7 @@ type Props = {
     onUpdate?: (index: number, text: string) => void
     onInsert?: (index: number, text: string) => void
     categoriesEnabled?: boolean
+    categoryHeadersVisible?: boolean
     listTextSize?: 'small' | 'medium' | 'normal'
 }
 
@@ -42,6 +43,7 @@ export default function InertialElasticList({
     onDelete,
     onInsert,
     categoriesEnabled = true,
+    categoryHeadersVisible = true,
     listTextSize = 'normal',
 }: Props) {
     const scrollY = useRef(new Animated.Value(0)).current
@@ -100,13 +102,15 @@ export default function InertialElasticList({
         let visualIndex = 0
 
         for (const section of sections) {
-            items.push({
-                type: 'header',
-                category: section.category,
-                canonicalKey: section.canonicalKey,
-                key: `header-${section.canonicalKey}`,
-            })
-            visualIndex++
+            if (categoryHeadersVisible) {
+                items.push({
+                    type: 'header',
+                    category: section.category,
+                    canonicalKey: section.canonicalKey,
+                    key: `header-${section.canonicalKey}`,
+                })
+                visualIndex++
+            }
 
             for (const indexed of section.items) {
                 items.push({
@@ -121,7 +125,7 @@ export default function InertialElasticList({
         }
 
         return items
-    }, [data, categoriesEnabled])
+    }, [data, categoriesEnabled, categoryHeadersVisible])
 
     const renderItem = useCallback(({ item }: { item: FlatListItem }) => {
         if (item.type === 'header') {
@@ -155,7 +159,7 @@ export default function InertialElasticList({
                 textScaleFactor={textScaleFactor}
             />
         )
-    }, [scrollY, onToggleDone, onDelete, onInsert, handleStartEdit, handleSubmitEdit, handleCancelEdit, textScaleFactor])
+    }, [scrollY, onToggleDone, onDelete, onInsert, handleStartEdit, handleSubmitEdit, handleCancelEdit, textScaleFactor, categoryHeadersVisible])
 
     const keyExtractor = useCallback((item: FlatListItem) => item.key, [])
 

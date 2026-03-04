@@ -48,6 +48,8 @@ type HeaderProps = {
     onToggleView: () => void
     categoriesEnabled: boolean
     onToggleCategories: () => void
+    categoryHeadersVisible: boolean
+    onToggleCategoryHeaders: () => void
     gridIconSize: 'small' | 'medium' | 'normal'
     onGridIconSizeChange: (size: 'small' | 'medium' | 'normal') => void
     listTextSize: 'small' | 'medium' | 'normal'
@@ -114,6 +116,8 @@ export function Header({
     onToggleView,
     categoriesEnabled,
     onToggleCategories,
+    categoryHeadersVisible,
+    onToggleCategoryHeaders,
     gridIconSize,
     onGridIconSizeChange,
     listTextSize,
@@ -274,6 +278,18 @@ export function Header({
                                 <Switch
                                     value={categoriesEnabled}
                                     onValueChange={onToggleCategories}
+                                    trackColor={{ false: '#ccc', true: '#333' }}
+                                    thumbColor="#fff"
+                                    style={drawerStyles.switch}
+                                />
+                            </View>
+
+                            <View style={drawerStyles.menuRow}>
+                                <Ionicons name="eye-off-outline" size={22} color="#333" />
+                                <Text style={drawerStyles.menuLabel}>Category Headers</Text>
+                                <Switch
+                                    value={categoryHeadersVisible}
+                                    onValueChange={onToggleCategoryHeaders}
                                     trackColor={{ false: '#ccc', true: '#333' }}
                                     thumbColor="#fff"
                                     style={drawerStyles.switch}

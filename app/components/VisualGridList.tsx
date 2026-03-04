@@ -28,6 +28,7 @@ type Props = {
     onDelete?: (index: number) => void
     onInsert?: (index: number, text: string) => void
     categoriesEnabled?: boolean
+    categoryHeadersVisible?: boolean
     gridIconSize?: 'small' | 'medium' | 'normal'
 }
 
@@ -37,6 +38,7 @@ export function VisualGridList({
     onDelete,
     onInsert,
     categoriesEnabled = true,
+    categoryHeadersVisible = true,
     gridIconSize = 'normal',
 }: Props) {
     const [isAddingItem, setIsAddingItem] = useState(false)
@@ -139,7 +141,7 @@ export function VisualGridList({
                 >
                     {sections.map((section) => (
                         <View key={section.category || '_flat'} style={styles.section}>
-                            {section.category !== '' && (
+                            {categoryHeadersVisible && section.category !== '' && (
                                 <View style={styles.categoryHeader}>
                                     <Ionicons
                                         name={(CATEGORY_ICONS[section.canonicalKey] || 'basket-outline') as any}
