@@ -30,6 +30,7 @@ export let addedStaticPeers = false
 
 // State flags
 export let isResettingState = false
+export let isPendingJoinSuccess = false
 
 // Transient error tracking
 export let transientErrorCount = 0
@@ -58,6 +59,7 @@ export function setCurrentList(val) { currentList = val }
 export function setPeerCount(val) { peerCount = val }
 export function setAddedStaticPeers(val) { addedStaticPeers = val }
 export function setIsResettingState(val) { isResettingState = val }
+export function setIsPendingJoinSuccess(val) { isPendingJoinSuccess = val }
 export function setTransientErrorCount(val) { transientErrorCount = val }
 export function setLastTransientErrorTime(val) { lastTransientErrorTime = val }
 

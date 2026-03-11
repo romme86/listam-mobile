@@ -35,13 +35,86 @@ import {
     setCurrentInvite,
     setEncryptionKey,
     setCurrentList,
-    clearKnownWriters
+    clearKnownWriters,
+    isPendingJoinSuccess,
+    setIsPendingJoinSuccess
 } from "./state.mjs"
 import { rebuildListFromPersistedOps, syncListToFrontend } from "./item.mjs"
 
 let _initPromise = null
+let _writableCheckTimer = null
 const INVITE_MAX_USES = 10
 let inviteUsesRemaining = 0
+
+// Temp swarm/pairing kept alive until waitForWritable completes
+let _tempSwarm = null
+let _tempPairing = null
+
+// Polls autobase.update() every second until the local node becomes writable,
+// then broadcasts join-success. Falls back to join-error after 120 s.
+// Also syncs replicated items on each attempt so the guest sees the host's
+// list even before write access is confirmed.
+function cleanupTempSwarm() {
+    if (_tempPairing) {
+        try { _tempPairing.close() } catch (_) {}
+        _tempPairing = null
+    }
+    if (_tempSwarm) {
+        try { _tempSwarm.destroy() } catch (_) {}
+        _tempSwarm = null
+    }
+}
+
+function waitForWritable() {
+    if (_writableCheckTimer) clearTimeout(_writableCheckTimer)
+    let attempts = 0
+    const MAX_ATTEMPTS = 120
+
+    async function check() {
+        if (!isPendingJoinSuccess) return
+        attempts++
+        try {
+            if (autobase) await autobase.update()
+        } catch (e) {
+            console.error('[ERROR] waitForWritable update failed:', e)
+        }
+        // Sync whatever items have replicated so far
+        try {
+            const list = await rebuildListFromPersistedOps()
+            if (list.length > 0) syncListToFrontend(list)
+        } catch (_) {}
+
+        // Log status every 10 attempts
+        if (attempts % 10 === 0) {
+            const viewLen = autobase?.view?.length ?? '?'
+            const mainConns = swarm?.connections?.size ?? '?'
+            const tempConns = _tempSwarm?.connections?.size ?? 0
+            console.error(`[INFO] waitForWritable #${attempts}: writable=${autobase?.writable}, view=${viewLen}, mainSwarm=${mainConns}, tempSwarm=${tempConns}`)
+        }
+
+        if (autobase?.writable) {
+            setIsPendingJoinSuccess(false)
+            if (autobase.key) saveAutobaseKey(autobase.key, keyFilePath)
+            console.error('[INFO] Guest became writable after', attempts, 'attempt(s)')
+            broadcastMessage({ type: 'join-success' })
+            cleanupTempSwarm()
+            return
+        }
+        if (attempts >= MAX_ATTEMPTS) {
+            setIsPendingJoinSuccess(false)
+            const viewLen = autobase?.view?.length ?? '?'
+            const mainConns = swarm?.connections?.size ?? '?'
+            const tempConns = _tempSwarm?.connections?.size ?? 0
+            console.error(`[ERROR] Timed out waiting for write access after ${attempts} attempts. view=${viewLen}, mainSwarm=${mainConns}, tempSwarm=${tempConns}`)
+            broadcastMessage({ type: 'join-error', message: 'Timed out waiting for write access from host.' })
+            cleanupTempSwarm()
+            return
+        }
+        _writableCheckTimer = setTimeout(check, 1000)
+    }
+
+    _writableCheckTimer = setTimeout(check, 1000)
+}
 
 export function createInvite() {
     if (!autobase) return null
@@ -107,6 +180,13 @@ export function setupBlindPairing() {
 }
 
 async function tearDownAutobaseSwarmStore() {
+    // Cancel any pending writable-check polling
+    if (_writableCheckTimer) {
+        clearTimeout(_writableCheckTimer)
+        _writableCheckTimer = null
+    }
+    setIsPendingJoinSuccess(false)
+
     // 1. Clean up BlindPairing
     if (pairing) {
         try {
@@ -322,51 +402,44 @@ export async function joinViaInvite(z32InviteStr) {
         const previousBaseKey = baseKey ? Buffer.from(baseKey) : null
         const previousEncryptionKey = encryptionKey ? Buffer.from(encryptionKey) : null
         const normalizedInvite = normalizeInviteCode(z32InviteStr)
-        const mainStoragePath = `${storagePath}-local`
-        const tempStoragePath = `${storagePath}-join-temp-${Date.now()}`
-        let tempStore = null
-        let tempSwarm = null
-        let tempPairing = null
-        let commitStarted = false
+
+        // Clean up any leftover temp resources from a previous attempt
+        cleanupTempSwarm()
 
         try {
             if (!normalizedInvite) {
                 throw new Error('Invite is empty or invalid')
             }
 
-            // 1. Pair in an isolated temporary environment.
-            tempStore = new Corestore(tempStoragePath)
-            await tempStore.ready()
-            tempSwarm = new Hyperswarm({
-                keyPair: await tempStore.createKeyPair('hyperswarm')
-            })
-            tempSwarm.on('connection', (conn) => {
-                tempStore.replicate(conn)
-            })
+            // 1. Derive writer key from the already-open autobase's local core.
+            //    autobase.local.key is stable across teardown/reinit of the same
+            //    storage path, so the host will add the right key.
+            if (!autobase?.local?.key) {
+                throw new Error('autobase.local.key unavailable — cannot derive writer key')
+            }
+            const localWriterKey = autobase.local.key
+            console.error('[INFO] Guest localWriterKey:', localWriterKey.toString('hex'))
 
-            // 2. Use a temp local writer key for blind pairing userData.
-            const localCore = Autobase.getLocalCore(tempStore)
-            await localCore.ready()
-            const localWriterKey = localCore.key
-            await localCore.close()
-
-            // 3. Blind pairing as candidate.
-            tempPairing = new BlindPairing(tempSwarm)
+            // 2. Temp swarm for blind pairing only.
+            //    DO NOT close the candidate in onadd — closing it kills the
+            //    underlying Noise connection, which is the only live link to the
+            //    host. The temp swarm stays alive so we can replicate over it.
+            _tempSwarm = new Hyperswarm()
+            _tempPairing = new BlindPairing(_tempSwarm)
 
             const result = await new Promise((resolve, reject) => {
-                let candidate = null
                 const timeout = setTimeout(() => {
-                    if (candidate) candidate.close()
                     reject(new Error('Pairing timed out'))
-                }, 120000)  // 2 min timeout
+                }, 120000)
 
-                candidate = tempPairing.addCandidate({
+                _tempPairing.addCandidate({
                     invite: z32.decode(normalizedInvite),
                     userData: localWriterKey,
                     onadd: async (paired) => {
                         clearTimeout(timeout)
                         resolve(paired)
-                        candidate.close()
+                        // NOTE: do NOT call candidate.close() here — it kills
+                        // the connection we need for replication bootstrapping.
                     }
                 })
             })
@@ -375,66 +448,50 @@ export async function joinViaInvite(z32InviteStr) {
                 throw new Error('Pairing returned incomplete credentials')
             }
 
-            // 4. Pairing succeeded. Commit by switching to the joined base.
-            commitStarted = true
-            await tearDownAutobaseSwarmStore()
-            setBaseKey(result.key)
+            console.error('[INFO] Blind pairing succeeded. Host base key:', result.key.toString('hex'))
+            console.error('[INFO] Temp swarm connections after pairing:', _tempSwarm.connections.size)
+
+            // 3. Use initAutobase to set up the joined base — same proven code
+            //    path the host uses. Set encryption key first so initAutobase
+            //    picks it up.
             setEncryptionKey(result.encryptionKey)
-            setStore(new Corestore(mainStoragePath))
-            await store.ready()
-            setSwarm(new Hyperswarm({
-                keyPair: await store.createKeyPair('hyperswarm')
-            }))
-            swarm.on('error', (err) => {
-                console.error('[ERROR] Replication swarm error:', err)
-            })
+            await initAutobase(result.key)
 
-            const autobaseOpts = {
-                apply, open,
-                valueEncoding: 'json',
-                encrypt: true,
-                encryptionKey: result.encryptionKey
+            console.error('[INFO] Guest initAutobase complete. writable:', autobase?.writable, '| swarm connections:', swarm?.connections?.size)
+
+            // 4. Replicate over the temp swarm's existing connections.
+            //    The temp swarm has a live connection to the host from blind
+            //    pairing. The main swarm needs DHT to find the host (can take
+            //    30-60s or fail entirely on restricted networks). By replicating
+            //    over the temp connection, we get immediate data exchange.
+            if (_tempSwarm) {
+                let tempConnCount = 0
+                for (const conn of _tempSwarm.connections) {
+                    if (conn.destroyed || conn.closed) continue
+                    tempConnCount++
+                    console.error('[INFO] Guest: replicating autobase over temp swarm connection (alive:', !conn.destroyed, ')')
+                    try {
+                        autobase.replicate(conn)
+                    } catch (e) {
+                        console.error('[ERROR] Failed to replicate over temp connection:', e)
+                    }
+                }
+                console.error('[INFO] Guest: replicated over', tempConnCount, 'temp connections')
             }
-            setAutobase(new Autobase(store, result.key, autobaseOpts))
-            await autobase.ready()
 
-            // Set up autobase replication on swarm
-            swarm.on('connection', (conn) => {
-                conn.on('error', (err) => console.error('[ERROR]', err))
-                setPeerCount(peerCount + 1)
-                broadcastPeerCount()
-                conn.on('close', () => {
-                    setPeerCount(Math.max(0, peerCount - 1))
-                    broadcastPeerCount()
-                })
-                autobase.replicate(conn)
-            })
-            setPeerCount(swarm.connections.size)
-            broadcastPeerCount()
-
-            // Join discovery topic
-            setDiscovery(swarm.join(autobase.discoveryKey, { server: true, client: true }))
-            await discovery.flushed()
-
-            // Set up blind pairing for future joiners
-            setupBlindPairing()
-
-            // Rebuild list
-            await autobase.update()
-            const rebuiltList = await rebuildListFromPersistedOps()
-            syncListToFrontend(rebuiltList)
-            saveAutobaseKey(result.key, keyFilePath)
-            saveEncryptionKey(result.encryptionKey, encKeyFilePath)
-
-            // Send invite to frontend
-            const z32Invite = createInvite()
-            if (z32Invite && rpc) {
-                const req = rpc.request(RPC_GET_KEY)
-                req.send(z32Invite)
+            // 5. Check writability
+            if (autobase.writable) {
+                console.error('[INFO] Guest is already writable')
+                broadcastMessage({ type: 'join-success' })
+                cleanupTempSwarm()
+            } else {
+                console.error('[INFO] Guest not yet writable — starting waitForWritable polling')
+                setIsPendingJoinSuccess(true)
+                waitForWritable()
             }
-            broadcastMessage({ type: 'join-success' })
         } catch (e) {
             console.error('[ERROR] joinViaInvite failed:', e)
+            setIsPendingJoinSuccess(false)
             broadcastMessage({
                 type: 'join-error',
                 message: e?.message || 'Failed to join peer'
@@ -443,31 +500,19 @@ export async function joinViaInvite(z32InviteStr) {
                 const syncReq = rpc.request(SYNC_LIST)
                 syncReq.send(JSON.stringify(previousList))
             }
-            if (commitStarted) {
+            // Rollback to previous base if we already tore down
+            if (previousBaseKey) {
                 try {
                     setEncryptionKey(previousEncryptionKey)
                     await initAutobase(previousBaseKey)
                 } catch (rollbackError) {
-                    console.error('[ERROR] Failed to rollback previous session after join failure:', rollbackError)
+                    console.error('[ERROR] Failed to rollback previous session:', rollbackError)
                 }
             }
         } finally {
-            try {
-                if (tempPairing) await tempPairing.close()
-            } catch (err) {
-                console.error('[ERROR] Failed to close temp pairing:', err)
+            if (!isPendingJoinSuccess) {
+                cleanupTempSwarm()
             }
-            try {
-                if (tempSwarm) await tempSwarm.destroy()
-            } catch (err) {
-                console.error('[ERROR] Failed to close temp swarm:', err)
-            }
-            try {
-                if (tempStore) await tempStore.close()
-            } catch (err) {
-                console.error('[ERROR] Failed to close temp store:', err)
-            }
-            rmrfSafe(tempStoragePath)
         }
     })()
 
@@ -475,37 +520,6 @@ export async function joinViaInvite(z32InviteStr) {
     finally { _joinPromise = null }
 }
 
-export async function nukeData() {
-    console.error('[INFO] NUKE: starting full wipe and reinit')
-
-    // 1. Tear down autobase, swarm, store, pairing
-    await tearDownAutobaseSwarmStore()
-
-    // 2. Delete all persisted files
-    const baseStoragePath = `${storagePath}-local`
-    rmrfSafe(baseStoragePath)
-    rmrfSafe(keyFilePath)
-    rmrfSafe(encKeyFilePath)
-    rmrfSafe(inviteFilePath)
-
-    // 3. Reset in-memory state
-    setBaseKey(null)
-    setEncryptionKey(null)
-    setCurrentInvite(null)
-    setCurrentList([])
-    clearKnownWriters()
-    setAddedStaticPeers(false)
-
-    // 4. Tell frontend to clear its list
-    if (rpc) {
-        const resetReq = rpc.request(RPC_RESET)
-        resetReq.send('')
-    }
-
-    // 5. Fresh autobase — new keys, new invite
-    console.error('[INFO] NUKE: reinitializing fresh autobase')
-    return initAutobase(null)
-}
 
 function broadcastPeerCount() {
     broadcastMessage({ type: 'peer-count', count: peerCount })

@@ -12,14 +12,13 @@ import {
     RPC_DELETE_FROM_BACKEND,
     SYNC_LIST,
     RPC_REQUEST_SYNC,
-    RPC_CREATE_INVITE,
-    RPC_NUKE
+    RPC_CREATE_INVITE
 } from '../rpc-commands.mjs'
 import b4a from 'b4a'
 import {syncListToFrontend, validateItem, addItem, updateItem, deleteItem} from './lib/item.mjs'
 const { IPC } = BareKit
 import {loadAutobaseKey, saveAutobaseKey, loadEncryptionKey} from "./lib/key.mjs"
-import {initAutobase, joinViaInvite, createInvite, nukeData} from "./lib/network.mjs"
+import {initAutobase, joinViaInvite, createInvite} from "./lib/network.mjs"
 import {
     autobase,
     store,
@@ -161,11 +160,6 @@ let rpcGenerated = new RPC(IPC, async (req, error) => {
                 syncListToFrontend()
                 break
             }
-            case RPC_NUKE: {
-                console.error('[INFO] Command RPC_NUKE - wiping all data and reinitializing')
-                await nukeData()
-                break
-            }
         }
     } catch (err) {
         console.error('[ERROR] Error handling RPC request:', err)
@@ -255,16 +249,13 @@ export async function apply (nodes, view, host) {
         if (value.type === 'add-writer' && typeof value.key === 'string') {
             try {
                 const writerKey = Buffer.from(value.key, 'hex')
-                await host.addWriter(writerKey, { indexer: false })
+                await host.addWriter(writerKey, { indexer: true })
                 console.error('[INFO] Added writer from add-writer op:', value.key)
 
-                // If we just became writable (our key was added), save the base key
-                if (autobase && autobase.local) {
+                // Log which key was added vs our own key (for debugging)
+                if (autobase?.local) {
                     const ourKeyHex = autobase.local.key.toString('hex')
-                    if (value.key === ourKeyHex && autobase.writable) {
-                        saveAutobaseKey(autobase.key, keyFilePath)
-                        console.error('[INFO] We became writable! Saved autobase key for persistence.')
-                    }
+                    console.error('[INFO] add-writer key:', value.key, '| our key:', ourKeyHex, '| match:', value.key === ourKeyHex)
                 }
             } catch (err) {
                 console.error('[ERROR] Failed to add writer from add-writer op:', err)
