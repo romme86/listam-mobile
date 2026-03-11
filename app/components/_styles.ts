@@ -233,4 +233,18 @@ export const joiningStyles = StyleSheet.create({
         fontWeight: '600',
         color: '#666',
     },
+    phaseRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 12,
+    },
+    phaseDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#ddd',
+    },
+    phaseDotActive: {
+        backgroundColor: '#333',
+    },
 })

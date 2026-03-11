@@ -78,6 +78,13 @@ function waitForWritable() {
         } catch (e) {
             console.error('[ERROR] waitForWritable update failed:', e)
         }
+        // Clean up temp swarm as soon as main swarm has connections
+        // (prevents host from seeing double peer count)
+        if (_tempSwarm && swarm?.connections?.size > 0) {
+            console.error('[INFO] Main swarm connected, cleaning up temp swarm')
+            cleanupTempSwarm()
+        }
+
         // Sync whatever items have replicated so far
         try {
             const list = await rebuildListFromPersistedOps()
@@ -93,11 +100,22 @@ function waitForWritable() {
         }
 
         if (autobase?.writable) {
-            setIsPendingJoinSuccess(false)
             if (autobase.key) saveAutobaseKey(autobase.key, keyFilePath)
             console.error('[INFO] Guest became writable after', attempts, 'attempt(s)')
-            broadcastMessage({ type: 'join-success' })
+
+            // Phase 3: syncing — wait for main swarm peer connection
+            if (swarm?.connections?.size > 0) {
+                // Already connected, done!
+                setIsPendingJoinSuccess(false)
+                broadcastMessage({ type: 'join-success' })
+                cleanupTempSwarm()
+                return
+            }
+
+            // Switch to syncing phase and wait for main swarm connection
+            broadcastJoinPhase('syncing')
             cleanupTempSwarm()
+            waitForPeerConnection(MAX_ATTEMPTS - attempts)
             return
         }
         if (attempts >= MAX_ATTEMPTS) {
@@ -110,6 +128,37 @@ function waitForWritable() {
             cleanupTempSwarm()
             return
         }
+        _writableCheckTimer = setTimeout(check, 1000)
+    }
+
+    _writableCheckTimer = setTimeout(check, 1000)
+}
+
+// Waits for the main swarm to establish at least one peer connection
+// (phase 3: "syncing"). Once connected, the guest's green badge appears.
+function waitForPeerConnection(remainingAttempts) {
+    let attempts = 0
+    const maxAttempts = Math.max(remainingAttempts, 30)
+
+    function check() {
+        if (!isPendingJoinSuccess) return
+        attempts++
+
+        if (swarm?.connections?.size > 0) {
+            setIsPendingJoinSuccess(false)
+            console.error('[INFO] Guest main swarm connected after', attempts, 'syncing attempt(s)')
+            broadcastMessage({ type: 'join-success' })
+            return
+        }
+
+        if (attempts >= maxAttempts) {
+            // Timed out waiting for peer, but we ARE writable — still success
+            setIsPendingJoinSuccess(false)
+            console.error('[INFO] Syncing phase timed out, but guest is writable — sending join-success anyway')
+            broadcastMessage({ type: 'join-success' })
+            return
+        }
+
         _writableCheckTimer = setTimeout(check, 1000)
     }
 
@@ -160,10 +209,6 @@ export function setupBlindPairing() {
 
             // Allow multiple successful pairings per invite for smoother retries.
             inviteUsesRemaining = Math.max(0, inviteUsesRemaining - 1)
-
-            // Track peer + auto-create next invite
-            setPeerCount(peerCount + 1)
-            broadcastPeerCount()
 
             // Rotate invite only after the usage budget is exhausted.
             if (inviteUsesRemaining <= 0) {
@@ -263,6 +308,27 @@ export async function initAutobase(newBaseKey) {
             baseKey ? baseKey.toString('hex') : '(new base)'
         )
 
+        // Clear stale user data from the local core ONLY when the base key
+        // is changing (e.g. guest joining a host's base).  boot.js reads
+        // 'autobase/encryption' from the local core and uses it over the
+        // key passed via opts.  Without clearing on base-key change, a
+        // guest that previously ran its own fresh base would keep the OLD
+        // encryption key instead of the one received via blind pairing.
+        // On a normal restart (same base key), we must NOT clear — doing
+        // so would wipe the boot record and break persistence.
+        if (baseKey) {
+            const lc = store.get({ name: 'local' })
+            await lc.ready()
+            const existingRef = await lc.getUserData('referrer')
+            if (!existingRef || !b4a.equals(existingRef, baseKey)) {
+                await lc.setUserData('autobase/encryption', null)
+                await lc.setUserData('autobase/boot', null)
+                await lc.setUserData('referrer', null)
+                console.error('[INFO] Cleared stale local-core user data (base key changed)')
+            }
+            await lc.close()
+        }
+
         const autobaseOpts = {
             apply, open,
             valueEncoding: 'json',
@@ -270,7 +336,7 @@ export async function initAutobase(newBaseKey) {
             encryptionKey: encryptionKey || undefined
         }
         setAutobase(new Autobase(store, baseKey, autobaseOpts))
-        console.error('[INFO] Calling autobase.ready()...')
+        console.error('[INFO] Calling autobase.ready()... encKey:', encryptionKey ? encryptionKey.toString('hex').slice(0, 16) + '...' : 'none')
         try {
             await autobase.ready()
         } catch (e) {
@@ -286,10 +352,12 @@ export async function initAutobase(newBaseKey) {
             throw e
         }
         console.error(
-            '[INFO] autobase.ready() resolved. Autobase ready, writable?',
+            '[INFO] autobase.ready() resolved. writable?',
             autobase.writable,
-            ' key:',
+            '| key:',
             autobase.key?.toString('hex'),
+            '| encKey:',
+            autobase.encryptionKey ? autobase.encryptionKey.toString('hex').slice(0, 16) + '...' : 'none',
         )
 
         // Save the autobase key for persistence across restarts
@@ -355,10 +423,10 @@ export async function initAutobase(newBaseKey) {
             conn.on('error', (err) => {
                 console.error('[ERROR] Replication connection error:', err)
             })
-            setPeerCount(peerCount + 1)
+            setPeerCount(swarm.connections.size)
             broadcastPeerCount()
             conn.on('close', () => {
-                setPeerCount(Math.max(0, peerCount - 1))
+                setPeerCount(swarm.connections.size)
                 broadcastPeerCount()
             })
             if (autobase) {
@@ -411,6 +479,9 @@ export async function joinViaInvite(z32InviteStr) {
                 throw new Error('Invite is empty or invalid')
             }
 
+            // Notify frontend: phase 1 — pairing
+            broadcastJoinPhase('pairing')
+
             // 1. Derive writer key from the already-open autobase's local core.
             //    autobase.local.key is stable across teardown/reinit of the same
             //    storage path, so the host will add the right key.
@@ -447,6 +518,9 @@ export async function joinViaInvite(z32InviteStr) {
             if (!result?.key || !result?.encryptionKey) {
                 throw new Error('Pairing returned incomplete credentials')
             }
+
+            // Notify frontend: phase 2 — permission (waiting for write access)
+            broadcastJoinPhase('permission')
 
             console.error('[INFO] Blind pairing succeeded. Host base key:', result.key.toString('hex'))
             console.error('[INFO] Temp swarm connections after pairing:', _tempSwarm.connections.size)
@@ -523,6 +597,10 @@ export async function joinViaInvite(z32InviteStr) {
 
 function broadcastPeerCount() {
     broadcastMessage({ type: 'peer-count', count: peerCount })
+}
+
+function broadcastJoinPhase(phase) {
+    broadcastMessage({ type: 'join-phase', phase })
 }
 
 function broadcastMessage(payload) {

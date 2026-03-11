@@ -40,6 +40,8 @@ function getGlobalState(): GlobalWorkletState {
     return g[GLOBAL_KEY] as GlobalWorkletState
 }
 
+export type JoinPhase = 'pairing' | 'permission' | 'syncing' | null
+
 type UseWorkletResult = {
     dataList: ListEntry[]
     setDataList: React.Dispatch<React.SetStateAction<ListEntry[]>>
@@ -49,6 +51,7 @@ type UseWorkletResult = {
     isJoining: boolean
     setIsJoining: React.Dispatch<React.SetStateAction<boolean>>
     isJoiningRef: React.MutableRefObject<boolean>
+    joinPhase: JoinPhase
     sendRPC: (command: number, payload?: string) => void
 }
 
@@ -58,6 +61,7 @@ export function useWorklet(): UseWorkletResult {
     const [autobaseInviteKey, setAutobaseInviteKey] = useState('')
     const [peerCount, setPeerCount] = useState(0)
     const [isJoining, setIsJoining] = useState(false)
+    const [joinPhase, setJoinPhase] = useState<JoinPhase>(null)
 
     const rpcRef = useRef<any>(null)
     const workletRef = useRef<Worklet | null>(null)
@@ -101,15 +105,19 @@ export function useWorklet(): UseWorkletResult {
                         if (payload.type === 'peer-count') {
                             const count = typeof payload.count === 'number' ? payload.count : 0
                             setPeerCount(count)
+                        } else if (payload.type === 'join-phase') {
+                            setJoinPhase(payload.phase || null)
                         } else if (payload.type === 'not-writable') {
                             Alert.alert('Please wait', payload.message || 'You are not yet authorized to modify the list. Please wait a moment.')
                         } else if (payload.type === 'join-success') {
+                            setJoinPhase(null)
                             if (isJoiningRef.current) {
                                 isJoiningRef.current = false
                                 setIsJoining(false)
                             }
                             Alert.alert('Success!', 'Connected to peer successfully. Your lists are now synced.')
                         } else if (payload.type === 'join-error') {
+                            setJoinPhase(null)
                             if (isJoiningRef.current) {
                                 isJoiningRef.current = false
                                 setIsJoining(false)
@@ -163,7 +171,7 @@ export function useWorklet(): UseWorkletResult {
                 if (reqFromBackend.data) {
                     console.log('data from bare', b4a.toString(reqFromBackend.data))
                     const itemToAdd = JSON.parse(b4a.toString(reqFromBackend.data))
-                    setDataList((prevList) => [itemToAdd, ...prevList])
+                    setDataList((prevList) => [itemToAdd, ...prevList.filter((item) => item.text !== itemToAdd.text)])
                 }
             }
             if (reqFromBackend.command === RPC_GET_KEY) {
@@ -214,6 +222,7 @@ export function useWorklet(): UseWorkletResult {
         isJoining,
         setIsJoining,
         isJoiningRef,
+        joinPhase,
         sendRPC,
     }
 }

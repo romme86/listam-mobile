@@ -42,6 +42,7 @@ export default function App() {
         isJoining,
         setIsJoining,
         isJoiningRef,
+        joinPhase,
         sendRPC,
     } = useWorklet()
 
@@ -409,13 +410,14 @@ export default function App() {
                 <JoiningOverlay
                     visible={isJoining}
                     currentMessageIndex={currentP2PMessage}
+                    joinPhase={joinPhase}
                     onCancel={handleJoiningCancel}
                 />
                 {isGridView ? (
                     <VisualGridList
                         data={dataList.length === 0 ? DEFAULT_INSTRUCTIONS : dataList}
-                        onToggleDone={dataList.length === 0 ? () => {} : handleToggleDone}
-                        onDelete={dataList.length === 0 ? () => {} : handleDelete}
+                        onToggleDone={handleToggleDone}
+                        onDelete={handleDelete}
                         onInsert={handleInsert}
                         categoriesEnabled={categoriesEnabled}
                         categoryHeadersVisible={categoryHeadersVisible}
@@ -425,8 +427,8 @@ export default function App() {
                 ) : (
                     <InertialElasticList
                         data={dataList.length === 0 ? DEFAULT_INSTRUCTIONS : dataList}
-                        onToggleDone={dataList.length === 0 ? () => {} : handleToggleDone}
-                        onDelete={dataList.length === 0 ? () => {} : handleDelete}
+                        onToggleDone={handleToggleDone}
+                        onDelete={handleDelete}
                         onInsert={handleInsert}
                         categoriesEnabled={categoriesEnabled}
                         categoryHeadersVisible={categoryHeadersVisible}
