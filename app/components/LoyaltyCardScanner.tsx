@@ -8,6 +8,7 @@ import {
     StyleSheet,
     KeyboardAvoidingView,
     Platform,
+    Linking,
 } from 'react-native'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { Ionicons } from '@expo/vector-icons'
@@ -29,6 +30,15 @@ export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyC
     const [permission, requestPermission] = useCameraPermissions()
     const [scannedData, setScannedData] = useState<{ data: string; type: string } | null>(null)
     const [storeName, setStoreName] = useState('')
+
+    const handlePermissionContinue = async () => {
+        if (permission && !permission.granted && permission.canAskAgain === false) {
+            await Linking.openSettings()
+            return
+        }
+
+        await requestPermission()
+    }
 
     const handleBarcodeScanned = ({ data, type }: { data: string; type: string }) => {
         if (scannedData) return
@@ -56,18 +66,15 @@ export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyC
 
     if (!permission?.granted) {
         return (
-            <Modal visible={visible} animationType="slide" onRequestClose={resetAndClose}>
+            <Modal visible={visible} animationType="slide" onRequestClose={handlePermissionContinue}>
                 <View style={scannerStyles.permissionContainer}>
                     <Ionicons name="camera-outline" size={64} color="#999" />
                     <Text style={scannerStyles.permissionTitle}>Camera Permission Needed</Text>
                     <Text style={scannerStyles.permissionText}>
                         We need camera access to scan loyalty card barcodes.
                     </Text>
-                    <TouchableOpacity style={scannerStyles.permissionButton} onPress={requestPermission}>
-                        <Text style={scannerStyles.permissionButtonText}>Grant Permission</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={scannerStyles.cancelButton} onPress={resetAndClose}>
-                        <Text style={scannerStyles.cancelButtonText}>Cancel</Text>
+                    <TouchableOpacity style={scannerStyles.permissionButton} onPress={handlePermissionContinue}>
+                        <Text style={scannerStyles.permissionButtonText}>Continue</Text>
                     </TouchableOpacity>
                 </View>
             </Modal>
