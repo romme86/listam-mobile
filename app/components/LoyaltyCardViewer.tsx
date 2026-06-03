@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import {
     Modal,
     View,
@@ -7,8 +7,10 @@ import {
     StyleSheet,
     Alert,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import Svg, { Rect } from 'react-native-svg'
+import { useTheme, type Theme } from '../theme'
 import type { LoyaltyCard } from './LoyaltyCardScanner'
 
 const QRCode = require('qrcode-terminal/vendor/QRCode')
@@ -182,7 +184,7 @@ function QRCodeGraphic({ value, size = 240 }: { value: string; size?: number }) 
     const cellSize = size / moduleCount
 
     return (
-        <View style={viewerStyles.qrFrame}>
+        <View style={frameStyles.qrFrame}>
             <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
                 <Rect x={0} y={0} width={size} height={size} fill="#fff" />
                 {qr.modules.map((row: boolean[], rowIndex: number) =>
@@ -221,7 +223,7 @@ function BarcodeGraphic({
     const barWidth = (width - quietZone * 2) / encoding.bits.length
 
     return (
-        <View style={viewerStyles.barcodeFrame}>
+        <View style={frameStyles.barcodeFrame}>
             <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
                 <Rect x={0} y={0} width={width} height={height} fill="#fff" />
                 {encoding.bits.split('').map((bit, index) => (
@@ -237,7 +239,7 @@ function BarcodeGraphic({
                     ) : null
                 ))}
             </Svg>
-            <Text style={viewerStyles.barcodeCaption}>{encoding.label}</Text>
+            <Text style={frameStyles.barcodeCaption}>{encoding.label}</Text>
         </View>
     )
 }
@@ -250,6 +252,10 @@ type LoyaltyCardViewerProps = {
 }
 
 export function LoyaltyCardViewer({ visible, card, onClose, onDelete }: LoyaltyCardViewerProps) {
+    const t = useTheme()
+    const insets = useSafeAreaInsets()
+    const styles = useMemo(() => makeStyles(t), [t])
+
     if (!card) return null
     const normalizedType = card.type.toLowerCase()
     const isQrCard = normalizedType.includes('qr')
@@ -274,62 +280,31 @@ export function LoyaltyCardViewer({ visible, card, onClose, onDelete }: LoyaltyC
 
     return (
         <Modal visible={visible} animationType="fade" onRequestClose={onClose}>
-            <View style={viewerStyles.container}>
-                <View style={viewerStyles.header}>
-                    <TouchableOpacity style={viewerStyles.closeButton} onPress={onClose}>
-                        <Ionicons name="close" size={28} color="#333" />
+            <View style={styles.container}>
+                <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+                    <TouchableOpacity style={styles.closeButton} onPress={onClose} accessibilityRole="button">
+                        <Ionicons name="close" size={28} color={t.colors.text} />
                     </TouchableOpacity>
-                    <TouchableOpacity style={viewerStyles.deleteButton} onPress={handleDelete}>
-                        <Ionicons name="trash-outline" size={22} color="#d00" />
+                    <TouchableOpacity style={styles.deleteButton} onPress={handleDelete} accessibilityRole="button">
+                        <Ionicons name="trash-outline" size={22} color={t.colors.danger} />
                     </TouchableOpacity>
                 </View>
 
-                <View style={viewerStyles.content}>
-                    <Text style={viewerStyles.storeName}>{card.name}</Text>
+                <View style={styles.content}>
+                    <Text style={styles.storeName}>{card.name}</Text>
                     {isQrCard && <QRCodeGraphic value={card.data} />}
                     {!isQrCard && <BarcodeGraphic value={card.data} type={card.type} />}
-                    <Text style={viewerStyles.barcodeData}>{card.data}</Text>
-                    <Text style={viewerStyles.barcodeType}>{card.type}</Text>
+                    <Text style={styles.barcodeData}>{card.data}</Text>
+                    <Text style={styles.barcodeType}>{card.type}</Text>
                 </View>
             </View>
         </Modal>
     )
 }
 
-const viewerStyles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#fff',
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingTop: 60,
-        paddingHorizontal: 20,
-    },
-    closeButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#f0f0f0',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    deleteButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: '#fee',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    content: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 40,
-    },
+// The code graphics stay on a white card with dark modules so scanners can
+// always read them, regardless of the app theme.
+const frameStyles = StyleSheet.create({
     qrFrame: {
         padding: 14,
         borderRadius: 20,
@@ -365,24 +340,61 @@ const viewerStyles = StyleSheet.create({
         color: '#333',
         letterSpacing: 1.4,
     },
-    storeName: {
-        fontSize: 32,
-        fontWeight: '700',
-        color: '#333',
-        marginBottom: 32,
-    },
-    barcodeData: {
-        fontSize: 20,
-        fontWeight: '500',
-        color: '#333',
-        textAlign: 'center',
-        letterSpacing: 0.6,
-        marginBottom: 16,
-    },
-    barcodeType: {
-        fontSize: 13,
-        color: '#999',
-        textTransform: 'uppercase',
-        letterSpacing: 1,
-    },
 })
+
+function makeStyles(t: Theme) {
+    return StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: t.colors.bg,
+        },
+        header: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingHorizontal: t.spacing.lg,
+        },
+        closeButton: {
+            width: 44,
+            height: 44,
+            borderRadius: t.radius.pill,
+            backgroundColor: t.colors.surfaceAlt,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        deleteButton: {
+            width: 44,
+            height: 44,
+            borderRadius: t.radius.pill,
+            backgroundColor: t.colors.dangerSurface,
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        content: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: 40,
+        },
+        storeName: {
+            fontSize: 32,
+            fontWeight: '700',
+            color: t.colors.text,
+            marginBottom: 32,
+        },
+        barcodeData: {
+            fontSize: 20,
+            fontWeight: '500',
+            color: t.colors.text,
+            textAlign: 'center',
+            letterSpacing: 0.6,
+            marginBottom: 16,
+        },
+        barcodeType: {
+            fontSize: 13,
+            color: t.colors.textTertiary,
+            textTransform: 'uppercase',
+            letterSpacing: 1,
+        },
+    })
+}

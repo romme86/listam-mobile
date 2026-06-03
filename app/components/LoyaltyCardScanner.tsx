@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
     Modal,
     View,
@@ -10,8 +10,10 @@ import {
     Platform,
     Linking,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { Ionicons } from '@expo/vector-icons'
+import { useTheme, type Theme } from '../theme'
 
 export type LoyaltyCard = {
     id: string
@@ -27,6 +29,9 @@ type LoyaltyCardScannerProps = {
 }
 
 export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyCardScannerProps) {
+    const t = useTheme()
+    const insets = useSafeAreaInsets()
+    const styles = useMemo(() => makeStyles(t), [t])
     const [permission, requestPermission] = useCameraPermissions()
     const [scannedData, setScannedData] = useState<{ data: string; type: string } | null>(null)
     const [storeName, setStoreName] = useState('')
@@ -36,7 +41,6 @@ export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyC
             await Linking.openSettings()
             return
         }
-
         await requestPermission()
     }
 
@@ -67,14 +71,14 @@ export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyC
     if (!permission?.granted) {
         return (
             <Modal visible={visible} animationType="slide" onRequestClose={handlePermissionContinue}>
-                <View style={scannerStyles.permissionContainer}>
-                    <Ionicons name="camera-outline" size={64} color="#999" />
-                    <Text style={scannerStyles.permissionTitle}>Camera Permission Needed</Text>
-                    <Text style={scannerStyles.permissionText}>
+                <View style={styles.permissionContainer}>
+                    <Ionicons name="camera-outline" size={64} color={t.colors.textTertiary} />
+                    <Text style={styles.permissionTitle}>Camera Permission Needed</Text>
+                    <Text style={styles.permissionText}>
                         We need camera access to scan loyalty card barcodes.
                     </Text>
-                    <TouchableOpacity style={scannerStyles.permissionButton} onPress={handlePermissionContinue}>
-                        <Text style={scannerStyles.permissionButtonText}>Continue</Text>
+                    <TouchableOpacity style={styles.permissionButton} onPress={handlePermissionContinue} accessibilityRole="button">
+                        <Text style={styles.permissionButtonText}>Continue</Text>
                     </TouchableOpacity>
                 </View>
             </Modal>
@@ -83,7 +87,7 @@ export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyC
 
     return (
         <Modal visible={visible} animationType="slide" onRequestClose={resetAndClose}>
-            <View style={scannerStyles.container}>
+            <View style={styles.container}>
                 <CameraView
                     style={StyleSheet.absoluteFill}
                     facing="back"
@@ -107,47 +111,53 @@ export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyC
                     onBarcodeScanned={scannedData ? undefined : handleBarcodeScanned}
                 />
 
-                <TouchableOpacity style={scannerStyles.closeButton} onPress={resetAndClose}>
+                <TouchableOpacity
+                    style={[styles.closeButton, { top: insets.top + 12 }]}
+                    onPress={resetAndClose}
+                    accessibilityRole="button"
+                >
                     <Ionicons name="close" size={28} color="#fff" />
                 </TouchableOpacity>
 
                 {!scannedData && (
-                    <View style={scannerStyles.hintContainer}>
-                        <Text style={scannerStyles.hintText}>Point camera at a barcode or QR code</Text>
+                    <View style={styles.hintContainer}>
+                        <Text style={styles.hintText}>Point camera at a barcode or QR code</Text>
                     </View>
                 )}
 
                 {scannedData && (
                     <KeyboardAvoidingView
-                        style={scannerStyles.nameOverlay}
+                        style={styles.nameOverlay}
                         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     >
-                        <View style={scannerStyles.nameCard}>
-                            <Text style={scannerStyles.nameTitle}>Card Scanned!</Text>
-                            <Text style={scannerStyles.nameSubtitle}>Enter a name for this card</Text>
+                        <View style={styles.nameCard}>
+                            <Text style={styles.nameTitle}>Card Scanned!</Text>
+                            <Text style={styles.nameSubtitle}>Enter a name for this card</Text>
                             <TextInput
-                                style={scannerStyles.nameInput}
+                                style={styles.nameInput}
                                 placeholder="e.g. Migros, Coop..."
-                                placeholderTextColor="#999"
+                                placeholderTextColor={t.colors.placeholder}
                                 value={storeName}
                                 onChangeText={setStoreName}
                                 autoFocus
                                 returnKeyType="done"
                                 onSubmitEditing={handleSave}
                             />
-                            <View style={scannerStyles.nameButtons}>
+                            <View style={styles.nameButtons}>
                                 <TouchableOpacity
-                                    style={scannerStyles.nameCancel}
+                                    style={styles.nameCancel}
                                     onPress={() => setScannedData(null)}
+                                    accessibilityRole="button"
                                 >
-                                    <Text style={scannerStyles.nameCancelText}>Rescan</Text>
+                                    <Text style={styles.nameCancelText}>Rescan</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
-                                    style={[scannerStyles.nameSave, !storeName.trim() && { opacity: 0.4 }]}
+                                    style={[styles.nameSave, !storeName.trim() && { opacity: 0.4 }]}
                                     onPress={handleSave}
                                     disabled={!storeName.trim()}
+                                    accessibilityRole="button"
                                 >
-                                    <Text style={scannerStyles.nameSaveText}>Save</Text>
+                                    <Text style={styles.nameSaveText}>Save</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -158,137 +168,131 @@ export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyC
     )
 }
 
-const scannerStyles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#000',
-    },
-    closeButton: {
-        position: 'absolute',
-        top: 60,
-        right: 20,
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 10,
-    },
-    hintContainer: {
-        position: 'absolute',
-        bottom: 120,
-        left: 0,
-        right: 0,
-        alignItems: 'center',
-    },
-    hintText: {
-        color: '#fff',
-        fontSize: 16,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 20,
-        overflow: 'hidden',
-    },
-    nameOverlay: {
-        ...StyleSheet.absoluteFillObject,
-        justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0,0,0,0.6)',
-    },
-    nameCard: {
-        backgroundColor: '#fff',
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        padding: 24,
-        paddingBottom: 40,
-    },
-    nameTitle: {
-        fontSize: 20,
-        fontWeight: '600',
-        color: '#333',
-        marginBottom: 4,
-    },
-    nameSubtitle: {
-        fontSize: 14,
-        color: '#666',
-        marginBottom: 16,
-    },
-    nameInput: {
-        borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 10,
-        padding: 14,
-        fontSize: 16,
-        color: '#333',
-        marginBottom: 16,
-    },
-    nameButtons: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    nameCancel: {
-        flex: 1,
-        paddingVertical: 14,
-        borderRadius: 10,
-        backgroundColor: '#f0f0f0',
-        alignItems: 'center',
-    },
-    nameCancelText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333',
-    },
-    nameSave: {
-        flex: 1,
-        paddingVertical: 14,
-        borderRadius: 10,
-        backgroundColor: '#333',
-        alignItems: 'center',
-    },
-    nameSaveText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#fff',
-    },
-    permissionContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#fff',
-        padding: 40,
-    },
-    permissionTitle: {
-        fontSize: 20,
-        fontWeight: '600',
-        color: '#333',
-        marginTop: 20,
-        marginBottom: 8,
-    },
-    permissionText: {
-        fontSize: 14,
-        color: '#666',
-        textAlign: 'center',
-        marginBottom: 24,
-    },
-    permissionButton: {
-        paddingVertical: 14,
-        paddingHorizontal: 32,
-        borderRadius: 10,
-        backgroundColor: '#333',
-        marginBottom: 12,
-    },
-    permissionButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#fff',
-    },
-    cancelButton: {
-        paddingVertical: 14,
-        paddingHorizontal: 32,
-    },
-    cancelButtonText: {
-        fontSize: 16,
-        color: '#666',
-    },
-})
+function makeStyles(t: Theme) {
+    return StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: '#000',
+        },
+        closeButton: {
+            position: 'absolute',
+            right: 20,
+            width: 44,
+            height: 44,
+            borderRadius: 22,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 10,
+        },
+        hintContainer: {
+            position: 'absolute',
+            bottom: 120,
+            left: 0,
+            right: 0,
+            alignItems: 'center',
+        },
+        hintText: {
+            color: '#fff',
+            fontSize: 16,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            paddingHorizontal: 20,
+            paddingVertical: 10,
+            borderRadius: 20,
+            overflow: 'hidden',
+        },
+        nameOverlay: {
+            ...StyleSheet.absoluteFillObject,
+            justifyContent: 'flex-end',
+            backgroundColor: 'rgba(0,0,0,0.6)',
+        },
+        nameCard: {
+            backgroundColor: t.colors.surface,
+            borderTopLeftRadius: t.radius.xl,
+            borderTopRightRadius: t.radius.xl,
+            padding: t.spacing.xl,
+            paddingBottom: 40,
+        },
+        nameTitle: {
+            fontSize: t.type.title.fontSize,
+            fontWeight: t.type.title.fontWeight,
+            color: t.colors.text,
+            marginBottom: t.spacing.xs,
+        },
+        nameSubtitle: {
+            fontSize: t.type.label.fontSize,
+            color: t.colors.textSecondary,
+            marginBottom: t.spacing.lg,
+        },
+        nameInput: {
+            borderWidth: 1,
+            borderColor: t.colors.border,
+            backgroundColor: t.colors.surfaceAlt,
+            borderRadius: t.radius.sm,
+            padding: 14,
+            fontSize: t.type.body.fontSize,
+            color: t.colors.text,
+            marginBottom: t.spacing.lg,
+        },
+        nameButtons: {
+            flexDirection: 'row',
+            gap: t.spacing.md,
+        },
+        nameCancel: {
+            flex: 1,
+            paddingVertical: 14,
+            borderRadius: t.radius.sm,
+            backgroundColor: t.colors.surfaceSunken,
+            alignItems: 'center',
+        },
+        nameCancelText: {
+            fontSize: t.type.bodyStrong.fontSize,
+            fontWeight: '600',
+            color: t.colors.text,
+        },
+        nameSave: {
+            flex: 1,
+            paddingVertical: 14,
+            borderRadius: t.radius.sm,
+            backgroundColor: t.colors.primary,
+            alignItems: 'center',
+        },
+        nameSaveText: {
+            fontSize: t.type.bodyStrong.fontSize,
+            fontWeight: '600',
+            color: t.colors.onPrimary,
+        },
+        permissionContainer: {
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: t.colors.bg,
+            padding: 40,
+        },
+        permissionTitle: {
+            fontSize: t.type.title.fontSize,
+            fontWeight: t.type.title.fontWeight,
+            color: t.colors.text,
+            marginTop: t.spacing.lg,
+            marginBottom: t.spacing.sm,
+        },
+        permissionText: {
+            fontSize: t.type.label.fontSize,
+            color: t.colors.textSecondary,
+            textAlign: 'center',
+            marginBottom: t.spacing.xl,
+        },
+        permissionButton: {
+            paddingVertical: 14,
+            paddingHorizontal: t.spacing.xxl,
+            borderRadius: t.radius.sm,
+            backgroundColor: t.colors.primary,
+            marginBottom: t.spacing.md,
+        },
+        permissionButtonText: {
+            fontSize: t.type.bodyStrong.fontSize,
+            fontWeight: '600',
+            color: t.colors.onPrimary,
+        },
+    })
+}

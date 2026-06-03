@@ -1,6 +1,6 @@
 {
   "private": true,
-  "name": "listam",
+  "name": "listam-mobile",
   "description": "A minimalistic p2p list app",
   "main": "expo-router/entry",
   "scripts": {
@@ -8,6 +8,9 @@
     "android": "npm run bundle:backend:android && expo run:android",
     "android:release": "cd android && ./gradlew bundleRelease",
     "ios": "npm run bundle:backend:ios && expo run:ios --device",
+    "test:grocery": "node scripts/test-grocery-intelligence.mjs",
+    "test:security": "node --test backend/lib/*.test.mjs",
+    "typecheck": "tsc --noEmit",
     "bundle:backend:ios": "npx bare-pack --target ios --linked backend/backend.mjs --encoding base64 --out app/app.ios.bundle && node scripts/wrap-bare-bundle.mjs app/app.ios.bundle app/app.ios.bundle.mjs",
     "bundle:backend:android": "npx bare-pack --target android --linked backend/backend.mjs --encoding base64 --out app/assets/backend.android.bundle && node scripts/wrap-bare-bundle.mjs app/assets/backend.android.bundle app/assets/backend.android.bundle.mjs"
   },

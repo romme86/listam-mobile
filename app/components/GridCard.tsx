@@ -1,4 +1,4 @@
-import React, { useRef, useCallback } from 'react'
+import React, { useRef, useCallback, useMemo } from 'react'
 import {
     Animated,
     View,
@@ -6,9 +6,11 @@ import {
     Image,
     StyleSheet,
     TouchableOpacity,
+    Alert,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
-import * as Haptics from 'expo-haptics'
+import { haptics } from '../feedback'
+import { useTheme, type Theme } from '../theme'
 import type { ListEntry } from './_types'
 import { getIconForItem, type ItemIconVariant } from './itemIconMap'
 
@@ -22,63 +24,87 @@ type GridCardProps = {
     onToggleDone?: (index: number) => void
     onDelete?: (index: number) => void
     itemIconVariant?: ItemIconVariant
+    reduceMotion?: boolean
 }
 
 export function GridCard({
     item,
     originalIndex,
-    cardKey,
     cardWidth,
     onToggleDone,
     onDelete,
     itemIconVariant = 'illustrated',
+    reduceMotion = false,
 }: GridCardProps) {
+    const t = useTheme()
+    const styles = useMemo(() => makeStyles(t), [t])
     const bubbleScale = useRef(new Animated.Value(1)).current
     const bubbleOpacity = useRef(new Animated.Value(0)).current
     const iconSize = Math.max(28, Math.min(cardWidth * 0.68, 76))
 
     const handlePress = useCallback(() => {
-        if (!item.isDone) {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-
-            bubbleScale.setValue(1)
-            bubbleOpacity.setValue(1)
-
-            Animated.sequence([
-                Animated.delay(80),
+        // Commit the state change immediately — feedback animates in parallel,
+        // so the tap never feels delayed.
+        if (item.isDone) {
+            haptics.toggleOff()
+        } else {
+            haptics.toggleOn()
+            if (!reduceMotion) {
+                bubbleScale.setValue(1)
+                bubbleOpacity.setValue(1)
                 Animated.parallel([
                     Animated.timing(bubbleScale, {
-                        toValue: 1.15,
-                        duration: 300,
+                        toValue: 1.25,
+                        duration: 320,
                         useNativeDriver: true,
                     }),
                     Animated.timing(bubbleOpacity, {
                         toValue: 0,
-                        duration: 300,
+                        duration: 320,
                         useNativeDriver: true,
                     }),
-                ]),
-            ]).start(() => {
-                bubbleScale.setValue(1)
-                bubbleOpacity.setValue(0)
-                onToggleDone?.(originalIndex)
-            })
-        } else {
-            onToggleDone?.(originalIndex)
+                ]).start(() => {
+                    bubbleScale.setValue(1)
+                    bubbleOpacity.setValue(0)
+                })
+            }
         }
-    }, [item.isDone, originalIndex, onToggleDone, bubbleScale, bubbleOpacity])
+        onToggleDone?.(originalIndex)
+    }, [item.isDone, originalIndex, onToggleDone, bubbleScale, bubbleOpacity, reduceMotion])
+
+    const confirmDelete = useCallback(() => {
+        Alert.alert(
+            'Remove item',
+            `Remove "${item.text}"?`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Remove',
+                    style: 'destructive',
+                    onPress: () => {
+                        haptics.delete()
+                        onDelete?.(originalIndex)
+                    },
+                },
+            ]
+        )
+    }, [item.text, originalIndex, onDelete])
 
     return (
         <TouchableOpacity
             style={[styles.card, { width: cardWidth }, item.isDone && styles.cardDone]}
             onPress={handlePress}
-            onLongPress={() => onDelete?.(originalIndex)}
-            delayLongPress={500}
+            onLongPress={confirmDelete}
+            delayLongPress={400}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: item.isDone }}
+            accessibilityLabel={item.text}
+            accessibilityHint="Double tap to toggle done. Long-press to remove."
         >
             <View style={styles.iconContainer}>
                 <Image
                     source={getIconForItem(item.text, itemIconVariant).source}
-                    style={[styles.cardIcon, { width: iconSize, height: iconSize }, item.isDone && styles.cardIconDone]}
+                    style={[{ width: iconSize, height: iconSize }, item.isDone && styles.cardIconDone]}
                     resizeMode="contain"
                 />
             </View>
@@ -94,7 +120,7 @@ export function GridCard({
             </Text>
             {item.isDone && (
                 <View style={styles.checkmark}>
-                    <Ionicons name="checkmark-circle" size={18} color="#333" />
+                    <Ionicons name="checkmark-circle" size={18} color={t.colors.accent} />
                 </View>
             )}
             <Animated.View
@@ -111,55 +137,55 @@ export function GridCard({
     )
 }
 
-const styles = StyleSheet.create({
-    card: {
-        aspectRatio: 1,
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        paddingHorizontal: 4,
-        paddingTop: 4,
-        paddingBottom: 2,
-        marginRight: CARD_MARGIN,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#e0e0e0',
-    },
-    cardDone: {
-        backgroundColor: '#fafafa',
-        opacity: 0.6,
-    },
-    iconContainer: {
-        marginBottom: 2,
-    },
-    cardIcon: {
-    },
-    cardIconDone: {
-        opacity: 0.4,
-    },
-    cardText: {
-        fontSize: 11,
-        fontWeight: '600',
-        color: '#333',
-        textAlign: 'center',
-    },
-    cardTextDone: {
-        color: '#999',
-        textDecorationLine: 'line-through',
-    },
-    checkmark: {
-        position: 'absolute',
-        top: 8,
-        right: 8,
-    },
-    bubbleOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor: '#34c759',
-        borderRadius: 12,
-    },
-})
+function makeStyles(t: Theme) {
+    return StyleSheet.create({
+        card: {
+            aspectRatio: 1,
+            backgroundColor: t.colors.surface,
+            borderRadius: t.radius.md,
+            paddingHorizontal: 4,
+            paddingTop: 4,
+            paddingBottom: 2,
+            marginRight: CARD_MARGIN,
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderWidth: 1,
+            borderColor: t.colors.border,
+        },
+        cardDone: {
+            backgroundColor: t.colors.surfaceAlt,
+            opacity: 0.6,
+        },
+        iconContainer: {
+            marginBottom: 2,
+        },
+        cardIconDone: {
+            opacity: 0.4,
+        },
+        cardText: {
+            fontSize: 11,
+            fontWeight: '600',
+            color: t.colors.text,
+            textAlign: 'center',
+        },
+        cardTextDone: {
+            color: t.colors.textDisabled,
+            textDecorationLine: 'line-through',
+        },
+        checkmark: {
+            position: 'absolute',
+            top: 8,
+            right: 8,
+        },
+        bubbleOverlay: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            borderWidth: 2,
+            borderColor: t.colors.accent,
+            borderRadius: t.radius.md,
+        },
+    })
+}

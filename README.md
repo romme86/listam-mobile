@@ -1,6 +1,6 @@
-# Listam
+# Listam Mobile
 
-**Listam** is an experimental, local-first, peer-to-peer collaborative list application built with **React Native**, **Bare**, and **Autobase**.
+**Listam Mobile** is the mobile app repository for Listam, an experimental, local-first, peer-to-peer collaborative list application built with **React Native**, **Bare**, and **Autobase**.
 
 The project explores how far you can push a *real embedded backend* running inside a mobile app, with:
 - no central server
@@ -8,7 +8,7 @@ The project explores how far you can push a *real embedded backend* running insi
 - peer-to-peer synchronization
 - deterministic state reconstruction
 
-This repository is intended as both:
+This `listam-mobile` repository is intended as both:
 - a **working application**, and
 - a **reference architecture** for local-first P2P apps on mobile.
 

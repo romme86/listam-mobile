@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Alert } from 'react-native'
+import { haptics } from '../feedback'
 import * as FileSystemExpo from 'expo-file-system'
 import { toByteArray } from 'base64-js'
 import { Worklet } from 'react-native-bare-kit'
@@ -55,7 +56,10 @@ type UseWorkletResult = {
     sendRPC: (command: number, payload?: string) => void
 }
 
-export function useWorklet(): UseWorkletResult {
+export type NotifyType = 'info' | 'success' | 'error'
+export type NotifyFn = (message: string, type?: NotifyType) => void
+
+export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
     const [dataList, setDataList] = useState<ListEntry[]>([])
     const [isWorkletReady, setIsWorkletReady] = useState(false)
     const [autobaseInviteKey, setAutobaseInviteKey] = useState('')
@@ -66,6 +70,8 @@ export function useWorklet(): UseWorkletResult {
     const rpcRef = useRef<any>(null)
     const workletRef = useRef<Worklet | null>(null)
     const isJoiningRef = useRef(false)
+    const notifyRef = useRef<NotifyFn | undefined>(onNotify)
+    notifyRef.current = onNotify
 
     const sendRPC = useCallback((command: number, payload?: string) => {
         if (!rpcRef.current) {
@@ -108,21 +114,28 @@ export function useWorklet(): UseWorkletResult {
                         } else if (payload.type === 'join-phase') {
                             setJoinPhase(payload.phase || null)
                         } else if (payload.type === 'not-writable') {
-                            Alert.alert('Please wait', payload.message || 'You are not yet authorized to modify the list. Please wait a moment.')
+                            const msg = payload.message || 'You can’t edit yet — waiting for write access from the host.'
+                            if (notifyRef.current) notifyRef.current(msg, 'info')
+                            else Alert.alert('Please wait', msg)
                         } else if (payload.type === 'join-success') {
                             setJoinPhase(null)
                             if (isJoiningRef.current) {
                                 isJoiningRef.current = false
                                 setIsJoining(false)
                             }
-                            Alert.alert('Success!', 'Connected to peer successfully. Your lists are now synced.')
+                            haptics.success()
+                            if (notifyRef.current) notifyRef.current('Connected — your lists are now synced', 'success')
+                            else Alert.alert('Success!', 'Connected to peer successfully. Your lists are now synced.')
                         } else if (payload.type === 'join-error') {
                             setJoinPhase(null)
                             if (isJoiningRef.current) {
                                 isJoiningRef.current = false
                                 setIsJoining(false)
                             }
-                            Alert.alert('Connection failed', payload.message || 'Could not connect to this invite. Please try again.')
+                            haptics.error()
+                            const msg = payload.message || 'Could not connect to this invite. Please try again.'
+                            if (notifyRef.current) notifyRef.current(msg, 'error')
+                            else Alert.alert('Connection failed', msg)
                         } else {
                             console.log('RPC_MESSAGE payload (unhandled type):', payload)
                         }

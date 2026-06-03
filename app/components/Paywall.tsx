@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import {
     View,
     Text,
@@ -9,6 +9,8 @@ import {
     Linking,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { Ionicons } from '@expo/vector-icons'
+import { useTheme, type Theme } from '../theme'
 import type { SubscriptionState } from '../hooks/useSubscription'
 
 type PaywallProps = {
@@ -18,27 +20,27 @@ type PaywallProps = {
 }
 
 export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
+    const t = useTheme()
+    const styles = useMemo(() => makeStyles(t), [t])
+
     const price = Platform.select({
         ios: 'CHF 1.00',
         android: '$0.99',
     }) ?? '$0.99'
 
-    const openPrivacyPolicy = () => {
-        Linking.openURL('https://saynode.ch/privacy')
-    }
-
-    const openTerms = () => {
-        Linking.openURL('https://saynode.ch/terms')
-    }
+    const openPrivacyPolicy = () => Linking.openURL('https://saynode.ch/privacy')
+    const openTerms = () => Linking.openURL('https://saynode.ch/terms')
 
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.content}>
                 <View style={styles.header}>
-                    <Text style={styles.emoji}>{"<3"}</Text>
+                    <View style={styles.heartCircle}>
+                        <Ionicons name="heart" size={32} color={t.colors.accent} />
+                    </View>
                     <Text style={styles.title}>Your trial has ended</Text>
                     <Text style={styles.subtitle}>
-                        Thanks for trying Lista! Subscribe to continue using the app and support
+                        Thanks for trying Listam! Subscribe to continue using the app and support
                         development.
                     </Text>
                 </View>
@@ -49,10 +51,10 @@ export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
                 </View>
 
                 <View style={styles.features}>
-                    <FeatureRow text="Unlimited lists" />
-                    <FeatureRow text="P2P sync across devices" />
-                    <FeatureRow text="No ads, no tracking" />
-                    <FeatureRow text="Support indie development" />
+                    <FeatureRow text="Unlimited lists" styles={styles} accent={t.colors.accent} />
+                    <FeatureRow text="P2P sync across devices" styles={styles} accent={t.colors.accent} />
+                    <FeatureRow text="No ads, no tracking" styles={styles} accent={t.colors.accent} />
+                    <FeatureRow text="Support indie development" styles={styles} accent={t.colors.accent} />
                 </View>
 
                 {state.error && <Text style={styles.error}>{state.error}</Text>}
@@ -62,13 +64,12 @@ export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
                         style={styles.subscribeButton}
                         onPress={onPurchase}
                         disabled={state.isLoading}
+                        accessibilityRole="button"
                     >
                         {state.isLoading ? (
-                            <ActivityIndicator color="#fff" />
+                            <ActivityIndicator color={t.colors.onPrimary} />
                         ) : (
-                            <Text style={styles.subscribeButtonText}>
-                                Subscribe for {price}/year
-                            </Text>
+                            <Text style={styles.subscribeButtonText}>Subscribe for {price}/year</Text>
                         )}
                     </TouchableOpacity>
 
@@ -76,6 +77,7 @@ export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
                         style={styles.restoreButton}
                         onPress={onRestore}
                         disabled={state.isLoading}
+                        accessibilityRole="button"
                     >
                         <Text style={styles.restoreButtonText}>Restore Purchase</Text>
                     </TouchableOpacity>
@@ -101,131 +103,132 @@ export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
     )
 }
 
-function FeatureRow({ text }: { text: string }) {
+function FeatureRow({ text, styles, accent }: { text: string; styles: ReturnType<typeof makeStyles>; accent: string }) {
     return (
         <View style={styles.featureRow}>
-            <Text style={styles.checkmark}>+</Text>
+            <Ionicons name="checkmark-circle" size={20} color={accent} style={{ marginRight: 12 }} />
             <Text style={styles.featureText}>{text}</Text>
         </View>
     )
 }
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#fff',
-    },
-    content: {
-        flex: 1,
-        padding: 24,
-        justifyContent: 'space-between',
-    },
-    header: {
-        alignItems: 'center',
-        marginTop: 20,
-    },
-    emoji: {
-        fontSize: 48,
-        marginBottom: 16,
-    },
-    title: {
-        fontSize: 28,
-        fontWeight: '700',
-        color: '#333',
-        marginBottom: 12,
-        textAlign: 'center',
-    },
-    subtitle: {
-        fontSize: 16,
-        color: '#666',
-        textAlign: 'center',
-        lineHeight: 24,
-        paddingHorizontal: 20,
-    },
-    priceContainer: {
-        alignItems: 'center',
-        marginVertical: 24,
-    },
-    price: {
-        fontSize: 48,
-        fontWeight: '700',
-        color: '#333',
-    },
-    period: {
-        fontSize: 18,
-        color: '#666',
-        marginTop: 4,
-    },
-    features: {
-        marginVertical: 24,
-    },
-    featureRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginVertical: 8,
-        paddingHorizontal: 20,
-    },
-    checkmark: {
-        fontSize: 18,
-        color: '#34c759',
-        marginRight: 12,
-        fontWeight: '600',
-    },
-    featureText: {
-        fontSize: 16,
-        color: '#333',
-    },
-    error: {
-        color: '#ff3b30',
-        textAlign: 'center',
-        marginBottom: 16,
-        fontSize: 14,
-    },
-    buttons: {
-        marginTop: 'auto',
-        gap: 12,
-    },
-    subscribeButton: {
-        backgroundColor: '#333',
-        paddingVertical: 16,
-        borderRadius: 12,
-        alignItems: 'center',
-    },
-    subscribeButtonText: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: '600',
-    },
-    restoreButton: {
-        paddingVertical: 12,
-        alignItems: 'center',
-    },
-    restoreButtonText: {
-        color: '#666',
-        fontSize: 16,
-    },
-    footer: {
-        marginTop: 24,
-        alignItems: 'center',
-    },
-    footerText: {
-        fontSize: 12,
-        color: '#999',
-        textAlign: 'center',
-        lineHeight: 18,
-        marginBottom: 8,
-    },
-    links: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    link: {
-        fontSize: 12,
-        color: '#666',
-        textDecorationLine: 'underline',
-    },
-    linkSeparator: {
-        marginHorizontal: 8,
-        color: '#999',
-    },
-})
+function makeStyles(t: Theme) {
+    return StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: t.colors.bg,
+        },
+        content: {
+            flex: 1,
+            padding: t.spacing.xl,
+            justifyContent: 'space-between',
+        },
+        header: {
+            alignItems: 'center',
+            marginTop: t.spacing.xl,
+        },
+        heartCircle: {
+            width: 72,
+            height: 72,
+            borderRadius: t.radius.pill,
+            backgroundColor: t.colors.surfaceAlt,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: t.spacing.lg,
+        },
+        title: {
+            fontSize: t.type.display.fontSize,
+            fontWeight: '700',
+            color: t.colors.text,
+            marginBottom: t.spacing.md,
+            textAlign: 'center',
+        },
+        subtitle: {
+            fontSize: t.type.body.fontSize,
+            color: t.colors.textSecondary,
+            textAlign: 'center',
+            lineHeight: 24,
+            paddingHorizontal: t.spacing.xl,
+        },
+        priceContainer: {
+            alignItems: 'center',
+            marginVertical: t.spacing.xl,
+        },
+        price: {
+            fontSize: 48,
+            fontWeight: '700',
+            color: t.colors.text,
+        },
+        period: {
+            fontSize: t.type.bodyLg.fontSize,
+            color: t.colors.textSecondary,
+            marginTop: t.spacing.xs,
+        },
+        features: {
+            marginVertical: t.spacing.xl,
+        },
+        featureRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginVertical: t.spacing.sm,
+            paddingHorizontal: t.spacing.xl,
+        },
+        featureText: {
+            fontSize: t.type.body.fontSize,
+            color: t.colors.text,
+        },
+        error: {
+            color: t.colors.danger,
+            textAlign: 'center',
+            marginBottom: t.spacing.lg,
+            fontSize: t.type.label.fontSize,
+        },
+        buttons: {
+            marginTop: 'auto',
+            gap: t.spacing.md,
+        },
+        subscribeButton: {
+            backgroundColor: t.colors.primary,
+            paddingVertical: t.spacing.lg,
+            borderRadius: t.radius.md,
+            alignItems: 'center',
+        },
+        subscribeButtonText: {
+            color: t.colors.onPrimary,
+            fontSize: t.type.bodyLg.fontSize,
+            fontWeight: '600',
+        },
+        restoreButton: {
+            paddingVertical: t.spacing.md,
+            alignItems: 'center',
+        },
+        restoreButtonText: {
+            color: t.colors.textSecondary,
+            fontSize: t.type.body.fontSize,
+        },
+        footer: {
+            marginTop: t.spacing.xl,
+            alignItems: 'center',
+        },
+        footerText: {
+            fontSize: t.type.caption.fontSize,
+            color: t.colors.textTertiary,
+            textAlign: 'center',
+            lineHeight: 18,
+            marginBottom: t.spacing.sm,
+        },
+        links: {
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
+        link: {
+            fontSize: t.type.caption.fontSize,
+            color: t.colors.textSecondary,
+            textDecorationLine: 'underline',
+        },
+        linkSeparator: {
+            marginHorizontal: t.spacing.sm,
+            color: t.colors.textTertiary,
+        },
+    })
+}

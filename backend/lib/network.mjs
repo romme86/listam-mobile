@@ -3,7 +3,8 @@ import fs from "bare-fs"
 import BlindPairing from "blind-pairing"
 import z32 from "z32"
 import { apply, open, storagePath, peerKeysString, keyFilePath, encKeyFilePath, inviteFilePath } from "../backend.mjs"
-import { saveAutobaseKey, saveEncryptionKey, saveInvite, deleteInvite } from "./key.mjs"
+import { saveAutobaseKey, saveEncryptionKey, deleteInvite } from "./key.mjs"
+import { INVITE_MAX_USES, consumeInviteUse, isInviteUsable, withInvitePolicy } from "./invite-policy.mjs"
 import { RPC_MESSAGE, RPC_GET_KEY, SYNC_LIST } from "../../rpc-commands.mjs"
 import Corestore from "corestore"
 import Autobase from "autobase"
@@ -43,7 +44,6 @@ import { rebuildListFromPersistedOps, syncListToFrontend } from "./item.mjs"
 
 let _initPromise = null
 let _writableCheckTimer = null
-const INVITE_MAX_USES = 10
 let inviteUsesRemaining = 0
 
 // Temp swarm/pairing kept alive until waitForWritable completes
@@ -168,15 +168,29 @@ function waitForPeerConnection(remainingAttempts) {
 export function createInvite() {
     if (!autobase) return null
 
-    // Return existing invite while it still has available uses
-    if (currentInvite && inviteUsesRemaining > 0) return z32.encode(currentInvite.invite)
+    // Return an existing invite only while it is unexpired and unused.
+    if (isInviteUsable(currentInvite, inviteUsesRemaining)) {
+        return z32.encode(currentInvite.invite)
+    }
 
-    const inv = BlindPairing.createInvite(autobase.key)
+    const inv = withInvitePolicy(BlindPairing.createInvite(autobase.key))
     setCurrentInvite(inv)
     inviteUsesRemaining = INVITE_MAX_USES
-    saveInvite(inv, inviteFilePath)
+    deleteInvite(inviteFilePath)
 
     return z32.encode(inv.invite)
+}
+
+function rotateInviteAndNotifyFrontend() {
+    setCurrentInvite(null)
+    inviteUsesRemaining = 0
+    deleteInvite(inviteFilePath)
+
+    const newZ32 = createInvite()
+    if (newZ32 && rpc) {
+        const req = rpc.request(RPC_GET_KEY)
+        req.send(newZ32)
+    }
 }
 
 export function setupBlindPairing() {
@@ -189,6 +203,12 @@ export function setupBlindPairing() {
         onadd: async (candidate) => {
             // Match invite
             if (!currentInvite || !b4a.equals(currentInvite.id, candidate.inviteId)) return
+
+            if (!isInviteUsable(currentInvite, inviteUsesRemaining)) {
+                try { candidate.close() } catch (_) {}
+                rotateInviteAndNotifyFrontend()
+                return
+            }
 
             // Open with invite's public key
             candidate.open(currentInvite.publicKey)
@@ -207,18 +227,11 @@ export function setupBlindPairing() {
                 encryptionKey: autobase.encryptionKey
             })
 
-            // Allow multiple successful pairings per invite for smoother retries.
-            inviteUsesRemaining = Math.max(0, inviteUsesRemaining - 1)
+            inviteUsesRemaining = consumeInviteUse(inviteUsesRemaining)
 
-            // Rotate invite only after the usage budget is exhausted.
+            // Rotate invite after the single successful use.
             if (inviteUsesRemaining <= 0) {
-                setCurrentInvite(null)
-                deleteInvite(inviteFilePath)
-                const newZ32 = createInvite()
-                if (newZ32 && rpc) {
-                    const req = rpc.request(RPC_GET_KEY)
-                    req.send(newZ32)
-                }
+                rotateInviteAndNotifyFrontend()
             }
         }
     }))

@@ -1,19 +1,19 @@
-import React, { useRef, useState, useCallback, useMemo } from 'react'
+import React, { useRef, useCallback, useMemo } from 'react'
 import {
     Animated,
-    Dimensions,
     StyleSheet,
-    TextInput,
     View,
     Text,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
-import type { ListEntry } from './_types'
+import type { ListEntry, SizeOption } from './_types'
 import { ListItem, ITEM_HEIGHT, SPACING } from './ListItem'
 import { groupByCategory } from './categoryGrouping'
 import { CATEGORY_ICONS } from './categoryConstants'
+import { EmptyState } from './EmptyState'
+import { useTheme, type Theme } from '../theme'
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window')
 const TOTAL_ITEM_HEIGHT = ITEM_HEIGHT + SPACING
 
 type FlatListItem =
@@ -24,16 +24,18 @@ type Props = {
     data: ListEntry[]
     onToggleDone?: (index: number) => void
     onDelete?: (index: number) => void
-    onUpdate?: (index: number, text: string) => void
-    onInsert?: (index: number, text: string) => void
+    onEdit?: (index: number, text: string) => void
+    onRequestAdd?: () => void
     categoriesEnabled?: boolean
     categoryHeadersVisible?: boolean
-    listTextSize?: 'small' | 'medium' | 'normal'
+    listTextSize?: SizeOption
+    reduceMotion?: boolean
 }
 
-function getListTextScale(size: 'small' | 'medium' | 'normal') {
-    if (size === 'small') return 0.6
-    if (size === 'medium') return 0.8
+function getListTextScale(size: SizeOption) {
+    if (size === 'small') return 0.7
+    if (size === 'medium') return 0.85
+    if (size === 'large') return 1.25
     return 1
 }
 
@@ -41,50 +43,18 @@ export default function InertialElasticList({
     data,
     onToggleDone,
     onDelete,
-    onInsert,
+    onEdit,
+    onRequestAdd,
     categoriesEnabled = true,
     categoryHeadersVisible = true,
     listTextSize = 'normal',
+    reduceMotion = false,
 }: Props) {
+    const t = useTheme()
+    const insets = useSafeAreaInsets()
+    const styles = useMemo(() => makeStyles(t), [t])
     const scrollY = useRef(new Animated.Value(0)).current
-    const [isAddingItem, setIsAddingItem] = useState(false)
-    const [editText, setEditText] = useState('')
-    const listLastTap = useRef<number>(0)
     const textScaleFactor = getListTextScale(listTextSize)
-
-    const handleListDoubleTap = useCallback(() => {
-        setIsAddingItem(true)
-        setEditText('')
-    }, [])
-
-    const handleListPress = useCallback(() => {
-        const now = Date.now()
-        const DOUBLE_TAP_DELAY = 300
-
-        if (listLastTap.current && now - listLastTap.current < DOUBLE_TAP_DELAY) {
-            handleListDoubleTap()
-            listLastTap.current = 0
-        } else {
-            listLastTap.current = now
-        }
-    }, [handleListDoubleTap])
-
-    const handleStartEdit = useCallback(() => {
-        setIsAddingItem(true)
-        setEditText('')
-    }, [])
-
-    const handleSubmitEdit = useCallback(() => {
-        if (editText.trim()) {
-            if (onInsert) onInsert(0, editText)
-            setEditText('')
-        }
-    }, [editText, onInsert])
-
-    const handleCancelEdit = useCallback(() => {
-        setIsAddingItem(false)
-        setEditText('')
-    }, [])
 
     const flatData = useMemo((): FlatListItem[] => {
         if (!categoriesEnabled) {
@@ -131,9 +101,9 @@ export default function InertialElasticList({
         if (item.type === 'header') {
             const iconName = CATEGORY_ICONS[item.canonicalKey] || 'basket-outline'
             return (
-                <View style={headerStyles.container}>
-                    <Ionicons name={iconName as any} size={16} color="#555" />
-                    <Text style={[headerStyles.title, { fontSize: 13 * textScaleFactor }]}>
+                <View style={styles.headerContainer}>
+                    <Ionicons name={iconName as any} size={16} color={t.colors.textSecondary} />
+                    <Text style={[styles.headerTitle, { fontSize: 13 * textScaleFactor }]}>
                         {item.category.toUpperCase()}
                     </Text>
                 </View>
@@ -149,17 +119,12 @@ export default function InertialElasticList({
                 totalItemHeight={TOTAL_ITEM_HEIGHT}
                 onToggleDone={onToggleDone}
                 onDelete={onDelete}
-                onInsert={onInsert}
-                isEditing={false}
-                editText=""
-                setEditText={() => {}}
-                onStartEdit={handleStartEdit}
-                onSubmitEdit={handleSubmitEdit}
-                onCancelEdit={handleCancelEdit}
+                onEdit={onEdit}
                 textScaleFactor={textScaleFactor}
+                reduceMotion={reduceMotion}
             />
         )
-    }, [scrollY, onToggleDone, onDelete, onInsert, handleStartEdit, handleSubmitEdit, handleCancelEdit, textScaleFactor, categoryHeadersVisible])
+    }, [scrollY, onToggleDone, onDelete, onEdit, textScaleFactor, reduceMotion, styles, t])
 
     const keyExtractor = useCallback((item: FlatListItem) => item.key, [])
 
@@ -171,73 +136,49 @@ export default function InertialElasticList({
 
     return (
         <View style={styles.container}>
-            {isAddingItem && (
-                <View style={styles.topInputContainer}>
-                    <TextInput
-                        style={[styles.topInput, { fontSize: 16 * textScaleFactor }]}
-                        value={editText}
-                        onChangeText={setEditText}
-                        onSubmitEditing={handleSubmitEdit}
-                        onBlur={handleCancelEdit}
-                        blurOnSubmit={false}
-                        placeholder="Enter new item..."
-                        placeholderTextColor="#888"
-                        autoFocus
-                    />
-                </View>
-            )}
-            <View style={styles.container} onTouchEnd={handleListPress}>
-                <Animated.FlatList
-                    data={flatData}
-                    keyExtractor={keyExtractor}
-                    renderItem={renderItem}
-                    getItemLayout={getItemLayout}
-                    showsVerticalScrollIndicator={false}
-                    decelerationRate="fast"
-                    bounces={true}
-                    overScrollMode="always"
-                    onScroll={Animated.event(
-                        [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-                        { useNativeDriver: true }
-                    )}
-                    scrollEventThrottle={16}
-                    contentContainerStyle={{
-                        paddingVertical: SCREEN_HEIGHT / 3,
-                    }}
-                />
-            </View>
+            <Animated.FlatList
+                data={flatData}
+                keyExtractor={keyExtractor}
+                renderItem={renderItem}
+                getItemLayout={getItemLayout}
+                showsVerticalScrollIndicator={false}
+                decelerationRate="fast"
+                bounces={true}
+                overScrollMode="always"
+                onScroll={Animated.event(
+                    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+                    { useNativeDriver: true }
+                )}
+                scrollEventThrottle={16}
+                ListEmptyComponent={<EmptyState onRequestAdd={onRequestAdd} />}
+                contentContainerStyle={{
+                    flexGrow: 1,
+                    paddingTop: t.spacing.lg,
+                    paddingBottom: insets.bottom + 140,
+                }}
+            />
         </View>
     )
 }
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    topInputContainer: {
-        paddingHorizontal: 20,
-        paddingVertical: 16,
-        backgroundColor: '#fff',
-    },
-    topInput: {
-        fontSize: 16,
-        color: '#222',
-        fontWeight: '600',
-    },
-})
-
-const headerStyles = StyleSheet.create({
-    container: {
-        height: ITEM_HEIGHT + SPACING,
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingLeft: 20,
-    },
-    title: {
-        fontSize: 13,
-        fontWeight: '700',
-        color: '#555',
-        marginLeft: 6,
-        letterSpacing: 0.5,
-    },
-})
+function makeStyles(t: Theme) {
+    return StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: t.colors.bg,
+        },
+        headerContainer: {
+            height: ITEM_HEIGHT + SPACING,
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingLeft: 20,
+        },
+        headerTitle: {
+            fontSize: 13,
+            fontWeight: '700',
+            color: t.colors.textSecondary,
+            marginLeft: 6,
+            letterSpacing: 0.5,
+        },
+    })
+}

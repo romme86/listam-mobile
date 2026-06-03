@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useMemo } from 'react'
+import React, { useRef, useCallback, useMemo, useState } from 'react'
 import {
     Animated,
     Dimensions,
@@ -6,14 +6,17 @@ import {
     TextInput,
     PanResponder,
     View,
+    Text,
     StyleSheet,
 } from 'react-native'
-import * as Haptics from 'expo-haptics'
+import { Ionicons } from '@expo/vector-icons'
+import { haptics } from '../feedback'
+import { useTheme, type Theme } from '../theme'
 import type { ListEntry } from './_types'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const ITEM_HEIGHT = 60
-const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.2
+const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.32
 
 type ListItemProps = {
     item: ListEntry
@@ -23,14 +26,9 @@ type ListItemProps = {
     totalItemHeight: number
     onToggleDone?: (index: number) => void
     onDelete?: (index: number) => void
-    onInsert?: (index: number, text: string) => void
-    isEditing: boolean
-    editText: string
-    setEditText: (text: string) => void
-    onStartEdit: (index: number) => void
-    onSubmitEdit: () => void
-    onCancelEdit: () => void
+    onEdit?: (index: number, text: string) => void
     textScaleFactor?: number
+    reduceMotion?: boolean
 }
 
 export function ListItem({
@@ -41,17 +39,17 @@ export function ListItem({
     totalItemHeight,
     onToggleDone,
     onDelete,
-    isEditing,
-    editText,
-    setEditText,
-    onStartEdit,
-    onSubmitEdit,
-    onCancelEdit,
+    onEdit,
     textScaleFactor = 1,
+    reduceMotion = false,
 }: ListItemProps) {
+    const t = useTheme()
+    const styles = useMemo(() => makeStyles(t), [t])
     const panX = useRef(new Animated.Value(0)).current
-    const lastTapRef = useRef<number>(0)
     const isDeleting = useRef(false)
+    const passedThreshold = useRef(false)
+    const [editing, setEditing] = useState(false)
+    const [draft, setDraft] = useState('')
 
     React.useEffect(() => {
         panX.setValue(0)
@@ -60,52 +58,48 @@ export function ListItem({
 
     const handleSingleTap = useCallback(() => {
         if (!onToggleDone) return
-
-        if (!item.isDone) {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+        if (item.isDone) {
+            haptics.toggleOff()
+        } else {
+            haptics.toggleOn()
         }
         onToggleDone(index)
     }, [onToggleDone, index, item.isDone])
 
-    const handleDoubleTap = useCallback(() => {
-        onStartEdit(index)
-    }, [onStartEdit, index])
+    const startEdit = useCallback(() => {
+        if (!onEdit) return
+        haptics.select()
+        setDraft(item.text)
+        setEditing(true)
+    }, [onEdit, item.text])
 
-    const handlePress = useCallback(() => {
-        const now = Date.now()
-        const DOUBLE_TAP_DELAY = 300
-
-        if (lastTapRef.current && now - lastTapRef.current < DOUBLE_TAP_DELAY) {
-            handleDoubleTap()
-            lastTapRef.current = 0
-        } else {
-            lastTapRef.current = now
-            setTimeout(() => {
-                if (lastTapRef.current === now) {
-                    handleSingleTap()
-                }
-            }, DOUBLE_TAP_DELAY)
+    const submitEdit = useCallback(() => {
+        const value = draft.trim()
+        setEditing(false)
+        if (value && value !== item.text) {
+            onEdit?.(index, value)
         }
-    }, [handleDoubleTap, handleSingleTap])
-
-    const handleLongPress = useCallback(() => {
-        if (onToggleDone) {
-            onToggleDone(index)
-        }
-    }, [onToggleDone, index])
+    }, [draft, item.text, onEdit, index])
 
     const panResponder = useMemo(() => PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+            return Math.abs(gestureState.dx) > 8 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy)
+        },
         onMoveShouldSetPanResponderCapture: (_, gestureState) => {
-            return Math.abs(gestureState.dx) > 5 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy)
+            return Math.abs(gestureState.dx) > 8 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy)
         },
         onPanResponderGrant: () => {
             isDeleting.current = false
+            passedThreshold.current = false
         },
         onPanResponderMove: (_, gestureState) => {
             if (gestureState.dx > 0 && !isDeleting.current) {
                 panX.setValue(gestureState.dx)
+                const past = gestureState.dx > SWIPE_THRESHOLD
+                if (past !== passedThreshold.current) {
+                    passedThreshold.current = past
+                    if (past) haptics.select()
+                }
             }
         },
         onPanResponderRelease: (_, gestureState) => {
@@ -113,14 +107,13 @@ export function ListItem({
 
             if (gestureState.dx > SWIPE_THRESHOLD) {
                 isDeleting.current = true
+                haptics.delete()
                 Animated.timing(panX, {
                     toValue: SCREEN_WIDTH,
                     duration: 200,
                     useNativeDriver: true,
                 }).start(() => {
-                    if (onDelete) {
-                        onDelete(index)
-                    }
+                    onDelete?.(index)
                 })
             } else {
                 Animated.spring(panX, {
@@ -150,15 +143,25 @@ export function ListItem({
         (scrollIndex + 2) * totalItemHeight,
     ]
 
-    const textScale = scrollY.interpolate({
-        inputRange,
-        outputRange: [1, 1.57, 1],
-        extrapolate: 'clamp',
-    })
+    const textScale = reduceMotion
+        ? 1
+        : scrollY.interpolate({
+              inputRange,
+              outputRange: [1, 1.18, 1],
+              extrapolate: 'clamp',
+          })
 
-    const opacity = scrollY.interpolate({
-        inputRange,
-        outputRange: [0.4, 1, 0.4],
+    const opacity = reduceMotion
+        ? 1
+        : scrollY.interpolate({
+              inputRange,
+              outputRange: [0.5, 1, 0.5],
+              extrapolate: 'clamp',
+          })
+
+    const deleteOpacity = panX.interpolate({
+        inputRange: [0, SWIPE_THRESHOLD],
+        outputRange: [0, 1],
         extrapolate: 'clamp',
     })
 
@@ -166,28 +169,33 @@ export function ListItem({
         styles.text,
         { fontSize: 20 * textScaleFactor },
         item.isDone && styles.doneText,
-        { transform: [{ scale: textScale }] }
+        { transform: [{ scale: textScale }] },
     ]
 
-    if (isEditing) {
+    if (editing) {
         return (
-            <Animated.View style={[styles.item, { opacity }]}>
+            <View style={styles.item}>
                 <TextInput
                     style={[styles.editInput, { fontSize: 20 * textScaleFactor }]}
-                    value={editText}
-                    onChangeText={setEditText}
-                    onSubmitEditing={onSubmitEdit}
-                    onBlur={onCancelEdit}
-                    placeholder="Enter new item..."
-                    placeholderTextColor="#888"
+                    value={draft}
+                    onChangeText={setDraft}
+                    onSubmitEditing={submitEdit}
+                    onBlur={submitEdit}
+                    placeholder="Edit item..."
+                    placeholderTextColor={t.colors.placeholder}
+                    returnKeyType="done"
                     autoFocus
                 />
-            </Animated.View>
+            </View>
         )
     }
 
     return (
         <View style={styles.itemWrapper}>
+            <Animated.View style={[styles.deleteBg, { opacity: deleteOpacity }]}>
+                <Ionicons name="trash-outline" size={22} color={t.colors.onDanger} />
+                <Text style={styles.deleteLabel}>Delete</Text>
+            </Animated.View>
             <Animated.View
                 style={[
                     styles.itemContainer,
@@ -197,9 +205,13 @@ export function ListItem({
             >
                 <TouchableOpacity
                     activeOpacity={0.7}
-                    onPress={handlePress}
-                    onLongPress={handleLongPress}
-                    delayLongPress={500}
+                    onPress={handleSingleTap}
+                    onLongPress={startEdit}
+                    delayLongPress={350}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: item.isDone }}
+                    accessibilityLabel={item.text}
+                    accessibilityHint="Double tap to toggle done. Long-press to edit."
                 >
                     <Animated.View style={[styles.item, { opacity }]}>
                         <Animated.Text style={textStyle}>
@@ -214,38 +226,56 @@ export function ListItem({
 
 const SPACING = 16
 
-const styles = StyleSheet.create({
-    itemWrapper: {
-        overflow: 'hidden',
-        marginBottom: SPACING,
-    },
-    itemContainer: {
-        backgroundColor: '#fff',
-        paddingLeft: 20,
-    },
-    item: {
-        height: ITEM_HEIGHT,
-        justifyContent: 'center',
-        alignItems: 'flex-start',
-        width: SCREEN_WIDTH - 40,
-    },
-    text: {
-        fontSize: 20,
-        color: '#222',
-        fontWeight: '600',
-        transformOrigin: 'left center',
-    },
-    doneText: {
-        color: '#aaa',
-        textDecorationLine: 'line-through',
-    },
-    editInput: {
-        fontSize: 20,
-        color: '#222',
-        fontWeight: '600',
-        width: '100%',
-        padding: 0,
-    },
-})
+function makeStyles(t: Theme) {
+    return StyleSheet.create({
+        itemWrapper: {
+            overflow: 'hidden',
+            marginBottom: SPACING,
+            justifyContent: 'center',
+        },
+        deleteBg: {
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: t.colors.danger,
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingLeft: 24,
+            gap: 8,
+        },
+        deleteLabel: {
+            color: t.colors.onDanger,
+            fontSize: t.type.label.fontSize,
+            fontWeight: '700',
+        },
+        itemContainer: {
+            backgroundColor: t.colors.bg,
+            paddingLeft: 20,
+        },
+        item: {
+            height: ITEM_HEIGHT,
+            justifyContent: 'center',
+            alignItems: 'flex-start',
+            width: SCREEN_WIDTH - 40,
+            backgroundColor: t.colors.bg,
+        },
+        text: {
+            fontSize: 20,
+            color: t.colors.text,
+            fontWeight: '600',
+            transformOrigin: 'left center',
+        },
+        doneText: {
+            color: t.colors.textDisabled,
+            textDecorationLine: 'line-through',
+        },
+        editInput: {
+            fontSize: 20,
+            color: t.colors.text,
+            fontWeight: '600',
+            width: '100%',
+            paddingLeft: 20,
+            paddingVertical: 0,
+        },
+    })
+}
 
 export { ITEM_HEIGHT, SPACING }

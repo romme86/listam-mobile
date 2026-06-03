@@ -1,4 +1,5 @@
 node_modules/
+.npmrc
 .idea/
 .expo/
 dist/
@@ -15,3 +16,21 @@ npm-debug.*
 *.bundle
 *.bundle.js
 web-build/
+
+# Runtime logs (may contain key material printed via console.error)
+*.log
+logs_*
+app/logs_*
+
+# App-generated plaintext secret/key artifacts (encryption key, base key,
+# writer key, invites) — written by the Bare backend at runtime
+*.env
+.env
+lista-autobase-key.txt
+lista-encryption-key.txt
+lista-local-writer-key.txt
+lista-invite.json
+autobase-key.txt
+encryption-key.txt
+local-writer-key.txt
+invite.json

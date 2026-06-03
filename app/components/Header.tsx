@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import {
     View,
     Text,
@@ -14,31 +14,22 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { AnimatedIconButton } from './AnimatedIconButton'
-import { headerStyles } from './_styles'
+import { useTheme, cardColor, type Theme } from '../theme'
+import { useReduceMotion } from '../hooks/useReduceMotion'
 import type { LoyaltyCard } from './LoyaltyCardScanner'
 import type { ItemIconVariant } from './itemIconMap'
+import type { SizeOption } from './_types'
 
 const DRAWER_WIDTH = 280
 const { height: SCREEN_HEIGHT } = Dimensions.get('window')
 const HEADER_ICON_SIZE = 22
-const HEADER_TEXT_SIZE = 12
-const GRID_SIZE_OPTIONS = ['small', 'medium', 'normal'] as const
-const LIST_TEXT_SIZE_OPTIONS = ['small', 'medium', 'normal'] as const
+const SIZE_OPTIONS: SizeOption[] = ['small', 'medium', 'normal', 'large']
 const ITEM_ICON_VARIANT_OPTIONS: ItemIconVariant[] = ['illustrated', 'minimal']
-
-function cardColor(name: string): string {
-    let hash = 0
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash)
-    }
-    const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e']
-    return colors[Math.abs(hash) % colors.length]
-}
 
 type HeaderProps = {
     autobaseInviteKey: string
     peerCount: number
-    blinkAnim: Animated.Value
+    isWorkletReady: boolean
     onShare: () => void
     onJoin: () => void
     trialDaysRemaining?: number
@@ -51,10 +42,10 @@ type HeaderProps = {
     onToggleCategories: () => void
     categoryHeadersVisible: boolean
     onToggleCategoryHeaders: () => void
-    gridIconSize: 'small' | 'medium' | 'normal'
-    onGridIconSizeChange: (size: 'small' | 'medium' | 'normal') => void
-    listTextSize: 'small' | 'medium' | 'normal'
-    onListTextSizeChange: (size: 'small' | 'medium' | 'normal') => void
+    gridIconSize: SizeOption
+    onGridIconSizeChange: (size: SizeOption) => void
+    listTextSize: SizeOption
+    onListTextSizeChange: (size: SizeOption) => void
     itemIconVariant: ItemIconVariant
     onItemIconVariantChange: (variant: ItemIconVariant) => void
     loyaltyCards: LoyaltyCard[]
@@ -62,367 +53,241 @@ type HeaderProps = {
     onSelectCard: (card: LoyaltyCard) => void
 }
 
-function LoyaltyCardChip({
-    card,
-    onPress,
-    compact = false,
-}: {
-    card: LoyaltyCard
-    onPress?: () => void
-    compact?: boolean
-}) {
-    const content = (
-        <View
-            style={[
-                loyaltyStyles.cardChip,
-                compact && loyaltyStyles.cardChipCompact,
-                { backgroundColor: cardColor(card.name) },
-            ]}
-        >
-            <Ionicons
-                name="card-outline"
-                size={compact ? 16 : HEADER_ICON_SIZE}
-                color="#fff"
-            />
-            <Text
-                style={[
-                    loyaltyStyles.cardLetter,
-                    compact && loyaltyStyles.cardLetterCompact,
-                ]}
-            >
-                {card.name.charAt(0).toUpperCase()}
-            </Text>
-        </View>
-    )
+export function Header(props: HeaderProps) {
+    const {
+        autobaseInviteKey,
+        peerCount,
+        isWorkletReady,
+        onShare,
+        onJoin,
+        trialDaysRemaining,
+        menuVisible,
+        onMenuToggle,
+        onDeleteAll,
+        isGridView,
+        onToggleView,
+        categoriesEnabled,
+        onToggleCategories,
+        categoryHeadersVisible,
+        onToggleCategoryHeaders,
+        gridIconSize,
+        onGridIconSizeChange,
+        listTextSize,
+        onListTextSizeChange,
+        itemIconVariant,
+        onItemIconVariantChange,
+        loyaltyCards,
+        onScanCard,
+        onSelectCard,
+    } = props
 
-    if (!onPress) return content
+    const t = useTheme()
+    const reduceMotion = useReduceMotion()
+    const styles = useMemo(() => makeStyles(t), [t])
 
-    return (
-        <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
-            {content}
-        </TouchableOpacity>
-    )
-}
-
-export function Header({
-    autobaseInviteKey,
-    peerCount,
-    blinkAnim,
-    onShare,
-    onJoin,
-    trialDaysRemaining,
-    menuVisible,
-    onMenuToggle,
-    onDeleteAll,
-    isGridView,
-    onToggleView,
-    categoriesEnabled,
-    onToggleCategories,
-    categoryHeadersVisible,
-    onToggleCategoryHeaders,
-    gridIconSize,
-    onGridIconSizeChange,
-    listTextSize,
-    onListTextSizeChange,
-    itemIconVariant,
-    onItemIconVariantChange,
-    loyaltyCards,
-    onScanCard,
-    onSelectCard,
-}: HeaderProps) {
     const peerCountLabel = peerCount > 99 ? '99+' : String(peerCount)
     const primaryLoyaltyCard = loyaltyCards[0] ?? null
     const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current
     const overlayOpacity = useRef(new Animated.Value(0)).current
+    const pulse = useRef(new Animated.Value(1)).current
+
+    const ready = isWorkletReady && !!autobaseInviteKey
+    const status = !ready
+        ? { label: 'Starting up…', color: t.colors.warning }
+        : peerCount > 0
+            ? { label: `Synced · ${peerCount} ${peerCount === 1 ? 'device' : 'devices'}`, color: t.colors.accent }
+            : { label: 'Ready · share to sync', color: t.colors.textTertiary }
 
     useEffect(() => {
-        if (menuVisible) {
-            Animated.parallel([
-                Animated.timing(slideAnim, {
-                    toValue: 0,
-                    duration: 250,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(overlayOpacity, {
-                    toValue: 1,
-                    duration: 250,
-                    useNativeDriver: true,
-                }),
-            ]).start()
-        } else {
-            Animated.parallel([
-                Animated.timing(slideAnim, {
-                    toValue: -DRAWER_WIDTH,
-                    duration: 200,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(overlayOpacity, {
-                    toValue: 0,
-                    duration: 200,
-                    useNativeDriver: true,
-                }),
-            ]).start()
+        if (!ready && !reduceMotion) {
+            const loop = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(pulse, { toValue: 0.35, duration: 900, useNativeDriver: true }),
+                    Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+                ])
+            )
+            loop.start()
+            return () => loop.stop()
         }
-    }, [menuVisible, slideAnim, overlayOpacity])
+        pulse.setValue(1)
+    }, [ready, reduceMotion, pulse])
+
+    useEffect(() => {
+        const duration = reduceMotion ? 0 : menuVisible ? t.motion.duration.base : t.motion.duration.fast
+        Animated.parallel([
+            Animated.timing(slideAnim, {
+                toValue: menuVisible ? 0 : -DRAWER_WIDTH,
+                duration,
+                easing: t.motion.easing,
+                useNativeDriver: true,
+            }),
+            Animated.timing(overlayOpacity, {
+                toValue: menuVisible ? 1 : 0,
+                duration,
+                useNativeDriver: true,
+            }),
+        ]).start()
+    }, [menuVisible, slideAnim, overlayOpacity, reduceMotion, t.motion])
 
     const closeMenu = () => {
         if (menuVisible) onMenuToggle()
     }
 
     return (
-        <SafeAreaView style={headerStyles.safeArea} edges={['top']}>
-            <View style={headerStyles.container}>
-                <View style={headerStyles.leftSection}>
-                    <AnimatedIconButton
-                        style={headerStyles.iconButton}
-                        onPress={onMenuToggle}
-                    >
-                        <Ionicons name="menu-outline" size={HEADER_ICON_SIZE} color="#333" />
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+            <View style={styles.container}>
+                <View style={styles.leftSection}>
+                    <AnimatedIconButton style={styles.iconButton} onPress={onMenuToggle}>
+                        <Ionicons name="menu-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
                     </AnimatedIconButton>
                     {trialDaysRemaining !== undefined && trialDaysRemaining <= 7 && (
-                        <Text style={{ fontSize: HEADER_TEXT_SIZE, color: '#999', marginLeft: 8 }}>
-                            {trialDaysRemaining} days left
-                        </Text>
+                        <Text style={styles.trialText}>{trialDaysRemaining} days left</Text>
                     )}
                 </View>
 
-                <View style={headerStyles.rightSection}>
+                <View style={styles.rightSection}>
                     <AnimatedIconButton
-                        style={headerStyles.iconButton}
-                        onPress={() => {
-                            if (primaryLoyaltyCard) {
-                                onSelectCard(primaryLoyaltyCard)
-                            } else {
-                                onScanCard()
-                            }
-                        }}
+                        style={styles.iconButton}
+                        onPress={() => (primaryLoyaltyCard ? onSelectCard(primaryLoyaltyCard) : onScanCard())}
                     >
-                        <Ionicons name="card-outline" size={HEADER_ICON_SIZE} color="#333" />
+                        <Ionicons name="card-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
                     </AnimatedIconButton>
 
-                    <View style={headerStyles.iconWithBadge}>
-                        <AnimatedIconButton
-                            style={headerStyles.iconButton}
-                            onPress={onShare}
-                        >
-                            <Ionicons name="share-outline" size={HEADER_ICON_SIZE} color="#333" />
+                    <View style={styles.iconWithBadge}>
+                        <AnimatedIconButton style={styles.iconButton} onPress={onShare}>
+                            <Ionicons name="share-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
                         </AnimatedIconButton>
-                        {!autobaseInviteKey ? (
-                            <Animated.View style={[headerStyles.badge, headerStyles.orangeBadge, { opacity: blinkAnim }]} />
-                        ) : peerCount > 0 ? (
-                            <View style={headerStyles.pearBadge}>
-                                <View style={headerStyles.pearStalk} />
-                                <View style={headerStyles.pearTop} />
-                                <View style={headerStyles.pearBottom}>
-                                    <Text style={headerStyles.pearBadgeText}>{peerCountLabel}</Text>
-                                </View>
+                        {peerCount > 0 && (
+                            <View style={styles.peerBadge}>
+                                <Text style={styles.peerBadgeText}>{peerCountLabel}</Text>
                             </View>
-                        ) : null}
+                        )}
                     </View>
 
-                    <AnimatedIconButton
-                        style={headerStyles.iconButton}
-                        onPress={onJoin}
-                    >
-                        <Ionicons name="person-add-outline" size={HEADER_ICON_SIZE} color="#333" />
+                    <AnimatedIconButton style={styles.iconButton} onPress={onJoin}>
+                        <Ionicons name="person-add-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
                     </AnimatedIconButton>
                 </View>
             </View>
 
-            <Modal
-                visible={menuVisible}
-                transparent
-                animationType="none"
-                onRequestClose={closeMenu}
-            >
-                <View style={drawerStyles.modalContainer}>
+            <View style={styles.statusRow}>
+                <Animated.View style={[styles.statusDot, { backgroundColor: status.color, opacity: pulse }]} />
+                <Text style={styles.statusText}>{status.label}</Text>
+            </View>
+
+            <Modal visible={menuVisible} transparent animationType="none" onRequestClose={closeMenu}>
+                <View style={styles.modalContainer}>
                     <TouchableWithoutFeedback onPress={closeMenu}>
-                        <Animated.View
-                            style={[
-                                drawerStyles.overlay,
-                                { opacity: overlayOpacity },
-                            ]}
-                        />
+                        <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]} />
                     </TouchableWithoutFeedback>
 
-                    <Animated.View
-                        style={[
-                            drawerStyles.drawer,
-                            { transform: [{ translateX: slideAnim }] },
-                        ]}
-                    >
+                    <Animated.View style={[styles.drawer, { transform: [{ translateX: slideAnim }] }]}>
                         <ScrollView
-                            style={drawerStyles.drawerScroll}
-                            contentContainerStyle={drawerStyles.drawerContent}
+                            style={styles.drawerScroll}
+                            contentContainerStyle={styles.drawerContent}
                             showsVerticalScrollIndicator={false}
                         >
-                            {/* View Mode */}
                             <TouchableOpacity
-                                style={drawerStyles.menuRow}
-                                onPress={() => {
-                                    onToggleView()
-                                    closeMenu()
-                                }}
+                                style={styles.menuRow}
+                                onPress={() => { onToggleView(); closeMenu() }}
                                 activeOpacity={0.6}
                             >
                                 <Ionicons
                                     name={isGridView ? 'list-outline' : 'grid-outline'}
                                     size={22}
-                                    color="#333"
+                                    color={t.colors.text}
                                 />
-                                <Text style={drawerStyles.menuLabel}>
-                                    {isGridView ? 'List View' : 'Grid View'}
-                                </Text>
+                                <Text style={styles.menuLabel}>{isGridView ? 'List View' : 'Grid View'}</Text>
                             </TouchableOpacity>
 
-                            {/* Categories */}
-                            <View style={drawerStyles.menuRow}>
-                                <Ionicons name="pricetags-outline" size={22} color="#333" />
-                                <Text style={drawerStyles.menuLabel}>Categories</Text>
+                            <Text style={styles.sectionLabel}>Display</Text>
+
+                            <View style={styles.menuRow}>
+                                <Ionicons name="pricetags-outline" size={22} color={t.colors.text} />
+                                <Text style={styles.menuLabel}>Categories</Text>
                                 <Switch
                                     value={categoriesEnabled}
                                     onValueChange={onToggleCategories}
-                                    trackColor={{ false: '#ccc', true: '#333' }}
-                                    thumbColor="#fff"
-                                    style={drawerStyles.switch}
+                                    trackColor={{ false: t.colors.border, true: t.colors.primary }}
+                                    thumbColor={t.colors.surface}
                                 />
                             </View>
 
-                            <View style={drawerStyles.menuRow}>
-                                <Ionicons name="eye-off-outline" size={22} color="#333" />
-                                <Text style={drawerStyles.menuLabel}>Category Headers</Text>
+                            <View style={styles.menuRow}>
+                                <Ionicons name="albums-outline" size={22} color={t.colors.text} />
+                                <Text style={styles.menuLabel}>Category Headers</Text>
                                 <Switch
                                     value={categoryHeadersVisible}
                                     onValueChange={onToggleCategoryHeaders}
-                                    trackColor={{ false: '#ccc', true: '#333' }}
-                                    thumbColor="#fff"
-                                    style={drawerStyles.switch}
+                                    trackColor={{ false: t.colors.border, true: t.colors.primary }}
+                                    thumbColor={t.colors.surface}
                                 />
                             </View>
 
-                            <View style={drawerStyles.settingGroup}>
-                                <Text style={drawerStyles.settingTitle}>Grid Icon Size</Text>
-                                <View style={drawerStyles.optionRow}>
-                                    {GRID_SIZE_OPTIONS.map((option) => (
-                                        <TouchableOpacity
-                                            key={option}
-                                            style={[
-                                                drawerStyles.optionButton,
-                                                gridIconSize === option && drawerStyles.optionButtonActive,
-                                            ]}
-                                            onPress={() => onGridIconSizeChange(option)}
-                                            activeOpacity={0.7}
-                                        >
-                                            <Text
-                                                style={[
-                                                    drawerStyles.optionLabel,
-                                                    gridIconSize === option && drawerStyles.optionLabelActive,
-                                                ]}
-                                            >
-                                                {option[0].toUpperCase() + option.slice(1)}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
+                            {isGridView ? (
+                                <SegmentedSetting
+                                    title="Grid Icon Size"
+                                    options={SIZE_OPTIONS}
+                                    value={gridIconSize}
+                                    onChange={onGridIconSizeChange}
+                                    styles={styles}
+                                    labelFor={(o) => o[0].toUpperCase() + o.slice(1)}
+                                />
+                            ) : (
+                                <SegmentedSetting
+                                    title="List Text Size"
+                                    options={SIZE_OPTIONS}
+                                    value={listTextSize}
+                                    onChange={onListTextSizeChange}
+                                    styles={styles}
+                                    labelFor={(o) => o[0].toUpperCase() + o.slice(1)}
+                                />
+                            )}
 
-                            <View style={drawerStyles.settingGroup}>
-                                <Text style={drawerStyles.settingTitle}>List Text Size</Text>
-                                <View style={drawerStyles.optionRow}>
-                                    {LIST_TEXT_SIZE_OPTIONS.map((option) => (
-                                        <TouchableOpacity
-                                            key={option}
-                                            style={[
-                                                drawerStyles.optionButton,
-                                                listTextSize === option && drawerStyles.optionButtonActive,
-                                            ]}
-                                            onPress={() => onListTextSizeChange(option)}
-                                            activeOpacity={0.7}
-                                        >
-                                            <Text
-                                                style={[
-                                                    drawerStyles.optionLabel,
-                                                    listTextSize === option && drawerStyles.optionLabelActive,
-                                                ]}
-                                            >
-                                                {option[0].toUpperCase() + option.slice(1)}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
+                            <SegmentedSetting
+                                title="Item Icons"
+                                options={ITEM_ICON_VARIANT_OPTIONS}
+                                value={itemIconVariant}
+                                onChange={onItemIconVariantChange}
+                                styles={styles}
+                                labelFor={(o) => (o === 'illustrated' ? 'Illustrated' : 'Minimal')}
+                            />
 
-                            <View style={drawerStyles.settingGroup}>
-                                <Text style={drawerStyles.settingTitle}>Item Icons</Text>
-                                <View style={drawerStyles.optionRow}>
-                                    {ITEM_ICON_VARIANT_OPTIONS.map((option) => (
-                                        <TouchableOpacity
-                                            key={option}
-                                            style={[
-                                                drawerStyles.optionButton,
-                                                itemIconVariant === option && drawerStyles.optionButtonActive,
-                                            ]}
-                                            onPress={() => onItemIconVariantChange(option)}
-                                            activeOpacity={0.7}
-                                        >
-                                            <Text
-                                                style={[
-                                                    drawerStyles.optionLabel,
-                                                    itemIconVariant === option && drawerStyles.optionLabelActive,
-                                                ]}
-                                            >
-                                                {option === 'illustrated' ? 'Illustrated' : 'Minimalistic'}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </View>
+                            <Text style={styles.sectionLabel}>Loyalty Cards</Text>
 
-                            {/* Scan Loyalty Card */}
                             <TouchableOpacity
-                                style={drawerStyles.menuRow}
-                                onPress={() => {
-                                    onScanCard()
-                                    closeMenu()
-                                }}
+                                style={styles.menuRow}
+                                onPress={() => { onScanCard(); closeMenu() }}
                                 activeOpacity={0.6}
                             >
-                                <Ionicons name="card-outline" size={22} color="#333" />
-                                <Text style={drawerStyles.menuLabel}>Scan Loyalty Card</Text>
+                                <Ionicons name="scan-outline" size={22} color={t.colors.text} />
+                                <Text style={styles.menuLabel}>Scan Loyalty Card</Text>
                             </TouchableOpacity>
 
                             {loyaltyCards.map((card) => (
                                 <TouchableOpacity
                                     key={card.id}
-                                    style={drawerStyles.menuRow}
-                                    onPress={() => {
-                                        onSelectCard(card)
-                                        closeMenu()
-                                    }}
+                                    style={styles.menuRow}
+                                    onPress={() => { onSelectCard(card); closeMenu() }}
                                     activeOpacity={0.6}
                                 >
-                                    <Ionicons name="card-outline" size={22} color="#333" />
-                                    <Text style={drawerStyles.menuLabel}>{card.name}</Text>
+                                    <View style={[styles.cardSwatch, { backgroundColor: cardColor(card.name) }]}>
+                                        <Ionicons name="card-outline" size={14} color="#fff" />
+                                    </View>
+                                    <Text style={styles.menuLabel}>{card.name}</Text>
                                 </TouchableOpacity>
                             ))}
 
-                            <View style={drawerStyles.separator} />
+                            <Text style={styles.sectionLabel}>Danger Zone</Text>
 
-                            {/* Delete All */}
                             <TouchableOpacity
-                                style={drawerStyles.menuRow}
-                                onPress={() => {
-                                    onDeleteAll()
-                                    closeMenu()
-                                }}
+                                style={[styles.menuRow, styles.dangerRow]}
+                                onPress={() => { onDeleteAll(); closeMenu() }}
                                 activeOpacity={0.6}
                             >
-                                <Ionicons name="trash-outline" size={22} color="#d00" />
-                                <Text style={[drawerStyles.menuLabel, { color: '#d00' }]}>
-                                    Delete All
-                                </Text>
+                                <Ionicons name="trash-outline" size={22} color={t.colors.danger} />
+                                <Text style={[styles.menuLabel, { color: t.colors.danger }]}>Delete All</Text>
                             </TouchableOpacity>
-
                         </ScrollView>
                     </Animated.View>
                 </View>
@@ -431,114 +296,212 @@ export function Header({
     )
 }
 
-const drawerStyles = StyleSheet.create({
-    modalContainer: {
-        flex: 1,
-    },
-    overlay: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0,0,0,0.4)',
-    },
-    drawer: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: DRAWER_WIDTH,
-        height: SCREEN_HEIGHT,
-        backgroundColor: '#fff',
-        shadowColor: '#000',
-        shadowOffset: { width: 2, height: 0 },
-        shadowOpacity: 0.25,
-        shadowRadius: 8,
-        elevation: 10,
-    },
-    drawerContent: {
-        paddingTop: 80,
-        paddingHorizontal: 20,
-        paddingBottom: 32,
-    },
-    drawerScroll: {
-        flex: 1,
-    },
-    menuRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 14,
-    },
-    menuLabel: {
-        fontSize: 16,
-        color: '#333',
-        marginLeft: 14,
-        flex: 1,
-    },
-    switch: {
-        marginLeft: 'auto',
-    },
-    separator: {
-        height: 1,
-        backgroundColor: '#eee',
-        marginVertical: 8,
-    },
-    settingGroup: {
-        paddingVertical: 10,
-    },
-    settingTitle: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#333',
-        marginBottom: 10,
-    },
-    optionRow: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-    optionButton: {
-        flex: 1,
-        borderRadius: 10,
-        borderWidth: 1,
-        borderColor: '#ddd',
-        paddingVertical: 10,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#fff',
-    },
-    optionButtonActive: {
-        backgroundColor: '#333',
-        borderColor: '#333',
-    },
-    optionLabel: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: '#333',
-    },
-    optionLabelActive: {
-        color: '#fff',
-    },
-})
+function SegmentedSetting<T extends string>({
+    title,
+    options,
+    value,
+    onChange,
+    labelFor,
+    styles,
+}: {
+    title: string
+    options: readonly T[]
+    value: T
+    onChange: (value: T) => void
+    labelFor: (option: T) => string
+    styles: ReturnType<typeof makeStyles>
+}) {
+    return (
+        <View style={styles.settingGroup}>
+            <Text style={styles.settingTitle}>{title}</Text>
+            <View style={styles.optionRow}>
+                {options.map((option) => {
+                    const active = value === option
+                    return (
+                        <TouchableOpacity
+                            key={option}
+                            style={[styles.optionButton, active && styles.optionButtonActive]}
+                            onPress={() => onChange(option)}
+                            activeOpacity={0.7}
+                            accessibilityRole="button"
+                            accessibilityState={{ selected: active }}
+                        >
+                            <Text style={[styles.optionLabel, active && styles.optionLabelActive]}>
+                                {labelFor(option)}
+                            </Text>
+                        </TouchableOpacity>
+                    )
+                })}
+            </View>
+        </View>
+    )
+}
 
-const loyaltyStyles = StyleSheet.create({
-    cardChip: {
-        minWidth: 52,
-        height: 30,
-        borderRadius: 15,
-        paddingHorizontal: 10,
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 4,
-    },
-    cardChipCompact: {
-        minWidth: 40,
-        height: 24,
-        borderRadius: 12,
-        paddingHorizontal: 8,
-    },
-    cardLetter: {
-        color: '#fff',
-        fontSize: 13,
-        fontWeight: '700',
-    },
-    cardLetterCompact: {
-        fontSize: 11,
-    },
-})
+function makeStyles(t: Theme) {
+    return StyleSheet.create({
+        safeArea: {
+            backgroundColor: t.colors.bg,
+        },
+        container: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            backgroundColor: t.colors.bg,
+            paddingHorizontal: t.spacing.sm,
+            paddingVertical: t.spacing.sm,
+            minHeight: 52,
+        },
+        leftSection: {
+            flexDirection: 'row',
+            alignItems: 'center',
+        },
+        rightSection: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: t.spacing.md,
+        },
+        iconButton: {
+            padding: t.spacing.sm,
+        },
+        trialText: {
+            fontSize: t.type.caption.fontSize,
+            color: t.colors.textTertiary,
+            marginLeft: t.spacing.sm,
+        },
+        iconWithBadge: {
+            position: 'relative',
+            justifyContent: 'center',
+            alignItems: 'center',
+        },
+        peerBadge: {
+            position: 'absolute',
+            top: -2,
+            right: -6,
+            minWidth: 16,
+            height: 16,
+            borderRadius: t.radius.pill,
+            backgroundColor: t.colors.accent,
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingHorizontal: 4,
+        },
+        peerBadgeText: {
+            color: t.colors.onAccent,
+            fontSize: 9,
+            fontWeight: '700',
+        },
+        statusRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: t.spacing.sm,
+            paddingHorizontal: t.spacing.md,
+            paddingBottom: t.spacing.sm,
+        },
+        statusDot: {
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+        },
+        statusText: {
+            fontSize: t.type.caption.fontSize,
+            color: t.colors.textTertiary,
+        },
+        modalContainer: {
+            flex: 1,
+        },
+        overlay: {
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: t.colors.overlay,
+        },
+        drawer: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: DRAWER_WIDTH,
+            height: SCREEN_HEIGHT,
+            backgroundColor: t.colors.surface,
+            shadowColor: '#000',
+            shadowOffset: { width: 2, height: 0 },
+            shadowOpacity: 0.25,
+            shadowRadius: 8,
+            elevation: 10,
+        },
+        drawerContent: {
+            paddingTop: 72,
+            paddingHorizontal: t.spacing.lg,
+            paddingBottom: t.spacing.xxl,
+        },
+        drawerScroll: {
+            flex: 1,
+        },
+        sectionLabel: {
+            fontSize: t.type.caption.fontSize,
+            fontWeight: '700',
+            color: t.colors.textTertiary,
+            letterSpacing: 0.8,
+            textTransform: 'uppercase',
+            marginTop: t.spacing.lg,
+            marginBottom: t.spacing.xs,
+        },
+        menuRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: t.spacing.md,
+            minHeight: 48,
+        },
+        dangerRow: {
+            backgroundColor: t.colors.dangerSurface,
+            borderRadius: t.radius.sm,
+            paddingHorizontal: t.spacing.md,
+            marginTop: t.spacing.xs,
+        },
+        menuLabel: {
+            fontSize: t.type.bodyStrong.fontSize,
+            color: t.colors.text,
+            marginLeft: t.spacing.md,
+            flex: 1,
+        },
+        cardSwatch: {
+            width: 26,
+            height: 26,
+            borderRadius: t.radius.sm,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        settingGroup: {
+            paddingVertical: t.spacing.sm,
+        },
+        settingTitle: {
+            fontSize: t.type.label.fontSize,
+            fontWeight: '600',
+            color: t.colors.text,
+            marginBottom: t.spacing.sm,
+        },
+        optionRow: {
+            flexDirection: 'row',
+            gap: t.spacing.sm,
+        },
+        optionButton: {
+            flex: 1,
+            borderRadius: t.radius.sm,
+            borderWidth: 1,
+            borderColor: t.colors.border,
+            paddingVertical: t.spacing.sm,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: t.colors.surface,
+        },
+        optionButtonActive: {
+            backgroundColor: t.colors.primary,
+            borderColor: t.colors.primary,
+        },
+        optionLabel: {
+            fontSize: t.type.caption.fontSize,
+            fontWeight: '600',
+            color: t.colors.text,
+        },
+        optionLabelActive: {
+            color: t.colors.onPrimary,
+        },
+    })
+}
