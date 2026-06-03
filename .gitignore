@@ -5,7 +5,6 @@ node_modules/
 dist/
 ios/
 android/
-package-lock.json
 npm-debug.*
 *.jks
 *.p8
@@ -16,6 +15,14 @@ npm-debug.*
 *.bundle
 *.bundle.js
 web-build/
+
+# OS / editor / tooling junk
+.DS_Store
+__pycache__/
+*.pyc
+
+# The npm lockfile IS committed (Phase 0): reproducible installs via `npm ci`.
+# It is intentionally NOT ignored.
 
 # Runtime logs (may contain key material printed via console.error)
 *.log

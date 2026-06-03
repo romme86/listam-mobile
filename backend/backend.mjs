@@ -83,7 +83,7 @@ try {
 if (baseKeyHex) {
     try {
         setBaseKey(Buffer.from(baseKeyHex.trim(), 'hex'))
-        console.error('[INFO] Using existing Autobase key from argv[2]:', baseKeyHex.trim())
+        console.error('[INFO] Using existing Autobase key from argv[2]')
     } catch (err) {
         console.error('[ERROR] Invalid base key hex, creating new base instead:', err.message)
         setBaseKey(null)
@@ -142,7 +142,7 @@ let rpcGenerated = new RPC(IPC, async (req, error) => {
             case RPC_JOIN_KEY: {
                 console.error('[INFO] Command RPC_JOIN_KEY')
                 const data = JSON.parse(req.data.toString())
-                console.error('[INFO] Joining via invite from RPC:', data.key)
+                console.error('[INFO] Joining via invite from RPC')
                 await joinViaInvite(data.key)
                 break
             }
@@ -250,12 +250,13 @@ export async function apply (nodes, view, host) {
             try {
                 const writerKey = Buffer.from(value.key, 'hex')
                 await host.addWriter(writerKey, { indexer: true })
-                console.error('[INFO] Added writer from add-writer op:', value.key)
+                console.error('[INFO] Added writer from add-writer op')
 
-                // Log which key was added vs our own key (for debugging)
+                // Log whether the added writer is our own key (for debugging),
+                // without printing the raw key material.
                 if (autobase?.local) {
                     const ourKeyHex = autobase.local.key.toString('hex')
-                    console.error('[INFO] add-writer key:', value.key, '| our key:', ourKeyHex, '| match:', value.key === ourKeyHex)
+                    console.error('[INFO] add-writer is our own key:', value.key === ourKeyHex)
                 }
             } catch (err) {
                 console.error('[ERROR] Failed to add writer from add-writer op:', err)

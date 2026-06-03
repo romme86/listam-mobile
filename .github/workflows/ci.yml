@@ -1,0 +1,37 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  gates:
+    name: Phase 0 gates (install, lint, deps, secrets, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Reproducible install straight from the committed lockfile.
+      # --legacy-peer-deps matches how the lockfile was resolved (a pre-existing
+      # react-native-screens peer requires RN >=0.82 while the app pins 0.81).
+      - name: Install from lockfile
+        run: npm ci --legacy-peer-deps
+
+      - name: Lint (no-console for production code)
+        run: npm run lint
+
+      - name: Dependency hygiene (no undeclared imports)
+        run: npm run check:deps
+
+      - name: Secret/log grep gate
+        run: npm run check:secrets
+
+      - name: Tests
+        run: npm run test

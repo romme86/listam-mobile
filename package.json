@@ -10,11 +10,17 @@
     "ios": "npm run bundle:backend:ios && expo run:ios --device",
     "test:grocery": "node scripts/test-grocery-intelligence.mjs",
     "test:security": "node --test backend/lib/*.test.mjs",
+    "test": "npm run test:security && npm run test:grocery",
+    "lint": "eslint .",
+    "check:deps": "node scripts/check-deps.mjs",
+    "check:secrets": "node scripts/check-secrets.mjs",
     "typecheck": "tsc --noEmit",
+    "ci": "npm run lint && npm run check:deps && npm run check:secrets && npm run test",
     "bundle:backend:ios": "npx bare-pack --target ios --linked backend/backend.mjs --encoding base64 --out app/app.ios.bundle && node scripts/wrap-bare-bundle.mjs app/app.ios.bundle app/app.ios.bundle.mjs",
     "bundle:backend:android": "npx bare-pack --target android --linked backend/backend.mjs --encoding base64 --out app/assets/backend.android.bundle && node scripts/wrap-bare-bundle.mjs app/assets/backend.android.bundle app/assets/backend.android.bundle.mjs"
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.0.0",
     "@inquirer/prompts": "^7.8.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-clipboard/clipboard": "1.16.3",
@@ -23,7 +29,9 @@
     "b4a": "^1.7.1",
     "bare-crypto": "^1.12.0",
     "bare-fs": "^4.4.4",
+    "bare-path": "^3.0.1",
     "bare-rpc": "^0.2.12",
+    "bare-url": "^2.4.3",
     "base64-js": "^1.5.1",
     "blind-pairing": "^2.3.1",
     "blind-peering": "^1.13.0",
@@ -45,6 +53,7 @@
     "lucide-react-native": "^0.553.0",
     "make-dir": "^5.1.0",
     "protomux-wakeup": "^2.6.1",
+    "qrcode-terminal": "^0.12.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
@@ -53,6 +62,7 @@
     "react-native-iap": "^14.7.7",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "5.6.2",
+    "react-native-svg": "^15.12.1",
     "react-native-worklets": "0.5.1",
     "z32": "^1.1.0"
   },
@@ -62,8 +72,10 @@
     "@types/react": "19.2.7",
     "babel-plugin-module-resolver": "^5.0.2",
     "bare-pack": "1.5.1",
+    "eslint": "^9.0.0",
     "prettier": "3.7.4",
     "prettier-config-holepunch": "2.0.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.0.0"
   }
 }
