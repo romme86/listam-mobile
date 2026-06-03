@@ -349,7 +349,7 @@ export async function initAutobase(newBaseKey) {
             encryptionKey: encryptionKey || undefined
         }
         setAutobase(new Autobase(store, baseKey, autobaseOpts))
-        console.error('[INFO] Calling autobase.ready()... encKey:', encryptionKey ? encryptionKey.toString('hex').slice(0, 16) + '...' : 'none')
+        console.error('[INFO] Calling autobase.ready()... encKey:', encryptionKey ? 'present' : 'none')
         try {
             await autobase.ready()
         } catch (e) {
@@ -402,9 +402,9 @@ export async function initAutobase(newBaseKey) {
                     const peerCore = store.get({ key: peerKey })
                     await peerCore.ready()
                     await autobase.addInput(peerCore)
-                    console.error('[INFO] Added peer writer from argv[1]:', keyHex.trim())
+                    console.error('[INFO] Added peer writer from argv[1]')
                 } catch (err) {
-                    console.error('[ERROR] Failed to add peer from argv[1]:', keyHex, err.message)
+                    console.error('[ERROR] Failed to add peer from argv[1]:', err.message)
                 }
             }
             setAddedStaticPeers(true)
@@ -416,7 +416,7 @@ export async function initAutobase(newBaseKey) {
 
         // Use discoveryKey as swarm topic (NOT autobase.key)
         const topic = autobase.discoveryKey
-        console.error('[INFO] Discovery topic (replication swarm):', topic.toString('hex'))
+        console.error('[INFO] Discovery topic (replication swarm) ready')
 
         // Switch discovery to new topic
         if (discovery) {
@@ -502,7 +502,7 @@ export async function joinViaInvite(z32InviteStr) {
                 throw new Error('autobase.local.key unavailable — cannot derive writer key')
             }
             const localWriterKey = autobase.local.key
-            console.error('[INFO] Guest localWriterKey:', localWriterKey.toString('hex'))
+            console.error('[INFO] Guest localWriterKey ready')
 
             // 2. Temp swarm for blind pairing only.
             //    DO NOT close the candidate in onadd — closing it kills the
@@ -535,7 +535,7 @@ export async function joinViaInvite(z32InviteStr) {
             // Notify frontend: phase 2 — permission (waiting for write access)
             broadcastJoinPhase('permission')
 
-            console.error('[INFO] Blind pairing succeeded. Host base key:', result.key.toString('hex'))
+            console.error('[INFO] Blind pairing succeeded')
             console.error('[INFO] Temp swarm connections after pairing:', _tempSwarm.connections.size)
 
             // 3. Use initAutobase to set up the joined base — same proven code

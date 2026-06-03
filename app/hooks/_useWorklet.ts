@@ -190,7 +190,6 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
             if (reqFromBackend.command === RPC_GET_KEY) {
                 console.log('RPC_GET_KEY')
                 if (reqFromBackend.data) {
-                    console.log('data from bare', b4a.toString(reqFromBackend.data))
                     const data = b4a.toString(reqFromBackend.data)
                     setAutobaseInviteKey(data)
                 } else {

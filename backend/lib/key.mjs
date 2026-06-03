@@ -5,7 +5,7 @@ export function saveAutobaseKey(key, keyFilePath) {
     try {
         const keyHex = key.toString('hex')
         fs.writeFileSync(keyFilePath, keyHex)
-        console.error('[INFO] Saved autobase key to file:', keyHex)
+        console.error('[INFO] Saved autobase key to file')
     } catch (e) {
         console.error('[ERROR] Failed to save autobase key:', e)
     }
@@ -17,7 +17,7 @@ export function loadAutobaseKey(keyFilePath) {
         if (fs.existsSync(keyFilePath)) {
             const keyHex = fs.readFileSync(keyFilePath, 'utf8').trim()
             if (keyHex && keyHex.length === 64) {
-                console.error('[INFO] Loaded autobase key from file:', keyHex)
+                console.error('[INFO] Loaded autobase key from file')
                 return Buffer.from(keyHex, 'hex')
             }
         }
@@ -32,7 +32,7 @@ export function saveLocalWriterKey(key, localWriterKeyFilePath) {
     try {
         const keyHex = key.toString('hex')
         fs.writeFileSync(localWriterKeyFilePath, keyHex)
-        console.error('[INFO] Saved local writer key to file:', keyHex)
+        console.error('[INFO] Saved local writer key to file')
     } catch (e) {
         console.error('[ERROR] Failed to save local writer key:', e)
     }
@@ -44,7 +44,7 @@ export function loadLocalWriterKey(localWriterKeyFilePath) {
         if (fs.existsSync(localWriterKeyFilePath)) {
             const keyHex = fs.readFileSync(localWriterKeyFilePath, 'utf8').trim()
             if (keyHex && keyHex.length === 64) {
-                console.error('[INFO] Loaded local writer key from file:', keyHex)
+                console.error('[INFO] Loaded local writer key from file')
                 return Buffer.from(keyHex, 'hex')
             }
         }
