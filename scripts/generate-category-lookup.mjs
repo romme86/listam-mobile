@@ -24,6 +24,7 @@ for (const lang of LANGS) {
 
 // itemToCategory: normalized_item_text -> canonical_en_category
 const itemToCategory = {}
+const itemCategoryCollisions = new Map()
 // categoryTranslations: en_category -> { lang: translated_category_name }
 const categoryTranslations = {}
 // langItems: lang -> Set<normalized_item_string> (for language detection)
@@ -56,6 +57,11 @@ for (let i = 1; i < lines.length; i++) {
             langItems[lang].add(normalized)
             if (!itemToCategory[normalized]) {
                 itemToCategory[normalized] = enCategory
+            } else if (itemToCategory[normalized] !== enCategory) {
+                if (!itemCategoryCollisions.has(normalized)) {
+                    itemCategoryCollisions.set(normalized, new Set([itemToCategory[normalized]]))
+                }
+                itemCategoryCollisions.get(normalized).add(enCategory)
             }
         }
     }
@@ -65,13 +71,20 @@ for (let i = 1; i < lines.length; i++) {
 const KNOWN_ORDER = [
     'Fruits', 'Vegetables', 'Bread & Bakery', 'Deli', 'Meat', 'Fish & Seafood',
     'Dairy', 'Canned Goods', 'Pasta/Rice/Cereal', 'Condiments & Spices', 'Baking',
-    'Snacks', 'Beverages', 'Frozen Foods', 'Personal Care', 'Household & Cleaning',
-    'Baby Items', 'Pet Care', 'Others',
+    'Snacks', 'Beverages', 'Frozen Foods', 'Ready Meals', 'International Foods',
+    'Health & Organic', 'Personal Care', 'Household & Cleaning', 'Baby Items',
+    'Pet Care', 'Others',
 ]
 
 // Log stats
 console.log(`Items in lookup: ${Object.keys(itemToCategory).length}`)
 console.log(`Categories found: ${Object.keys(categoryTranslations).length}`)
+if (itemCategoryCollisions.size > 0) {
+    console.warn(`Category collisions found: ${itemCategoryCollisions.size}`)
+    for (const [item, categories] of Array.from(itemCategoryCollisions.entries()).slice(0, 80)) {
+        console.warn(`  ${JSON.stringify(item)} => ${Array.from(categories).join(' | ')}`)
+    }
+}
 for (const [cat, trans] of Object.entries(categoryTranslations)) {
     console.log(`  ${cat}: ${JSON.stringify(trans)}`)
 }

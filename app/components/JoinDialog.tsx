@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { View, Text, Modal, TextInput, TouchableOpacity } from 'react-native'
-import { dialogStyles } from './_styles'
+import { makeDialogStyles } from './_styles'
+import { useTheme } from '../theme'
 
 type JoinDialogProps = {
     visible: boolean
@@ -17,6 +18,9 @@ export function JoinDialog({
     onSubmit,
     onCancel,
 }: JoinDialogProps) {
+    const t = useTheme()
+    const dialogStyles = useMemo(() => makeDialogStyles(t), [t])
+
     return (
         <Modal
             visible={visible}
@@ -34,7 +38,7 @@ export function JoinDialog({
                         value={joinKeyInput}
                         onChangeText={setJoinKeyInput}
                         placeholder="Enter invite code..."
-                        placeholderTextColor="#999"
+                        placeholderTextColor={t.colors.placeholder}
                         multiline={true}
                         autoFocus={true}
                     />
@@ -43,6 +47,7 @@ export function JoinDialog({
                         <TouchableOpacity
                             style={[dialogStyles.button, dialogStyles.cancelButton]}
                             onPress={onCancel}
+                            accessibilityRole="button"
                         >
                             <Text style={dialogStyles.cancelButtonText}>Cancel</Text>
                         </TouchableOpacity>
@@ -50,6 +55,7 @@ export function JoinDialog({
                         <TouchableOpacity
                             style={[dialogStyles.button, dialogStyles.submitButton]}
                             onPress={onSubmit}
+                            accessibilityRole="button"
                         >
                             <Text style={dialogStyles.submitButtonText}>Join</Text>
                         </TouchableOpacity>

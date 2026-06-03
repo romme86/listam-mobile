@@ -1,25 +1,28 @@
-import React, { useState, useCallback, useMemo } from 'react'
+import React, { useMemo } from 'react'
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
-    TextInput,
     Dimensions,
 } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
-import type { ListEntry } from './_types'
+import type { ListEntry, SizeOption } from './_types'
 import { groupByCategory, type IndexedEntry } from './categoryGrouping'
 import { CATEGORY_ICONS } from './categoryConstants'
 import { GridCard } from './GridCard'
+import { EmptyState } from './EmptyState'
 import type { ItemIconVariant } from './itemIconMap'
+import { useTheme, type Theme } from '../theme'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const CARD_MARGIN = 6
 
-function getNumColumns(size: 'small' | 'medium' | 'normal') {
+function getNumColumns(size: SizeOption) {
     if (size === 'small') return 5
     if (size === 'medium') return 4
+    if (size === 'large') return 2
     return 3
 }
 
@@ -27,58 +30,33 @@ type Props = {
     data: ListEntry[]
     onToggleDone?: (index: number) => void
     onDelete?: (index: number) => void
-    onInsert?: (index: number, text: string) => void
+    onRequestAdd?: () => void
     categoriesEnabled?: boolean
     categoryHeadersVisible?: boolean
-    gridIconSize?: 'small' | 'medium' | 'normal'
+    gridIconSize?: SizeOption
     itemIconVariant?: ItemIconVariant
+    reduceMotion?: boolean
 }
 
 export function VisualGridList({
     data,
     onToggleDone,
     onDelete,
-    onInsert,
+    onRequestAdd,
     categoriesEnabled = true,
     categoryHeadersVisible = true,
     gridIconSize = 'normal',
     itemIconVariant = 'illustrated',
+    reduceMotion = false,
 }: Props) {
-    const [isAddingItem, setIsAddingItem] = useState(false)
-    const [editText, setEditText] = useState('')
+    const t = useTheme()
+    const insets = useSafeAreaInsets()
+    const styles = useMemo(() => makeStyles(t), [t])
     const numColumns = getNumColumns(gridIconSize)
     const cardWidth = useMemo(
         () => (SCREEN_WIDTH - 20 - CARD_MARGIN * (numColumns + 1)) / numColumns,
         [numColumns]
     )
-
-    const handleDoubleTap = useCallback(() => {
-        setIsAddingItem(true)
-        setEditText('')
-    }, [])
-
-    const lastTapRef = React.useRef<number>(0)
-    const handlePress = useCallback(() => {
-        const now = Date.now()
-        if (now - lastTapRef.current < 300) {
-            handleDoubleTap()
-            lastTapRef.current = 0
-        } else {
-            lastTapRef.current = now
-        }
-    }, [handleDoubleTap])
-
-    const handleSubmit = useCallback(() => {
-        if (editText.trim() && onInsert) {
-            onInsert(0, editText)
-            setEditText('')
-        }
-    }, [editText, onInsert])
-
-    const handleCancel = useCallback(() => {
-        setIsAddingItem(false)
-        setEditText('')
-    }, [])
 
     const sections = useMemo(() => {
         if (categoriesEnabled) return groupByCategory(data)
@@ -99,6 +77,7 @@ export function VisualGridList({
             onToggleDone={onToggleDone}
             onDelete={onDelete}
             itemIconVariant={itemIconVariant}
+            reduceMotion={reduceMotion}
         />
     )
 
@@ -121,109 +100,68 @@ export function VisualGridList({
         return rows
     }
 
+    if (data.length === 0) {
+        return (
+            <View style={styles.container}>
+                <EmptyState onRequestAdd={onRequestAdd} />
+            </View>
+        )
+    }
+
     return (
         <View style={styles.container}>
-            {isAddingItem && (
-                <View style={styles.inputContainer}>
-                    <TextInput
-                        style={styles.input}
-                        value={editText}
-                        onChangeText={setEditText}
-                        onSubmitEditing={handleSubmit}
-                        onBlur={handleCancel}
-                        blurOnSubmit={false}
-                        placeholder="Enter new item..."
-                        placeholderTextColor="#888"
-                        autoFocus
-                    />
-                </View>
-            )}
-            <View style={styles.scrollContainer} onTouchEnd={handlePress}>
-                <ScrollView
-                    contentContainerStyle={styles.scrollContent}
-                    showsVerticalScrollIndicator={false}
-                >
-                    {sections.map((section) => (
-                        <View key={section.category || '_flat'} style={styles.section}>
-                            {categoryHeadersVisible && section.category !== '' && (
-                                <View style={styles.categoryHeader}>
-                                    <Ionicons
-                                        name={(CATEGORY_ICONS[section.canonicalKey] || 'basket-outline') as any}
-                                        size={18}
-                                        color="#555"
-                                    />
-                                    <Text style={styles.categoryTitle}>{section.category.toUpperCase()}</Text>
-                                </View>
-                            )}
-                            {renderRows(section.items)}
-                        </View>
-                    ))}
-
-                    {data.length === 0 && (
-                        <View style={styles.emptyState}>
-                            <Ionicons name="basket-outline" size={64} color="#999" />
-                            <Text style={styles.emptyText}>Double tap to add items</Text>
-                        </View>
-                    )}
-                </ScrollView>
-            </View>
+            <ScrollView
+                contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 140 }]}
+                showsVerticalScrollIndicator={false}
+            >
+                {sections.map((section) => (
+                    <View key={section.category || '_flat'} style={styles.section}>
+                        {categoryHeadersVisible && section.category !== '' && (
+                            <View style={styles.categoryHeader}>
+                                <Ionicons
+                                    name={(CATEGORY_ICONS[section.canonicalKey] || 'basket-outline') as any}
+                                    size={18}
+                                    color={t.colors.textSecondary}
+                                />
+                                <Text style={styles.categoryTitle}>{section.category.toUpperCase()}</Text>
+                            </View>
+                        )}
+                        {renderRows(section.items)}
+                    </View>
+                ))}
+            </ScrollView>
         </View>
     )
 }
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: '#fff',
-    },
-    scrollContainer: {
-        flex: 1,
-    },
-    scrollContent: {
-        padding: 8,
-        paddingBottom: 100,
-    },
-    inputContainer: {
-        paddingHorizontal: 10,
-        paddingVertical: 12,
-        backgroundColor: '#fff',
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
-    },
-    input: {
-        fontSize: 16,
-        color: '#333',
-        fontWeight: '600',
-    },
-    section: {
-        marginBottom: 24,
-    },
-    categoryHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 10,
-        marginLeft: 4,
-    },
-    categoryTitle: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#333',
-        marginLeft: 6,
-        letterSpacing: 0.5,
-    },
-    row: {
-        flexDirection: 'row',
-        marginBottom: CARD_MARGIN,
-    },
-    emptyState: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingTop: 100,
-    },
-    emptyText: {
-        marginTop: 16,
-        fontSize: 16,
-        color: '#888',
-    },
-})
+function makeStyles(t: Theme) {
+    return StyleSheet.create({
+        container: {
+            flex: 1,
+            backgroundColor: t.colors.bg,
+        },
+        scrollContent: {
+            padding: 8,
+        },
+        section: {
+            marginBottom: t.spacing.xl,
+        },
+        categoryHeader: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            marginBottom: 10,
+            marginLeft: 4,
+        },
+        categoryTitle: {
+            fontSize: t.type.label.fontSize,
+            fontWeight: '700',
+            color: t.colors.textSecondary,
+            marginLeft: 6,
+            letterSpacing: 0.5,
+        },
+        row: {
+            flexDirection: 'row',
+            marginBottom: CARD_MARGIN,
+        },
+    })
+}

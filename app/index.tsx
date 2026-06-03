@@ -1,10 +1,19 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
-import { View, Share, Alert, Animated } from 'react-native'
+import {
+    View,
+    Share,
+    Alert,
+    StatusBar,
+    LayoutAnimation,
+    Platform,
+    UIManager,
+} from 'react-native'
 import * as Linking from 'expo-linking'
-import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useWorklet, RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_JOIN_KEY } from './hooks/_useWorklet'
+import { useWorklet, RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_JOIN_KEY, type NotifyType } from './hooks/_useWorklet'
 import { useSubscription } from './hooks/useSubscription'
+import { useReduceMotion } from './hooks/useReduceMotion'
 import { Header } from './components/Header'
 import { JoinDialog } from './components/JoinDialog'
 import { JoiningOverlay, P2P_MESSAGES } from './components/JoiningOverlay'
@@ -14,9 +23,18 @@ import { LoyaltyCardViewer } from './components/LoyaltyCardViewer'
 import type { LoyaltyCard } from './components/LoyaltyCardScanner'
 import InertialElasticList from './components/intertial_scroll'
 import { VisualGridList } from './components/VisualGridList'
+import { AddItemBar } from './components/AddItemBar'
+import { Fab } from './components/Fab'
+import { SummaryBar } from './components/SummaryBar'
+import { SnackbarProvider, useSnackbar } from './components/Snackbar'
+import { haptics } from './feedback'
+import { useTheme } from './theme'
 import type { ItemIconVariant } from './components/itemIconMap'
-import { styles } from './components/_styles'
-import type { ListEntry } from './components/_types'
+import type { ListEntry, SizeOption } from './components/_types'
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true)
+}
 
 const PREF_GRID_VIEW = '@lista_grid_view'
 const PREF_CATEGORIES = '@lista_categories'
@@ -26,13 +44,21 @@ const PREF_LIST_TEXT_SIZE = '@lista_list_text_size'
 const PREF_CATEGORY_HEADERS = '@lista_category_headers'
 const PREF_ITEM_ICON_VARIANT = '@lista_item_icon_variant'
 
-const DEFAULT_INSTRUCTIONS: ListEntry[] = [
-    { text: 'Double tap to add new', isDone: false, timeOfCompletion: 0 },
-    { text: 'Tap to mark as done', isDone: false, timeOfCompletion: 0 },
-    { text: 'Slide right slowly to delete', isDone: false, timeOfCompletion: 0 },
-]
+const SIZE_VALUES: SizeOption[] = ['small', 'medium', 'normal', 'large']
+const isSizeOption = (value: string | null): value is SizeOption =>
+    value !== null && (SIZE_VALUES as string[]).includes(value)
 
-export default function App() {
+function AppInner() {
+    const t = useTheme()
+    const insets = useSafeAreaInsets()
+    const snackbar = useSnackbar()
+    const reduceMotion = useReduceMotion()
+
+    const notify = useCallback(
+        (message: string, type: NotifyType = 'info') => snackbar.show(message, type),
+        [snackbar]
+    )
+
     const {
         dataList,
         setDataList,
@@ -44,7 +70,7 @@ export default function App() {
         isJoiningRef,
         joinPhase,
         sendRPC,
-    } = useWorklet()
+    } = useWorklet(notify)
 
     const subscription = useSubscription()
 
@@ -54,16 +80,25 @@ export default function App() {
     const [isGridView, setIsGridView] = useState(false)
     const [categoriesEnabled, setCategoriesEnabled] = useState(true)
     const [categoryHeadersVisible, setCategoryHeadersVisible] = useState(true)
-    const [gridIconSize, setGridIconSize] = useState<'small' | 'medium' | 'normal'>('normal')
-    const [listTextSize, setListTextSize] = useState<'small' | 'medium' | 'normal'>('normal')
+    const [gridIconSize, setGridIconSize] = useState<SizeOption>('normal')
+    const [listTextSize, setListTextSize] = useState<SizeOption>('normal')
     const [itemIconVariant, setItemIconVariant] = useState<ItemIconVariant>('illustrated')
     const [menuVisible, setMenuVisible] = useState(false)
     const [loyaltyCards, setLoyaltyCards] = useState<LoyaltyCard[]>([])
     const [scannerVisible, setScannerVisible] = useState(false)
     const [selectedCard, setSelectedCard] = useState<LoyaltyCard | null>(null)
-    const blinkAnim = useRef(new Animated.Value(1)).current
-    const lastAutoJoinInviteRef = useRef('')
-    const pendingDeepLinkInviteRef = useRef('')
+    const [isAdding, setIsAdding] = useState(false)
+    const [addText, setAddText] = useState('')
+
+    const pendingConfirmedInviteRef = useRef('')
+    const pendingJoinConfirmationInviteRef = useRef('')
+    const initialDeepLinkHandledRef = useRef(false)
+
+    const animate = useCallback(() => {
+        if (!reduceMotion) {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
+        }
+    }, [reduceMotion])
 
     const normalizeInvite = useCallback((raw: string) => {
         if (typeof raw !== 'string') return ''
@@ -83,14 +118,14 @@ export default function App() {
         return normalizeInvite(trimmed)
     }, [normalizeInvite])
 
-    const startJoinWithInvite = useCallback((rawInvite: string) => {
+    const beginJoinWithInvite = useCallback((rawInvite: string) => {
         const invite = extractInviteFromInput(rawInvite)
         if (!invite) {
-            Alert.alert('Error', 'Please enter a valid invite key or invite link')
+            snackbar.show('Enter a valid invite key or link', 'error')
             return false
         }
         if (!isWorkletReady) {
-            pendingDeepLinkInviteRef.current = invite
+            pendingConfirmedInviteRef.current = invite
             return true
         }
         setIsJoining(true)
@@ -98,7 +133,52 @@ export default function App() {
         isJoiningRef.current = true
         sendRPC(RPC_JOIN_KEY, JSON.stringify({ key: invite }))
         return true
-    }, [extractInviteFromInput, isJoiningRef, isWorkletReady, sendRPC, setIsJoining])
+    }, [extractInviteFromInput, isJoiningRef, isWorkletReady, sendRPC, setIsJoining, snackbar])
+
+    const requestJoinConfirmation = useCallback((rawInvite: string, source: 'link' | 'manual') => {
+        const invite = extractInviteFromInput(rawInvite)
+        if (!invite) {
+            snackbar.show('Enter a valid invite key or link', 'error')
+            return false
+        }
+        if (isJoiningRef.current) {
+            snackbar.show('Already joining an invite')
+            return false
+        }
+        if (pendingJoinConfirmationInviteRef.current === invite) return true
+
+        pendingJoinConfirmationInviteRef.current = invite
+        const sourceText = source === 'link'
+            ? 'This link contains a Listam invite.'
+            : 'This invite code will start a Listam join.'
+
+        Alert.alert(
+            'Join this Listam invite?',
+            `${sourceText}\n\nJoining may switch this device from your current list base to the invited one. The invite grants writer access until a future re-key flow exists.`,
+            [
+                {
+                    text: 'Cancel',
+                    style: 'cancel',
+                    onPress: () => {
+                        if (pendingJoinConfirmationInviteRef.current === invite) {
+                            pendingJoinConfirmationInviteRef.current = ''
+                        }
+                    },
+                },
+                {
+                    text: 'Join',
+                    style: 'default',
+                    onPress: () => {
+                        if (pendingJoinConfirmationInviteRef.current === invite) {
+                            pendingJoinConfirmationInviteRef.current = ''
+                        }
+                        beginJoinWithInvite(invite)
+                    },
+                },
+            ]
+        )
+        return true
+    }, [beginJoinWithInvite, extractInviteFromInput, isJoiningRef, snackbar])
 
     useEffect(() => {
         AsyncStorage.multiGet([
@@ -112,8 +192,8 @@ export default function App() {
         ]).then(([[, grid], [, cats], [, cards], [, gridSize], [, textSize], [, categoryHeaders], [, iconVariant]]) => {
             if (grid !== null) setIsGridView(grid === 'true')
             if (cats !== null) setCategoriesEnabled(cats === 'true')
-            if (gridSize === 'small' || gridSize === 'medium' || gridSize === 'normal') setGridIconSize(gridSize)
-            if (textSize === 'small' || textSize === 'medium' || textSize === 'normal') setListTextSize(textSize)
+            if (isSizeOption(gridSize)) setGridIconSize(gridSize)
+            if (isSizeOption(textSize)) setListTextSize(textSize)
             if (categoryHeaders !== null) setCategoryHeadersVisible(categoryHeaders === 'true')
             if (iconVariant === 'illustrated' || iconVariant === 'minimal') setItemIconVariant(iconVariant)
             if (cards !== null) {
@@ -136,12 +216,12 @@ export default function App() {
         })
     }, [])
 
-    const handleGridIconSizeChange = useCallback((size: 'small' | 'medium' | 'normal') => {
+    const handleGridIconSizeChange = useCallback((size: SizeOption) => {
         setGridIconSize(size)
         AsyncStorage.setItem(PREF_GRID_ICON_SIZE, size)
     }, [])
 
-    const handleListTextSizeChange = useCallback((size: 'small' | 'medium' | 'normal') => {
+    const handleListTextSizeChange = useCallback((size: SizeOption) => {
         setListTextSize(size)
         AsyncStorage.setItem(PREF_LIST_TEXT_SIZE, size)
     }, [])
@@ -165,7 +245,8 @@ export default function App() {
             return next
         })
         setScannerVisible(false)
-    }, [])
+        snackbar.show(`Saved ${card.name} card`, 'success')
+    }, [snackbar])
 
     const handleDeleteCard = useCallback((id: string) => {
         setLoyaltyCards((prev) => {
@@ -179,45 +260,22 @@ export default function App() {
         setSelectedCard(card)
     }, [])
 
-    // Blinking animation when key is not ready
-    useEffect(() => {
-        if (!autobaseInviteKey) {
-            const blink = Animated.loop(
-                Animated.sequence([
-                    Animated.timing(blinkAnim, {
-                        toValue: 0.3,
-                        duration: 500,
-                        useNativeDriver: true,
-                    }),
-                    Animated.timing(blinkAnim, {
-                        toValue: 1,
-                        duration: 500,
-                        useNativeDriver: true,
-                    }),
-                ])
-            )
-            blink.start()
-            return () => blink.stop()
-        } else {
-            blinkAnim.setValue(1)
-        }
-    }, [autobaseInviteKey, blinkAnim])
-
     useEffect(() => {
         const handleIncomingUrl = (url: string | null) => {
             if (!url) return
             const invite = extractInviteFromInput(url)
             if (!invite) return
-            if (lastAutoJoinInviteRef.current === invite) return
-            lastAutoJoinInviteRef.current = invite
-            startJoinWithInvite(invite)
+            requestJoinConfirmation(invite, 'link')
         }
 
-        Linking.getInitialURL().then((url) => {
-            handleIncomingUrl(url)
-        }).catch((error) => {
-            console.log('Failed to read initial URL', error)
-        })
+        if (!initialDeepLinkHandledRef.current) {
+            initialDeepLinkHandledRef.current = true
+            Linking.getInitialURL().then((url) => {
+                handleIncomingUrl(url)
+            }).catch((error) => {
+                console.log('Failed to read initial URL', error)
+            })
+        }
 
         const subscription = Linking.addEventListener('url', ({ url }) => {
             handleIncomingUrl(url)
@@ -226,15 +284,15 @@ export default function App() {
         return () => {
             subscription.remove()
         }
-    }, [extractInviteFromInput, startJoinWithInvite])
+    }, [extractInviteFromInput, requestJoinConfirmation])
 
     useEffect(() => {
         if (!isWorkletReady) return
-        if (!pendingDeepLinkInviteRef.current) return
-        const invite = pendingDeepLinkInviteRef.current
-        pendingDeepLinkInviteRef.current = ''
-        startJoinWithInvite(invite)
-    }, [isWorkletReady, startJoinWithInvite])
+        if (!pendingConfirmedInviteRef.current) return
+        const invite = pendingConfirmedInviteRef.current
+        pendingConfirmedInviteRef.current = ''
+        beginJoinWithInvite(invite)
+    }, [beginJoinWithInvite, isWorkletReady])
 
     // Rotate P2P messages while joining
     useEffect(() => {
@@ -246,13 +304,11 @@ export default function App() {
     }, [isJoining])
 
     const handleToggleDone = useCallback((index: number) => {
+        animate()
         setDataList((prevList) => {
             const newList = [...prevList]
             const current = newList[index]
-
-            if (!current) {
-                return prevList
-            }
+            if (!current) return prevList
 
             const updatedItem: ListEntry = {
                 ...current,
@@ -270,45 +326,76 @@ export default function App() {
             sendRPC(RPC_UPDATE, JSON.stringify({ item: updatedItem }))
             return newList
         })
-    }, [sendRPC, setDataList])
+    }, [animate, sendRPC, setDataList])
 
     const handleDelete = useCallback((index: number) => {
         const deletedItem = dataList[index]
+        animate()
         setDataList((prevList) => prevList.filter((_, i) => i !== index))
         sendRPC(RPC_DELETE, JSON.stringify({ item: deletedItem }))
-    }, [dataList, sendRPC, setDataList])
+    }, [animate, dataList, sendRPC, setDataList])
 
     const handleInsert = useCallback((_index: number, text: string) => {
-        const defaultTexts = [
-            'Tap to mark as done',
-            'Double tap to add new',
-            'Slide right slowly to delete'
-        ]
-        const defaultEntries = dataList.filter(item => defaultTexts.includes(item.text))
-        if (defaultEntries.length > 0) {
-            for (const entry of defaultEntries) {
-                sendRPC(RPC_DELETE, JSON.stringify({ item: entry }))
-            }
-        }
         sendRPC(RPC_ADD, JSON.stringify(text))
-    }, [dataList, sendRPC])
+    }, [sendRPC])
+
+    const handleEditItem = useCallback((index: number, newText: string) => {
+        const old = dataList[index]
+        if (!old) return
+        const trimmed = newText.trim()
+        if (!trimmed || trimmed === old.text) return
+        if (dataList.some((item, i) => i !== index && item.text === trimmed)) {
+            snackbar.show('An item with that name already exists', 'error')
+            return
+        }
+        animate()
+        setDataList((prev) => prev.map((item, i) => (i === index ? { ...item, text: trimmed } : item)))
+        sendRPC(RPC_DELETE, JSON.stringify({ item: old }))
+        sendRPC(RPC_ADD, JSON.stringify(trimmed))
+    }, [animate, dataList, sendRPC, setDataList, snackbar])
+
+    const handleClearCompleted = useCallback(() => {
+        const done = dataList.filter((item) => item.isDone)
+        if (done.length === 0) return
+        animate()
+        setDataList((prev) => prev.filter((item) => !item.isDone))
+        done.forEach((item) => sendRPC(RPC_DELETE, JSON.stringify({ item })))
+        haptics.success()
+    }, [animate, dataList, sendRPC, setDataList])
+
+    const handleRequestAdd = useCallback(() => {
+        setAddText('')
+        setIsAdding(true)
+    }, [])
+
+    const handleSubmitAdd = useCallback(() => {
+        const value = addText.trim()
+        if (!value) return
+        if (dataList.some((item) => item.text === value)) {
+            snackbar.show('That item is already on the list')
+            setAddText('')
+            return
+        }
+        handleInsert(0, value)
+        haptics.toggleOn()
+        setAddText('')
+    }, [addText, dataList, handleInsert, snackbar])
 
     const handleShare = useCallback(async () => {
         if (!autobaseInviteKey) {
-            Alert.alert('Connection in progress', 'Invite key is not available yet. Please wait a moment and try again.')
+            snackbar.show('Invite key not ready yet — try again in a moment')
             return
         }
-
         try {
             const inviteLink = `https://listam.ch/join?invite=${encodeURIComponent(autobaseInviteKey)}`
             await Share.share({
-                message: `Join my Listam list:\n${inviteLink}\n\nInvite code: ${autobaseInviteKey}`,
-                title: 'Join my Listam list'
+                message: `Join my Listam list:\n${inviteLink}\n\nInvite code: ${autobaseInviteKey}\n\nThis invite is single-use, expires in 10 minutes, and grants writer access until the list is re-keyed.`,
+                title: 'Join my Listam list',
             })
         } catch (error) {
             console.log('Error sharing:', error)
         }
-    }, [autobaseInviteKey])
+    }, [autobaseInviteKey, snackbar])
 
     const handleJoin = useCallback(() => {
         setJoinDialogVisible(true)
@@ -316,16 +403,14 @@ export default function App() {
 
     const handleJoinSubmit = useCallback(() => {
         if (!joinKeyInput.trim()) {
-            Alert.alert('Error', 'Please enter an invite key')
+            snackbar.show('Enter an invite key', 'error')
             return
         }
-
-        const didStartJoin = startJoinWithInvite(joinKeyInput)
-        if (!didStartJoin) return
-
+        const didRequestJoin = requestJoinConfirmation(joinKeyInput, 'manual')
+        if (!didRequestJoin) return
         setJoinDialogVisible(false)
         setJoinKeyInput('')
-    }, [joinKeyInput, startJoinWithInvite])
+    }, [joinKeyInput, requestJoinConfirmation, snackbar])
 
     const handleJoinCancel = useCallback(() => {
         setJoinDialogVisible(false)
@@ -347,106 +432,146 @@ export default function App() {
                     text: 'Delete All',
                     style: 'destructive',
                     onPress: () => {
+                        animate()
                         dataList.forEach((item) => {
                             sendRPC(RPC_DELETE, JSON.stringify({ item }))
                         })
                         setDataList([])
+                        haptics.delete()
                     },
                 },
             ]
         )
-    }, [dataList, sendRPC, setDataList])
+    }, [animate, dataList, sendRPC, setDataList])
 
+    const remaining = dataList.reduce((acc, item) => acc + (item.isDone ? 0 : 1), 0)
+    const doneCount = dataList.length - remaining
+    const hasItems = dataList.length > 0
 
     // Show paywall if trial expired and not subscribed
     if (subscription.shouldShowPaywall) {
         return (
-            <SafeAreaProvider>
-                <Paywall
-                    state={subscription}
-                    onPurchase={subscription.purchase}
-                    onRestore={subscription.restore}
-                />
-            </SafeAreaProvider>
+            <Paywall
+                state={subscription}
+                onPurchase={subscription.purchase}
+                onRestore={subscription.restore}
+            />
         )
     }
 
     return (
-        <SafeAreaProvider>
-            <View style={styles.container}>
-                <Header
-                    autobaseInviteKey={autobaseInviteKey}
-                    peerCount={peerCount}
-                    blinkAnim={blinkAnim}
-                    onShare={handleShare}
-                    onJoin={handleJoin}
-                    trialDaysRemaining={subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
-                    menuVisible={menuVisible}
-                    onMenuToggle={() => setMenuVisible(v => !v)}
-                    onDeleteAll={handleDeleteAll}
-                    isGridView={isGridView}
-                    onToggleView={handleToggleView}
+        <View style={{ flex: 1, backgroundColor: t.colors.bg }}>
+            <StatusBar
+                barStyle={t.dark ? 'light-content' : 'dark-content'}
+                backgroundColor={t.colors.bg}
+            />
+            <Header
+                autobaseInviteKey={autobaseInviteKey}
+                peerCount={peerCount}
+                isWorkletReady={isWorkletReady}
+                onShare={handleShare}
+                onJoin={handleJoin}
+                trialDaysRemaining={subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
+                menuVisible={menuVisible}
+                onMenuToggle={() => setMenuVisible(v => !v)}
+                onDeleteAll={handleDeleteAll}
+                isGridView={isGridView}
+                onToggleView={handleToggleView}
+                categoriesEnabled={categoriesEnabled}
+                onToggleCategories={handleToggleCategories}
+                categoryHeadersVisible={categoryHeadersVisible}
+                onToggleCategoryHeaders={handleToggleCategoryHeaders}
+                gridIconSize={gridIconSize}
+                onGridIconSizeChange={handleGridIconSizeChange}
+                listTextSize={listTextSize}
+                onListTextSizeChange={handleListTextSizeChange}
+                itemIconVariant={itemIconVariant}
+                onItemIconVariantChange={handleItemIconVariantChange}
+                loyaltyCards={loyaltyCards}
+                onScanCard={() => setScannerVisible(true)}
+                onSelectCard={handleSelectCard}
+            />
+
+            {isAdding && (
+                <AddItemBar
+                    value={addText}
+                    onChangeText={setAddText}
+                    onSubmit={handleSubmitAdd}
+                    onClose={() => setIsAdding(false)}
+                />
+            )}
+
+            <JoinDialog
+                visible={joinDialogVisible}
+                joinKeyInput={joinKeyInput}
+                setJoinKeyInput={setJoinKeyInput}
+                onSubmit={handleJoinSubmit}
+                onCancel={handleJoinCancel}
+            />
+            <JoiningOverlay
+                visible={isJoining}
+                currentMessageIndex={currentP2PMessage}
+                joinPhase={joinPhase}
+                onCancel={handleJoiningCancel}
+            />
+
+            {isGridView ? (
+                <VisualGridList
+                    data={dataList}
+                    onToggleDone={handleToggleDone}
+                    onDelete={handleDelete}
+                    onRequestAdd={handleRequestAdd}
                     categoriesEnabled={categoriesEnabled}
-                    onToggleCategories={handleToggleCategories}
                     categoryHeadersVisible={categoryHeadersVisible}
-                    onToggleCategoryHeaders={handleToggleCategoryHeaders}
                     gridIconSize={gridIconSize}
-                    onGridIconSizeChange={handleGridIconSizeChange}
-                    listTextSize={listTextSize}
-                    onListTextSizeChange={handleListTextSizeChange}
                     itemIconVariant={itemIconVariant}
-                    onItemIconVariantChange={handleItemIconVariantChange}
-                    loyaltyCards={loyaltyCards}
-                    onScanCard={() => setScannerVisible(true)}
-                    onSelectCard={handleSelectCard}
+                    reduceMotion={reduceMotion}
                 />
-                <JoinDialog
-                    visible={joinDialogVisible}
-                    joinKeyInput={joinKeyInput}
-                    setJoinKeyInput={setJoinKeyInput}
-                    onSubmit={handleJoinSubmit}
-                    onCancel={handleJoinCancel}
+            ) : (
+                <InertialElasticList
+                    data={dataList}
+                    onToggleDone={handleToggleDone}
+                    onDelete={handleDelete}
+                    onEdit={handleEditItem}
+                    onRequestAdd={handleRequestAdd}
+                    categoriesEnabled={categoriesEnabled}
+                    categoryHeadersVisible={categoryHeadersVisible}
+                    listTextSize={listTextSize}
+                    reduceMotion={reduceMotion}
                 />
-                <JoiningOverlay
-                    visible={isJoining}
-                    currentMessageIndex={currentP2PMessage}
-                    joinPhase={joinPhase}
-                    onCancel={handleJoiningCancel}
+            )}
+
+            {hasItems && (
+                <SummaryBar
+                    remaining={remaining}
+                    doneCount={doneCount}
+                    onClearCompleted={handleClearCompleted}
                 />
-                {isGridView ? (
-                    <VisualGridList
-                        data={dataList.length === 0 ? DEFAULT_INSTRUCTIONS : dataList}
-                        onToggleDone={handleToggleDone}
-                        onDelete={handleDelete}
-                        onInsert={handleInsert}
-                        categoriesEnabled={categoriesEnabled}
-                        categoryHeadersVisible={categoryHeadersVisible}
-                        gridIconSize={gridIconSize}
-                        itemIconVariant={itemIconVariant}
-                    />
-                ) : (
-                    <InertialElasticList
-                        data={dataList.length === 0 ? DEFAULT_INSTRUCTIONS : dataList}
-                        onToggleDone={handleToggleDone}
-                        onDelete={handleDelete}
-                        onInsert={handleInsert}
-                        categoriesEnabled={categoriesEnabled}
-                        categoryHeadersVisible={categoryHeadersVisible}
-                        listTextSize={listTextSize}
-                    />
-                )}
-                <LoyaltyCardScanner
-                    visible={scannerVisible}
-                    onClose={() => setScannerVisible(false)}
-                    onCardScanned={handleCardScanned}
-                />
-                <LoyaltyCardViewer
-                    visible={selectedCard !== null}
-                    card={selectedCard}
-                    onClose={() => setSelectedCard(null)}
-                    onDelete={handleDeleteCard}
-                />
-            </View>
+            )}
+
+            {!isAdding && <Fab onPress={handleRequestAdd} bottomOffset={insets.bottom + 20} />}
+
+            <LoyaltyCardScanner
+                visible={scannerVisible}
+                onClose={() => setScannerVisible(false)}
+                onCardScanned={handleCardScanned}
+            />
+            <LoyaltyCardViewer
+                visible={selectedCard !== null}
+                card={selectedCard}
+                onClose={() => setSelectedCard(null)}
+                onDelete={handleDeleteCard}
+            />
+        </View>
+    )
+}
+
+export default function App() {
+    return (
+        <SafeAreaProvider>
+            <SnackbarProvider>
+                <AppInner />
+            </SnackbarProvider>
         </SafeAreaProvider>
     )
 }

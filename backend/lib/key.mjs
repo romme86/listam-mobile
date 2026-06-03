@@ -81,40 +81,6 @@ export function loadEncryptionKey(filePath) {
     return null
 }
 
-// Save invite to file (JSON with hex-encoded buffers)
-export function saveInvite(invite, filePath) {
-    try {
-        const serialized = {
-            id: invite.id.toString('hex'),
-            invite: invite.invite.toString('hex'),
-            publicKey: invite.publicKey.toString('hex'),
-            expires: invite.expires || 0
-        }
-        fs.writeFileSync(filePath, JSON.stringify(serialized))
-        console.error('[INFO] Saved invite to file')
-    } catch (e) {
-        console.error('[ERROR] Failed to save invite:', e)
-    }
-}
-
-// Load invite from file if it exists
-export function loadInvite(filePath) {
-    try {
-        if (fs.existsSync(filePath)) {
-            const data = JSON.parse(fs.readFileSync(filePath, 'utf8'))
-            return {
-                id: Buffer.from(data.id, 'hex'),
-                invite: Buffer.from(data.invite, 'hex'),
-                publicKey: Buffer.from(data.publicKey, 'hex'),
-                expires: data.expires || 0
-            }
-        }
-    } catch (e) {
-        console.error('[ERROR] Failed to load invite:', e)
-    }
-    return null
-}
-
 // Delete invite file
 export function deleteInvite(filePath) {
     try {

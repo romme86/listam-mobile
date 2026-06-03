@@ -1,6 +1,7 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import { View, Text, Modal, TouchableOpacity, ActivityIndicator } from 'react-native'
-import { joiningStyles } from './_styles'
+import { makeJoiningStyles } from './_styles'
+import { useTheme } from '../theme'
 import type { JoinPhase } from '../hooks/_useWorklet'
 
 const P2P_MESSAGES = [
@@ -39,6 +40,9 @@ export function JoiningOverlay({
     joinPhase,
     onCancel,
 }: JoiningOverlayProps) {
+    const t = useTheme()
+    const joiningStyles = useMemo(() => makeJoiningStyles(t), [t])
+
     const phaseKey = joinPhase || 'pairing'
     const title = PHASE_TITLES[phaseKey] || 'Connecting to peer...'
     const subtitle = PHASE_SUBTITLES[phaseKey] || 'Please keep the app open while we establish a secure connection.'
@@ -55,7 +59,7 @@ export function JoiningOverlay({
         >
             <View style={joiningStyles.overlay}>
                 <View style={joiningStyles.content}>
-                    <ActivityIndicator size="large" color="#333" />
+                    <ActivityIndicator size="large" color={t.colors.accent} />
                     <Text style={joiningStyles.title}>{title}</Text>
                     <View style={joiningStyles.phaseRow}>
                         {phases.map((phase, i) => (
@@ -75,6 +79,7 @@ export function JoiningOverlay({
                     <TouchableOpacity
                         style={joiningStyles.cancelButton}
                         onPress={onCancel}
+                        accessibilityRole="button"
                     >
                         <Text style={joiningStyles.cancelButtonText}>Cancel</Text>
                     </TouchableOpacity>

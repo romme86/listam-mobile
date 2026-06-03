@@ -1,4 +1,11 @@
 import type { ImageSourcePropType } from 'react-native'
+import { getCategoryForItem } from './categoryLookup'
+import {
+    containsLookupTerm,
+    getFirstAsciiLetter,
+    normalizeGroceryText,
+    toRawLookupText,
+} from './groceryText'
 import { TRANSLATED_ITEM_TO_EN } from './itemTranslations'
 
 // Static require maps — React Native needs literal require() calls
@@ -35,6 +42,7 @@ const ITEM_ICONS: Record<string, ImageSourcePropType> = {
     watermelon: require('../assets/icons/items/illustrated/watermelon.png'),
     pineapple: require('../assets/icons/items/illustrated/pineapple.png'),
     mango: require('../assets/icons/items/illustrated/apple.png'), // no mango icon, fallback
+    mangoes: require('../assets/icons/items/illustrated/apple.png'), // no mango icon, fallback
     peach: require('../assets/icons/items/illustrated/peach.png'),
     peaches: require('../assets/icons/items/illustrated/peach.png'),
     pear: require('../assets/icons/items/illustrated/pear.png'),
@@ -75,6 +83,8 @@ const ITEM_ICONS: Record<string, ImageSourcePropType> = {
     broccoli: require('../assets/icons/items/illustrated/broccoli.png'),
     spinach: require('../assets/icons/items/illustrated/spinach-leaves.png'),
     'spinach leaves': require('../assets/icons/items/illustrated/spinach-leaves.png'),
+    kale: require('../assets/icons/items/illustrated/spinach-leaves.png'),
+    'baby spinach': require('../assets/icons/items/illustrated/spinach-leaves.png'),
     salad: require('../assets/icons/items/illustrated/salad-lettuce-iceberg.png'),
     lettuce: require('../assets/icons/items/illustrated/salad-lettuce-iceberg.png'),
     iceberg: require('../assets/icons/items/illustrated/salad-lettuce-iceberg.png'),
@@ -209,7 +219,12 @@ const ITEM_ICONS: Record<string, ImageSourcePropType> = {
 
     // ── Dairy ────────────────────────────────────────────────────────────────
     milk: require('../assets/icons/items/illustrated/milk.png'),
+    'whole milk': require('../assets/icons/items/illustrated/milk.png'),
+    'semi skimmed milk': require('../assets/icons/items/illustrated/milk.png'),
+    'skimmed milk': require('../assets/icons/items/illustrated/milk.png'),
+    'oat milk': require('../assets/icons/items/illustrated/milk.png'),
     'almond milk': require('../assets/icons/items/illustrated/almond-milk-carton.png'),
+    'soy milk': require('../assets/icons/items/illustrated/milk.png'),
     butter: require('../assets/icons/items/illustrated/butter.png'),
     margarine: require('../assets/icons/items/illustrated/margarine.png'),
     egg: require('../assets/icons/items/illustrated/eggs.png'),
@@ -222,6 +237,10 @@ const ITEM_ICONS: Record<string, ImageSourcePropType> = {
     parmigiano: require('../assets/icons/items/illustrated/parmigiano-grana.png'),
     grana: require('../assets/icons/items/illustrated/parmigiano-grana.png'),
     cheddar: require('../assets/icons/items/illustrated/cheddar.png'),
+    cheese: require('../assets/icons/items/illustrated/cheddar.png'),
+    feta: require('../assets/icons/items/illustrated/cheddar.png'),
+    gouda: require('../assets/icons/items/illustrated/cheddar.png'),
+    brie: require('../assets/icons/items/illustrated/cheddar.png'),
     ricotta: require('../assets/icons/items/illustrated/ricotta-cheese.png'),
     'cottage cheese': require('../assets/icons/items/illustrated/cottage-cheese.png'),
     yogurt: require('../assets/icons/items/illustrated/plain-yogurt.png'),
@@ -231,6 +250,12 @@ const ITEM_ICONS: Record<string, ImageSourcePropType> = {
 
     // ── Canned Goods & Condiments ────────────────────────────────────────────
     'coconut milk': require('../assets/icons/items/illustrated/coconut-milk.png'),
+    'canned tuna': require('../assets/icons/items/illustrated/tuna-fish.png'),
+    'canned beans': require('../assets/icons/items/illustrated/beans.png'),
+    'canned corn': require('../assets/icons/items/illustrated/corn.png'),
+    'canned tomatoes': require('../assets/icons/items/illustrated/tomato.png'),
+    chickpeas: require('../assets/icons/items/illustrated/beans.png'),
+    lentils: require('../assets/icons/items/illustrated/beans.png'),
     'soy sauce': require('../assets/icons/items/illustrated/soy-sauce-bottle.png'),
     honey: require('../assets/icons/items/illustrated/honey-jar.png'),
     marmalade: require('../assets/icons/items/illustrated/marmalade-jar.png'),
@@ -402,6 +427,7 @@ const MINIMAL_ITEM_ICONS: Partial<Record<string, ImageSourcePropType>> = {
     'melon': require('@/app/assets/icons/items/minimal/melon.png'),
     'watermelon': require('@/app/assets/icons/items/minimal/watermelon.png'),
     'pineapple': require('@/app/assets/icons/items/minimal/pineapple.png'),
+    'mangoes': require('@/app/assets/icons/items/minimal/apple.png'),
     'peach': require('@/app/assets/icons/items/minimal/peach.png'),
     'peaches': require('@/app/assets/icons/items/minimal/peach.png'),
     'pear': require('@/app/assets/icons/items/minimal/pear.png'),
@@ -442,6 +468,8 @@ const MINIMAL_ITEM_ICONS: Partial<Record<string, ImageSourcePropType>> = {
     'broccoli': require('@/app/assets/icons/items/minimal/broccoli.png'),
     'spinach': require('@/app/assets/icons/items/minimal/spinach-leaves.png'),
     'spinach leaves': require('@/app/assets/icons/items/minimal/spinach-leaves.png'),
+    'kale': require('@/app/assets/icons/items/minimal/spinach-leaves.png'),
+    'baby spinach': require('@/app/assets/icons/items/minimal/spinach-leaves.png'),
     'salad': require('@/app/assets/icons/items/minimal/salad-lettuce-iceberg.png'),
     'lettuce': require('@/app/assets/icons/items/minimal/salad-lettuce-iceberg.png'),
     'iceberg': require('@/app/assets/icons/items/minimal/salad-lettuce-iceberg.png'),
@@ -576,7 +604,12 @@ const MINIMAL_ITEM_ICONS: Partial<Record<string, ImageSourcePropType>> = {
 
     // ── Dairy ────────────────────────────────────────────────────────────────
     'milk': require('@/app/assets/icons/items/minimal/milk.png'),
+    'whole milk': require('@/app/assets/icons/items/minimal/milk.png'),
+    'semi skimmed milk': require('@/app/assets/icons/items/minimal/milk.png'),
+    'skimmed milk': require('@/app/assets/icons/items/minimal/milk.png'),
+    'oat milk': require('@/app/assets/icons/items/minimal/milk.png'),
     'almond milk': require('@/app/assets/icons/items/minimal/almond-milk-carton.png'),
+    'soy milk': require('@/app/assets/icons/items/minimal/milk.png'),
     'butter': require('@/app/assets/icons/items/minimal/butter.png'),
     'margarine': require('@/app/assets/icons/items/minimal/margarine.png'),
     'egg': require('@/app/assets/icons/items/minimal/eggs.png'),
@@ -589,6 +622,10 @@ const MINIMAL_ITEM_ICONS: Partial<Record<string, ImageSourcePropType>> = {
     'parmigiano': require('@/app/assets/icons/items/minimal/parmigiano-grana.png'),
     'grana': require('@/app/assets/icons/items/minimal/parmigiano-grana.png'),
     'cheddar': require('@/app/assets/icons/items/minimal/cheddar.png'),
+    'cheese': require('@/app/assets/icons/items/minimal/cheddar.png'),
+    'feta': require('@/app/assets/icons/items/minimal/cheddar.png'),
+    'gouda': require('@/app/assets/icons/items/minimal/cheddar.png'),
+    'brie': require('@/app/assets/icons/items/minimal/cheddar.png'),
     'ricotta': require('@/app/assets/icons/items/minimal/ricotta-cheese.png'),
     'cottage cheese': require('@/app/assets/icons/items/minimal/cottage-cheese.png'),
     'yogurt': require('@/app/assets/icons/items/minimal/plain-yogurt.png'),
@@ -598,6 +635,12 @@ const MINIMAL_ITEM_ICONS: Partial<Record<string, ImageSourcePropType>> = {
 
     // ── Canned Goods & Condiments ────────────────────────────────────────────
     'coconut milk': require('@/app/assets/icons/items/minimal/coconut-milk.png'),
+    'canned tuna': require('@/app/assets/icons/items/minimal/tuna-fish.png'),
+    'canned beans': require('@/app/assets/icons/items/minimal/beans.png'),
+    'canned corn': require('@/app/assets/icons/items/minimal/corn.png'),
+    'canned tomatoes': require('@/app/assets/icons/items/minimal/tomato.png'),
+    'chickpeas': require('@/app/assets/icons/items/minimal/beans.png'),
+    'lentils': require('@/app/assets/icons/items/minimal/beans.png'),
     'soy sauce': require('@/app/assets/icons/items/minimal/soy-sauce-bottle.png'),
     'honey': require('@/app/assets/icons/items/minimal/honey-jar.png'),
     'marmalade': require('@/app/assets/icons/items/minimal/marmalade-jar.png'),
@@ -1621,7 +1664,7 @@ const SINGLE_WORD_KEYS = Object.keys(ITEM_ICONS).filter((k) => !k.includes(' '))
 
 const NORMALIZED_TRANSLATED_ITEM_TO_EN: Record<string, string> = {}
 for (const [source, target] of Object.entries(TRANSLATED_ITEM_TO_EN)) {
-    const normalizedSource = normalizeForLookup(source)
+    const normalizedSource = normalizeGroceryText(source)
     if (normalizedSource && !NORMALIZED_TRANSLATED_ITEM_TO_EN[normalizedSource]) {
         NORMALIZED_TRANSLATED_ITEM_TO_EN[normalizedSource] = target
     }
@@ -1629,23 +1672,13 @@ for (const [source, target] of Object.entries(TRANSLATED_ITEM_TO_EN)) {
 
 const NORMALIZED_MANUAL_TRANSLATIONS: Record<string, string> = {}
 for (const [source, target] of Object.entries(MANUAL_TRANSLATIONS)) {
-    const normalizedSource = normalizeForLookup(source)
+    const normalizedSource = normalizeGroceryText(source)
     if (normalizedSource && !NORMALIZED_MANUAL_TRANSLATIONS[normalizedSource]) {
         NORMALIZED_MANUAL_TRANSLATIONS[normalizedSource] = target
     }
 }
 
-function normalizeForLookup(text: string): string {
-    return text
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[’']/g, '')
-        .replace(/[-_/]/g, ' ')
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-}
+const normalizeForLookup = normalizeGroceryText
 
 function stripQuantifiers(text: string): string {
     return text
@@ -1659,12 +1692,54 @@ function stripQuantifiers(text: string): string {
 }
 
 type IconResult = { type: 'image' | 'letter'; source: ImageSourcePropType }
+export type IconKeyResolution =
+    | { type: 'image'; key: string }
+    | { type: 'letter'; letter: string }
+
+const TEXT_ICON_OVERRIDES = new Map<string, string>([
+    ['pepper', 'black pepper'],
+    ['pepe', 'black pepper'],
+    ['peper', 'black pepper'],
+    ['pfeffer', 'black pepper'],
+    ['pimienta', 'black pepper'],
+    ['pimenta', 'black pepper'],
+    ['poivre', 'black pepper'],
+    ['胡椒', 'black pepper'],
+    ['перец', 'black pepper'],
+    ['こしょう', 'black pepper'],
+    ['후추', 'black pepper'],
+    ['فلفل', 'black pepper'],
+    ['काली मिर्च', 'black pepper'],
+])
+
+const GENERIC_FOOD_ICON_KEYS = new Set([
+    'cream',
+    'milk',
+    'egg',
+    'eggs',
+    'butter',
+    'water',
+    'pepper',
+])
+
+function isCompatibleIconKey(key: string, category: string): boolean {
+    if (!GENERIC_FOOD_ICON_KEYS.has(key)) return true
+    if (key === 'cream') return category === 'Dairy'
+    if (key === 'milk') return category === 'Dairy' || category === 'Beverages'
+    if (key === 'egg' || key === 'eggs' || key === 'butter') return category === 'Dairy'
+    if (key === 'water') return category === 'Beverages'
+    if (key === 'pepper') return category === 'Vegetables'
+    return true
+}
 
 function translateToEnglish(text: string): string | undefined {
+    const raw = toRawLookupText(text)
     const normalized = normalizeForLookup(text)
     return (
         MANUAL_TRANSLATIONS[text] ??
         TRANSLATED_ITEM_TO_EN[text] ??
+        MANUAL_TRANSLATIONS[raw] ??
+        TRANSLATED_ITEM_TO_EN[raw] ??
         NORMALIZED_MANUAL_TRANSLATIONS[normalized] ??
         NORMALIZED_TRANSLATED_ITEM_TO_EN[normalized]
     )
@@ -1677,75 +1752,122 @@ function getImageSourceForKey(key: string, variant: ItemIconVariant): ImageSourc
     return ITEM_ICONS[key]
 }
 
-export function getIconForItem(text: string, variant: ItemIconVariant = 'illustrated'): IconResult {
+function getCompatibleImageKey(key: string, category: string): string | undefined {
+    if (getImageSourceForKey(key, 'illustrated') && isCompatibleIconKey(key, category)) {
+        return key
+    }
+    return undefined
+}
+
+function getTranslatedImageKey(text: string, category: string): string | undefined {
+    const enEquiv = translateToEnglish(text)
+    if (!enEquiv) return undefined
+
+    const translated = normalizeForLookup(enEquiv)
+    const translatedOverride = TEXT_ICON_OVERRIDES.get(translated)
+    if (translatedOverride && getImageSourceForKey(translatedOverride, 'illustrated')) {
+        return translatedOverride
+    }
+
+    const translatedSource = getCompatibleImageKey(translated, category)
+    if (translatedSource) return translatedSource
+
+    const enStripped = stripQuantifiers(translated)
+    if (enStripped !== translated) {
+        return getCompatibleImageKey(enStripped, category)
+    }
+
+    return undefined
+}
+
+export function resolveIconKeyForItem(text: string, _variant: ItemIconVariant = 'illustrated'): IconKeyResolution {
+    const raw = toRawLookupText(text)
     const normalized = normalizeForLookup(text)
     const stripped = stripQuantifiers(normalized)
+    const category = getCategoryForItem(text)
+    const override = TEXT_ICON_OVERRIDES.get(normalized)
+        ?? TEXT_ICON_OVERRIDES.get(raw)
+        ?? TEXT_ICON_OVERRIDES.get(stripped)
+
+    if (override && getImageSourceForKey(override, 'illustrated')) {
+        return { type: 'image', key: override }
+    }
+
+    const rawTranslation = getTranslatedImageKey(raw, category)
+    if (rawTranslation) {
+        return { type: 'image', key: rawTranslation }
+    }
 
     // 1. Exact match on normalized text
-    const normalizedSource = getImageSourceForKey(normalized, variant)
-    if (normalizedSource) {
-        return { type: 'image', source: normalizedSource }
+    const normalizedKey = getCompatibleImageKey(normalized, category)
+    if (normalizedKey) {
+        return { type: 'image', key: normalizedKey }
     }
 
     // 2. Exact match on stripped text
     if (stripped && stripped !== normalized) {
-        const strippedSource = getImageSourceForKey(stripped, variant)
-        if (strippedSource) {
-            return { type: 'image', source: strippedSource }
+        const strippedKey = getCompatibleImageKey(stripped, category)
+        if (strippedKey) {
+            return { type: 'image', key: strippedKey }
         }
     }
 
     // 3. Translate to English and retry (covers all non-English item names)
-    const enEquiv = translateToEnglish(normalized) ?? translateToEnglish(stripped)
-    if (enEquiv) {
-        const englishSource = getImageSourceForKey(enEquiv, variant)
-        if (englishSource) {
-            return { type: 'image', source: englishSource }
-        }
-        // Also try stripped version of the English equivalent
-        const enStripped = stripQuantifiers(enEquiv)
-        if (enStripped !== enEquiv) {
-            const strippedEnglishSource = getImageSourceForKey(enStripped, variant)
-            if (strippedEnglishSource) {
-                return { type: 'image', source: strippedEnglishSource }
-            }
-        }
+    const normalizedTranslation = getTranslatedImageKey(normalized, category)
+        ?? getTranslatedImageKey(stripped, category)
+    if (normalizedTranslation) {
+        return { type: 'image', key: normalizedTranslation }
     }
 
     // 4. Multi-word key match (longest first — "bell peppers" before "pepper")
     for (const key of MULTI_WORD_KEYS) {
-        if (normalized.includes(key) || stripped.includes(key)) {
-            return { type: 'image', source: getImageSourceForKey(key, variant) ?? ITEM_ICONS[key] }
+        if ((containsLookupTerm(normalized, key) || containsLookupTerm(stripped, key)) && isCompatibleIconKey(key, category)) {
+            return { type: 'image', key }
         }
     }
 
     // 5. Word match — split text into words, check each against single-word keys
     const words = normalized.split(/\s+/)
     for (const word of words) {
-        const wordSource = getImageSourceForKey(word, variant)
-        if (wordSource) {
-            return { type: 'image', source: wordSource }
+        const wordSource = getImageSourceForKey(word, 'illustrated')
+        if (wordSource && isCompatibleIconKey(word, category)) {
+            return { type: 'image', key: word }
         }
         // Also try translating individual words
         const wordEn = translateToEnglish(word)
         if (wordEn) {
-            const translatedWordSource = getImageSourceForKey(wordEn, variant)
-            if (translatedWordSource) {
-                return { type: 'image', source: translatedWordSource }
+            const translatedWord = normalizeForLookup(wordEn)
+            const translatedWordSource = getImageSourceForKey(translatedWord, 'illustrated')
+            if (translatedWordSource && isCompatibleIconKey(translatedWord, category)) {
+                return { type: 'image', key: translatedWord }
             }
         }
     }
 
-    // 6. Substring match — check if any single-word key is contained in the text
+    // 6. Token-bounded fallback for single-word keys.
     for (const key of SINGLE_WORD_KEYS) {
-        if (normalized.includes(key) || stripped.includes(key)) {
-            return { type: 'image', source: getImageSourceForKey(key, variant) ?? ITEM_ICONS[key] }
+        if (
+            key.length >= 4
+            && (containsLookupTerm(normalized, key) || containsLookupTerm(stripped, key))
+            && isCompatibleIconKey(key, category)
+        ) {
+            return { type: 'image', key }
         }
     }
 
     // 7. Letter fallback
-    const letterMatch = text.match(/[a-zA-Z]/)
-    const letter = letterMatch ? letterMatch[0].toLowerCase() : 'a'
+    return { type: 'letter', letter: getFirstAsciiLetter(text) }
+}
+
+export function getIconForItem(text: string, variant: ItemIconVariant = 'illustrated'): IconResult {
+    const resolution = resolveIconKeyForItem(text, variant)
+    if (resolution.type === 'image') {
+        return {
+            type: 'image',
+            source: getImageSourceForKey(resolution.key, variant) ?? ITEM_ICONS[resolution.key],
+        }
+    }
+
     const letterIcons = variant === 'minimal' ? MINIMAL_LETTER_ICONS : ILLUSTRATED_LETTER_ICONS
-    return { type: 'letter', source: letterIcons[letter] }
+    return { type: 'letter', source: letterIcons[resolution.letter] }
 }
