@@ -45,6 +45,14 @@ Listam is split into two clearly separated layers:
 
 ---
 
+## Invite Safety
+
+Listam invite links and pasted invite codes require explicit user confirmation before the app sends a join RPC. A cancelled confirmation does not change the current list base or visible list.
+
+Host-created BlindPairing invites are single-use and expire after 10 minutes. The backend reserves the one allowed use before accepting a join candidate, rotates the invite after use or expiry, and removes stale legacy `lista-invite.json` files instead of persisting plaintext invite material.
+
+---
+
 ## Building a Free Version (Disabling the Paywall)
 
 Listam includes a subscription paywall that appears after a 30-day trial. If you're building your own version of the app according to the open source philosophy, you can disable it entirely.

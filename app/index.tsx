@@ -29,6 +29,11 @@ import { SummaryBar } from './components/SummaryBar'
 import { SnackbarProvider, useSnackbar } from './components/Snackbar'
 import { haptics } from './feedback'
 import { useTheme } from './theme'
+import {
+    createJoinConfirmationRequest,
+    extractInviteFromInput,
+    resolveJoinConfirmation,
+} from './invite-confirmation'
 import type { ItemIconVariant } from './components/itemIconMap'
 import type { ListEntry, SizeOption } from './components/_types'
 
@@ -100,24 +105,6 @@ function AppInner() {
         }
     }, [reduceMotion])
 
-    const normalizeInvite = useCallback((raw: string) => {
-        if (typeof raw !== 'string') return ''
-        return raw.trim().replace(/\s+/g, '')
-    }, [])
-
-    const extractInviteFromInput = useCallback((raw: string) => {
-        const trimmed = raw.trim()
-        if (!trimmed) return ''
-        if (trimmed.includes('://')) {
-            const parsed = Linking.parse(trimmed)
-            const inviteParam = parsed.queryParams?.invite
-            if (typeof inviteParam === 'string') {
-                return normalizeInvite(inviteParam)
-            }
-        }
-        return normalizeInvite(trimmed)
-    }, [normalizeInvite])
-
     const beginJoinWithInvite = useCallback((rawInvite: string) => {
         const invite = extractInviteFromInput(rawInvite)
         if (!invite) {
@@ -133,52 +120,59 @@ function AppInner() {
         isJoiningRef.current = true
         sendRPC(RPC_JOIN_KEY, JSON.stringify({ key: invite }))
         return true
-    }, [extractInviteFromInput, isJoiningRef, isWorkletReady, sendRPC, setIsJoining, snackbar])
+    }, [isJoiningRef, isWorkletReady, sendRPC, setIsJoining, snackbar])
 
     const requestJoinConfirmation = useCallback((rawInvite: string, source: 'link' | 'manual') => {
-        const invite = extractInviteFromInput(rawInvite)
-        if (!invite) {
-            snackbar.show('Enter a valid invite key or link', 'error')
+        const request = createJoinConfirmationRequest(rawInvite, {
+            source,
+            pendingInvite: pendingJoinConfirmationInviteRef.current,
+            isJoining: isJoiningRef.current,
+        })
+
+        if (request.status === 'invalid') {
+            snackbar.show(request.notification || 'Enter a valid invite key or link', 'error')
             return false
         }
-        if (isJoiningRef.current) {
-            snackbar.show('Already joining an invite')
+        if (request.status === 'busy') {
+            snackbar.show(request.notification || 'Already joining an invite')
             return false
         }
-        if (pendingJoinConfirmationInviteRef.current === invite) return true
+        if (request.status === 'already-pending') return true
 
-        pendingJoinConfirmationInviteRef.current = invite
-        const sourceText = source === 'link'
-            ? 'This link contains a Listam invite.'
-            : 'This invite code will start a Listam join.'
-
+        pendingJoinConfirmationInviteRef.current = request.pendingInvite
         Alert.alert(
-            'Join this Listam invite?',
-            `${sourceText}\n\nJoining may switch this device from your current list base to the invited one. The invite grants writer access until a future re-key flow exists.`,
+            request.title || 'Join this Listam invite?',
+            request.message || '',
             [
                 {
                     text: 'Cancel',
                     style: 'cancel',
                     onPress: () => {
-                        if (pendingJoinConfirmationInviteRef.current === invite) {
-                            pendingJoinConfirmationInviteRef.current = ''
-                        }
+                        const result = resolveJoinConfirmation(
+                            pendingJoinConfirmationInviteRef.current,
+                            request.invite,
+                            false
+                        )
+                        pendingJoinConfirmationInviteRef.current = result.pendingInvite
                     },
                 },
                 {
                     text: 'Join',
                     style: 'default',
                     onPress: () => {
-                        if (pendingJoinConfirmationInviteRef.current === invite) {
-                            pendingJoinConfirmationInviteRef.current = ''
-                        }
-                        beginJoinWithInvite(invite)
+                        const result = resolveJoinConfirmation(
+                            pendingJoinConfirmationInviteRef.current,
+                            request.invite,
+                            true
+                        )
+                        pendingJoinConfirmationInviteRef.current = result.pendingInvite
+                        if (result.confirmedInvite) beginJoinWithInvite(result.confirmedInvite)
                     },
                 },
             ]
         )
         return true
-    }, [beginJoinWithInvite, extractInviteFromInput, isJoiningRef, snackbar])
+    }, [beginJoinWithInvite, isJoiningRef, snackbar])
 
     useEffect(() => {
         AsyncStorage.multiGet([
@@ -284,7 +278,7 @@ function AppInner() {
         return () => {
             subscription.remove()
         }
-    }, [extractInviteFromInput, requestJoinConfirmation])
+    }, [requestJoinConfirmation])
 
     useEffect(() => {
         if (!isWorkletReady) return

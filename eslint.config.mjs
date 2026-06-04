@@ -33,7 +33,7 @@ export default [
             'app/**/*.{ts,tsx,js,jsx,mjs,cjs}',
             'backend/**/*.{ts,tsx,js,jsx,mjs,cjs}'
         ],
-        ignores: ['**/*.test.{ts,tsx,js,mjs,cjs}'],
+        ignores: ['**/*.test.{ts,tsx,js,mjs,cjs}', 'backend/lib/logger.mjs'],
         languageOptions: {
             parser: tseslint.parser,
             ecmaVersion: 'latest',
@@ -43,21 +43,23 @@ export default [
             'no-console': 'error'
         }
     },
-    // Legacy files that still use console. Downgraded to a warning as a ratchet:
-    // existing calls do not fail CI, but no NEW file may introduce console, and
-    // the warnings track the remaining Phase 9 (M5) logger-migration work.
+    // App legacy files that still use console. Downgraded to a warning as a
+    // ratchet; backend code is stricter and must use backend/lib/logger.mjs.
     {
         files: [
             'app/index.tsx',
             'app/hooks/_useWorklet.ts',
-            'app/hooks/useSubscription.ts',
-            'backend/backend.mjs',
-            'backend/lib/item.mjs',
-            'backend/lib/network.mjs',
-            'backend/lib/key.mjs'
+            'app/hooks/useSubscription.ts'
         ],
         rules: {
             'no-console': 'warn'
+        }
+    },
+    // The backend logger is the only production backend console boundary.
+    {
+        files: ['backend/lib/logger.mjs'],
+        rules: {
+            'no-console': 'off'
         }
     },
     // Build/codegen scripts and tests may log freely.
