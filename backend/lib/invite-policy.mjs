@@ -10,14 +10,31 @@ export function withInvitePolicy(invite, now = Date.now()) {
 }
 
 export function isInviteUsable(invite, usesRemaining, now = Date.now()) {
-    if (!invite) return false
-    if (usesRemaining <= 0) return false
-    if (!Number.isFinite(invite.expires)) return false
-    return now < invite.expires
+    return reserveInviteUse(invite, usesRemaining, now).ok
 }
 
 export function consumeInviteUse(usesRemaining) {
     return Math.max(0, usesRemaining - 1)
+}
+
+export function reserveInviteUse(invite, usesRemaining, now = Date.now()) {
+    if (!invite) {
+        return { ok: false, reason: 'missing', usesRemaining }
+    }
+    if (usesRemaining <= 0) {
+        return { ok: false, reason: 'exhausted', usesRemaining }
+    }
+    if (!Number.isFinite(invite.expires)) {
+        return { ok: false, reason: 'legacy', usesRemaining }
+    }
+    if (now >= invite.expires) {
+        return { ok: false, reason: 'expired', usesRemaining }
+    }
+    return {
+        ok: true,
+        reason: 'reserved',
+        usesRemaining: consumeInviteUse(usesRemaining)
+    }
 }
 
 export function inviteExpiresInMs(invite, now = Date.now()) {
