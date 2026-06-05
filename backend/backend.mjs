@@ -19,6 +19,7 @@ import {syncListToFrontend, validateItem, addItem, updateItem, deleteItem} from 
 const { IPC } = BareKit
 import {loadAutobaseKey, saveAutobaseKey, loadEncryptionKey} from "./lib/key.mjs"
 import {initAutobase, joinViaInvite, createInvite} from "./lib/network.mjs"
+import { parseBootSecretPayload } from './lib/secrets.mjs'
 import {
     autobase,
     store,
@@ -51,6 +52,7 @@ if (argv0) {
 export const storagePath = baseDir ? join(baseDir, 'lista') : './data';
 export const peerKeysString = Bare.argv[1] || '' // Comma-separated peer keys
 const baseKeyHex = Bare.argv[2] || '' // Optional Autobase key (to join an existing base)
+const bootSecrets = parseBootSecretPayload(Bare.argv[3] || '')
 export const keyFilePath = baseDir ? join(baseDir, 'lista-autobase-key.txt') : './autobase-key.txt';
 const localWriterKeyFilePath = baseDir ? join(baseDir, 'lista-local-writer-key.txt') : './local-writer-key.txt';
 export const encKeyFilePath = baseDir ? join(baseDir, 'lista-encryption-key.txt') : './encryption-key.txt';
@@ -93,12 +95,12 @@ if (baseKeyHex) {
 
 // If no key from argv, try loading from file (for restart persistence)
 if (!baseKey) {
-    setBaseKey(loadAutobaseKey(keyFilePath))
+    setBaseKey(loadAutobaseKey(bootSecrets))
 }
 
 // Load encryption key if we have a base key (for restart persistence)
 if (baseKey) {
-    const loadedEncKey = loadEncryptionKey(encKeyFilePath)
+    const loadedEncKey = loadEncryptionKey(bootSecrets)
     if (loadedEncKey) {
         setEncryptionKey(loadedEncKey)
     }
