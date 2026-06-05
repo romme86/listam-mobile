@@ -4,6 +4,7 @@ import BlindPairing from "blind-pairing"
 import z32 from "z32"
 import { apply, open, storagePath, peerKeysString, keyFilePath, encKeyFilePath, legacyInviteFilePath } from "../backend.mjs"
 import { saveAutobaseKey, saveEncryptionKey, deleteLegacyInviteFile } from "./key.mjs"
+import { deleteBackendSecret } from "./secrets.mjs"
 import { INVITE_MAX_USES, isInviteUsable, reserveInviteUse, withInvitePolicy } from "./invite-policy.mjs"
 import { createJoinRollbackSnapshot, restoreJoinRollbackSnapshot } from "./join-rollback.mjs"
 import { RPC_MESSAGE, RPC_GET_KEY, SYNC_LIST } from "../../rpc-commands.mjs"
@@ -103,6 +104,10 @@ function waitForWritable() {
 
         if (autobase?.writable) {
             if (autobase.key) saveAutobaseKey(autobase.key, keyFilePath)
+            if (autobase.encryptionKey) {
+                setEncryptionKey(autobase.encryptionKey)
+                saveEncryptionKey(autobase.encryptionKey, encKeyFilePath)
+            }
             logger.log('[INFO] Guest became writable after', attempts, 'attempt(s)')
 
             // Phase 3: syncing — wait for main swarm peer connection
@@ -368,8 +373,12 @@ export async function initAutobase(newBaseKey) {
             const msg = String(e?.stack || e?.message || e)
             if (msg.includes("reading 'signers'") || msg.includes('autobase/lib/store.js')) {
                 logger.log('[ERROR] Autobase appears corrupted. Wiping local state and recreating a new base...')
+                deleteBackendSecret('autobaseKey')
+                deleteBackendSecret('encryptionKey')
                 rmrfSafe(keyFilePath)
+                rmrfSafe(encKeyFilePath)
                 rmrfSafe(baseStoragePath)
+                setEncryptionKey(null)
                 // Clear the promise so recursive call can start fresh
                 _initPromise = null
                 return initAutobase(null)

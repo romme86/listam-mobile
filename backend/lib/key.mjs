@@ -1,85 +1,69 @@
 import fs from 'bare-fs'
 import { logger } from './logger.mjs'
+import {
+    getBootSecretBuffer,
+    persistBackendSecret,
+    secretFingerprint,
+} from './secrets.mjs'
 
 
 export function saveAutobaseKey(key, keyFilePath) {
-    try {
-        const keyHex = key.toString('hex')
-        fs.writeFileSync(keyFilePath, keyHex)
-        logger.log('[INFO] Saved autobase key to file')
-    } catch (e) {
-        logger.log('[ERROR] Failed to save autobase key:', e)
+    if (persistBackendSecret('autobaseKey', key)) {
+        logger.log('[INFO] Saved autobase key through secure adapter', {
+            fingerprint: secretFingerprint(key.toString('hex')),
+        })
     }
 }
 
-// Load autobase key from file if it exists
-export function loadAutobaseKey(keyFilePath) {
-    try {
-        if (fs.existsSync(keyFilePath)) {
-            const keyHex = fs.readFileSync(keyFilePath, 'utf8').trim()
-            if (keyHex && keyHex.length === 64) {
-                logger.log('[INFO] Loaded autobase key from file')
-                return Buffer.from(keyHex, 'hex')
-            }
-        }
-    } catch (e) {
-        logger.log('[ERROR] Failed to load autobase key:', e)
+// Load autobase key from the platform adapter boot payload.
+export function loadAutobaseKey(bootSecrets) {
+    const key = getBootSecretBuffer(bootSecrets, 'autobaseKey')
+    if (key) {
+        logger.log('[INFO] Loaded autobase key from secure adapter', {
+            fingerprint: secretFingerprint(key.toString('hex')),
+        })
     }
-    return null
+    return key
 }
 
-// Save local writer key to file for persistence
+// Save local writer key through the platform adapter for future migrations.
 export function saveLocalWriterKey(key, localWriterKeyFilePath) {
-    try {
-        const keyHex = key.toString('hex')
-        fs.writeFileSync(localWriterKeyFilePath, keyHex)
-        logger.log('[INFO] Saved local writer key to file')
-    } catch (e) {
-        logger.log('[ERROR] Failed to save local writer key:', e)
+    if (persistBackendSecret('localWriterKey', key)) {
+        logger.log('[INFO] Saved local writer key through secure adapter', {
+            fingerprint: secretFingerprint(key.toString('hex')),
+        })
     }
 }
 
-// Load local writer key from file if it exists
-export function loadLocalWriterKey(localWriterKeyFilePath) {
-    try {
-        if (fs.existsSync(localWriterKeyFilePath)) {
-            const keyHex = fs.readFileSync(localWriterKeyFilePath, 'utf8').trim()
-            if (keyHex && keyHex.length === 64) {
-                logger.log('[INFO] Loaded local writer key from file')
-                return Buffer.from(keyHex, 'hex')
-            }
-        }
-    } catch (e) {
-        logger.log('[ERROR] Failed to load local writer key:', e)
+// Load local writer key from the platform adapter boot payload if supplied.
+export function loadLocalWriterKey(bootSecrets) {
+    const key = getBootSecretBuffer(bootSecrets, 'localWriterKey')
+    if (key) {
+        logger.log('[INFO] Loaded local writer key from secure adapter', {
+            fingerprint: secretFingerprint(key.toString('hex')),
+        })
     }
-    return null
+    return key
 }
 
-// Save encryption key (hex-encoded 32-byte buffer)
+// Save encryption key through the platform adapter.
 export function saveEncryptionKey(key, filePath) {
-    try {
-        const keyHex = key.toString('hex')
-        fs.writeFileSync(filePath, keyHex)
-        logger.log('[INFO] Saved encryption key to file')
-    } catch (e) {
-        logger.log('[ERROR] Failed to save encryption key:', e)
+    if (persistBackendSecret('encryptionKey', key)) {
+        logger.log('[INFO] Saved encryption key through secure adapter', {
+            fingerprint: secretFingerprint(key.toString('hex')),
+        })
     }
 }
 
-// Load encryption key from file if it exists
-export function loadEncryptionKey(filePath) {
-    try {
-        if (fs.existsSync(filePath)) {
-            const keyHex = fs.readFileSync(filePath, 'utf8').trim()
-            if (keyHex && keyHex.length === 64) {
-                logger.log('[INFO] Loaded encryption key from file')
-                return Buffer.from(keyHex, 'hex')
-            }
-        }
-    } catch (e) {
-        logger.log('[ERROR] Failed to load encryption key:', e)
+// Load encryption key from the platform adapter boot payload.
+export function loadEncryptionKey(bootSecrets) {
+    const key = getBootSecretBuffer(bootSecrets, 'encryptionKey')
+    if (key) {
+        logger.log('[INFO] Loaded encryption key from secure adapter', {
+            fingerprint: secretFingerprint(key.toString('hex')),
+        })
     }
-    return null
+    return key
 }
 
 // Remove stale invite files from the old plaintext invite-persistence path.

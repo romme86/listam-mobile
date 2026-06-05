@@ -9,6 +9,10 @@ import b4a from 'b4a'
 import backendBundleB64 from '../app.ios.bundle.mjs'
 // import backendBundleB64 from '../assets/backend.android.bundle.mjs'
 import {
+    prepareBackendSecretPayload,
+    persistBackendSecretFromPayload,
+} from '../secrets'
+import {
     RPC_MESSAGE,
     RPC_RESET,
     RPC_UPDATE,
@@ -21,6 +25,7 @@ import {
     RPC_JOIN_KEY,
     SYNC_LIST,
     RPC_CREATE_INVITE,
+    RPC_PERSIST_SECRET,
 } from '../../rpc-commands.mjs'
 import type { ListEntry } from '@/app/components/_types'
 
@@ -84,23 +89,52 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         }
     }, [])
 
-    const startWorklet = useCallback(() => {
+    const startWorklet = useCallback(async () => {
         console.log('Starting worklet (singleton)')
+        const baseDir =
+            FileSystemExpo.Paths.document.uri ??
+            FileSystemExpo.Paths.cache.uri ??
+            ''
+        const preparedSecrets = await prepareBackendSecretPayload(String(baseDir))
+        if (preparedSecrets.mode !== 'secure-store') {
+            const msg = preparedSecrets.mode === 'plaintext-recovery'
+                ? 'Secure storage is unavailable; using the legacy key files for this session.'
+                : 'Secure storage is unavailable; key material can only be cached for this session.'
+            if (notifyRef.current) notifyRef.current(msg, 'info')
+        }
+
         const worklet = new Worklet()
         workletSingleton = worklet
         workletRef.current = worklet
 
         const bundleBytes = toByteArray(backendBundleB64)
 
-        const baseDir =
-            FileSystemExpo.Paths.document.uri ??
-            FileSystemExpo.Paths.cache.uri ??
-            ''
-
-        worklet.start('/app.bundle', bundleBytes, [String(baseDir)])
+        worklet.start('/app.bundle', bundleBytes, [
+            String(baseDir),
+            '',
+            '',
+            JSON.stringify(preparedSecrets.backendPayload),
+        ])
 
         const { IPC } = worklet
         rpcRef.current = new RPC(IPC, (reqFromBackend) => {
+            if (reqFromBackend.command === RPC_PERSIST_SECRET) {
+                if (reqFromBackend.data) {
+                    const payload = b4a.toString(reqFromBackend.data)
+                    void persistBackendSecretFromPayload(payload)
+                        .then((result) => {
+                            if (result.warning) {
+                                if (notifyRef.current) notifyRef.current(result.warning, 'info')
+                            }
+                        })
+                        .catch(() => {
+                            if (notifyRef.current) {
+                                notifyRef.current('Could not persist backend key material securely.', 'error')
+                            }
+                        })
+                }
+                return
+            }
             if (reqFromBackend.command === RPC_MESSAGE) {
                 console.log('RPC MESSAGE req', reqFromBackend)
                 if (reqFromBackend.data) {
@@ -207,8 +241,17 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         if (!workletStarted && !g.started) {
             g.started = true
             workletStarted = true
-            startWorklet()
-            g.worklet = workletRef.current
+            void startWorklet()
+                .then(() => {
+                    g.worklet = workletRef.current
+                })
+                .catch(() => {
+                    g.started = false
+                    workletStarted = false
+                    if (notifyRef.current) {
+                        notifyRef.current('Could not start the Listam backend.', 'error')
+                    }
+                })
         } else if (workletSingleton || g.worklet) {
             if (workletSingleton)
             {
