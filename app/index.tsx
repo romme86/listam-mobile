@@ -32,7 +32,9 @@ import { useTheme } from './theme'
 import {
     createJoinConfirmationRequest,
     extractInviteFromInput,
+    planIncomingLinkJoin,
     resolveJoinConfirmation,
+    type JoinConfirmationRequest,
 } from './invite-confirmation'
 import type { ItemIconVariant } from './components/itemIconMap'
 import type { ListEntry, SizeOption } from './components/_types'
@@ -122,18 +124,12 @@ function AppInner() {
         return true
     }, [isJoiningRef, isWorkletReady, sendRPC, setIsJoining, snackbar])
 
-    const requestJoinConfirmation = useCallback((rawInvite: string, source: 'link' | 'manual') => {
-        const request = createJoinConfirmationRequest(rawInvite, {
-            source,
-            pendingInvite: pendingJoinConfirmationInviteRef.current,
-            isJoining: isJoiningRef.current,
-        })
-
+    const presentJoinConfirmation = useCallback((request: JoinConfirmationRequest) => {
         if (request.status === 'invalid') {
             snackbar.show(request.notification || 'Enter a valid invite key or link', 'error')
             return false
         }
-        if (request.status === 'busy') {
+        if (request.status === 'busy' || request.status === 'confirmation-open') {
             snackbar.show(request.notification || 'Already joining an invite')
             return false
         }
@@ -172,7 +168,15 @@ function AppInner() {
             ]
         )
         return true
-    }, [beginJoinWithInvite, isJoiningRef, snackbar])
+    }, [beginJoinWithInvite, snackbar])
+
+    const requestJoinConfirmation = useCallback((rawInvite: string, source: 'link' | 'manual') => {
+        return presentJoinConfirmation(createJoinConfirmationRequest(rawInvite, {
+            source,
+            pendingInvite: pendingJoinConfirmationInviteRef.current,
+            isJoining: isJoiningRef.current,
+        }))
+    }, [isJoiningRef, presentJoinConfirmation])
 
     useEffect(() => {
         AsyncStorage.multiGet([
@@ -257,18 +261,20 @@ function AppInner() {
     useEffect(() => {
         const handleIncomingUrl = (url: string | null) => {
             if (!url) return
-            const invite = extractInviteFromInput(url)
-            if (!invite) return
-            requestJoinConfirmation(invite, 'link')
+            const request = planIncomingLinkJoin(url, {
+                pendingInvite: pendingJoinConfirmationInviteRef.current,
+                isJoining: isJoiningRef.current,
+            })
+            if (request) presentJoinConfirmation(request)
         }
 
         if (!initialDeepLinkHandledRef.current) {
             initialDeepLinkHandledRef.current = true
-            Linking.getInitialURL().then((url) => {
-                handleIncomingUrl(url)
-            }).catch((error) => {
-                console.log('Failed to read initial URL', error)
-            })
+            Linking.getInitialURL()
+                .then(handleIncomingUrl)
+                .catch(() => {
+                    // A missing/unreadable initial URL is non-fatal — nothing to join.
+                })
         }
 
         const subscription = Linking.addEventListener('url', ({ url }) => {
@@ -278,7 +284,7 @@ function AppInner() {
         return () => {
             subscription.remove()
         }
-    }, [requestJoinConfirmation])
+    }, [isJoiningRef, presentJoinConfirmation])
 
     useEffect(() => {
         if (!isWorkletReady) return
@@ -386,8 +392,8 @@ function AppInner() {
                 message: `Join my Listam list:\n${inviteLink}\n\nInvite code: ${autobaseInviteKey}\n\nThis invite is single-use, expires in 10 minutes, and grants writer access until the list is re-keyed.`,
                 title: 'Join my Listam list',
             })
-        } catch (error) {
-            console.log('Error sharing:', error)
+        } catch {
+            snackbar.show('Could not open the share sheet', 'error')
         }
     }, [autobaseInviteKey, snackbar])
 

@@ -16,6 +16,8 @@ const { outputText } = ts.transpileModule(source, {
 const {
     createJoinConfirmationRequest,
     extractInviteFromInput,
+    parseInviteLink,
+    planIncomingLinkJoin,
     resolveJoinConfirmation,
 } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`)
 
@@ -62,6 +64,77 @@ test('confirm returns the invite only while it is still pending', () => {
         pendingInvite: 'different',
         confirmedInvite: '',
     })
+})
+
+test('parseInviteLink only recognizes invite links and flags untrusted hosts', () => {
+    assert.deepEqual(parseInviteLink('https://listam.ch/join?invite=abc'), {
+        invite: 'abc',
+        sourceLabel: 'listam.ch',
+        trusted: true,
+    })
+    assert.deepEqual(parseInviteLink('listam://join?invite=xyz'), {
+        invite: 'xyz',
+        sourceLabel: 'the Listam app',
+        trusted: true,
+    })
+    assert.deepEqual(parseInviteLink('https://evil.example/join?invite=abc'), {
+        invite: 'abc',
+        sourceLabel: 'evil.example',
+        trusted: false,
+    })
+    // Not a Listam invite link → ignored entirely.
+    assert.equal(parseInviteLink('https://listam.ch/about'), null)
+    assert.equal(parseInviteLink('not a url'), null)
+    assert.equal(parseInviteLink(''), null)
+})
+
+test('cold-start and foreground links produce a confirmation showing the source', () => {
+    const coldStart = planIncomingLinkJoin('https://listam.ch/join?invite=abc', {
+        pendingInvite: '',
+        isJoining: false,
+    })
+    assert.equal(coldStart.status, 'needs-confirmation')
+    assert.equal(coldStart.invite, 'abc')
+    assert.match(coldStart.message, /listam\.ch/)
+    assert.doesNotMatch(coldStart.message, /not from listam\.ch/)
+
+    // Foreground link from an untrusted host still confirms, but warns.
+    const untrusted = planIncomingLinkJoin('https://evil.example/join?invite=abc', {
+        pendingInvite: '',
+        isJoining: false,
+    })
+    assert.equal(untrusted.status, 'needs-confirmation')
+    assert.match(untrusted.message, /not from listam\.ch/)
+})
+
+test('non-invite links are ignored instead of prompting a join', () => {
+    assert.equal(planIncomingLinkJoin('https://listam.ch/about', {
+        pendingInvite: '',
+        isJoining: false,
+    }), null)
+})
+
+test('a duplicate link while one is pending is suppressed, not stacked', () => {
+    // Same invite already pending → no second dialog.
+    assert.equal(planIncomingLinkJoin('https://listam.ch/join?invite=abc', {
+        pendingInvite: 'abc',
+        isJoining: false,
+    }).status, 'already-pending')
+
+    // Different invite while a dialog is open → suppressed.
+    const collision = planIncomingLinkJoin('https://listam.ch/join?invite=def', {
+        pendingInvite: 'abc',
+        isJoining: false,
+    })
+    assert.equal(collision.status, 'confirmation-open')
+    assert.equal(collision.pendingInvite, 'abc')
+})
+
+test('a link arriving while already joining is rejected as busy', () => {
+    assert.equal(planIncomingLinkJoin('https://listam.ch/join?invite=abc', {
+        pendingInvite: '',
+        isJoining: true,
+    }).status, 'busy')
 })
 
 test('invalid and busy join requests never create a pending confirmation', () => {
