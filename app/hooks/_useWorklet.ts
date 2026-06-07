@@ -119,6 +119,13 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         const { IPC } = worklet
         rpcRef.current = new RPC(IPC, (reqFromBackend) => {
             if (reqFromBackend.command === RPC_PERSIST_SECRET) {
+                const replySecretAck = (stored: boolean, mode?: string) => {
+                    try {
+                        reqFromBackend.reply(JSON.stringify({ stored, mode }))
+                    } catch {
+                        // Reply channel closed; backend will fall back to its retry/timeout.
+                    }
+                }
                 if (reqFromBackend.data) {
                     const payload = b4a.toString(reqFromBackend.data)
                     void persistBackendSecretFromPayload(payload)
@@ -126,12 +133,18 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                             if (result.warning) {
                                 if (notifyRef.current) notifyRef.current(result.warning, 'info')
                             }
+                            // Only a secure-store write is durable enough for the
+                            // backend to retire its plaintext copy.
+                            replySecretAck(result.mode === 'secure-store', result.mode)
                         })
                         .catch(() => {
                             if (notifyRef.current) {
                                 notifyRef.current('Could not persist backend key material securely.', 'error')
                             }
+                            replySecretAck(false)
                         })
+                } else {
+                    replySecretAck(false)
                 }
                 return
             }
@@ -223,7 +236,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
             }
             if (reqFromBackend.command === RPC_GET_KEY) {
                 console.log('RPC_GET_KEY')
-                if (reqFromBackend.data) {
+                if (reqFromBackend.data != null) {
                     const data = b4a.toString(reqFromBackend.data)
                     setAutobaseInviteKey(data)
                 } else {

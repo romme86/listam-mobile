@@ -14,6 +14,12 @@ export let rpc = null
 export let baseKey = null
 export let currentTopic = null
 export let encryptionKey = null       // Buffer — Autobase encryption key
+export let ownerAuthorityKeyPair = null
+export let membershipState = {
+    ownerAuthorityKey: null,
+    highestSequence: 0,
+    writers: new Set(),
+}
 
 // Blind pairing
 export let pairing = null             // BlindPairing instance
@@ -52,6 +58,8 @@ export function setRpc(val) { rpc = val }
 export function setBaseKey(val) { baseKey = val }
 export function setCurrentTopic(val) { currentTopic = val }
 export function setEncryptionKey(val) { encryptionKey = val }
+export function setOwnerAuthorityKeyPair(val) { ownerAuthorityKeyPair = val }
+export function setMembershipState(val) { membershipState = val }
 export function setPairing(val) { pairing = val }
 export function setPairingMember(val) { pairingMember = val }
 export function setCurrentInvite(val) { currentInvite = val }

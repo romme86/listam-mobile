@@ -2,16 +2,24 @@ import Hyperswarm from "hyperswarm"
 import fs from "bare-fs"
 import BlindPairing from "blind-pairing"
 import z32 from "z32"
-import { apply, open, storagePath, peerKeysString, keyFilePath, encKeyFilePath, legacyInviteFilePath } from "../backend.mjs"
-import { saveAutobaseKey, saveEncryptionKey, deleteLegacyInviteFile } from "./key.mjs"
+import { apply, open, storagePath, peerKeysString, keyFilePath, encKeyFilePath, ownerAuthorityKeyFilePath, legacyInviteFilePath } from "../backend.mjs"
+import { saveAutobaseKey, saveEncryptionKey, saveOwnerAuthorityKey, deleteOwnerAuthorityKey, deleteLegacyInviteFile } from "./key.mjs"
 import { deleteBackendSecret } from "./secrets.mjs"
 import { INVITE_MAX_USES, isInviteUsable, reserveInviteUse, withInvitePolicy } from "./invite-policy.mjs"
 import { createJoinRollbackSnapshot, restoreJoinRollbackSnapshot } from "./join-rollback.mjs"
+import {
+    canCreateMembershipInvite,
+    createAddWriterMembershipRecord,
+    createMembershipState,
+    createOwnerAuthorityKeyPair,
+    createOwnerBootstrapRecord,
+    nextMembershipSequence,
+    ownerAuthorityPublicKeyHex,
+} from "./membership.mjs"
 import { RPC_MESSAGE, RPC_GET_KEY, SYNC_LIST } from "../../rpc-commands.mjs"
 import Corestore from "corestore"
 import Autobase from "autobase"
 import b4a from "b4a"
-import { randomBytes } from "hypercore-crypto"
 import {
     autobase,
     rpc,
@@ -20,12 +28,13 @@ import {
     baseKey,
     store,
     discovery,
-    knownWriters,
     peerCount,
     currentList,
     pairing,
     currentInvite,
     encryptionKey,
+    ownerAuthorityKeyPair,
+    membershipState,
     setAutobase,
     setAddedStaticPeers,
     setSwarm,
@@ -37,8 +46,8 @@ import {
     setPairingMember,
     setCurrentInvite,
     setEncryptionKey,
-    setCurrentList,
-    clearKnownWriters,
+    setOwnerAuthorityKeyPair,
+    setMembershipState,
     isPendingJoinSuccess,
     setIsPendingJoinSuccess
 } from "./state.mjs"
@@ -103,10 +112,10 @@ function waitForWritable() {
         }
 
         if (autobase?.writable) {
-            if (autobase.key) saveAutobaseKey(autobase.key, keyFilePath)
+            if (autobase.key) saveAutobaseKey(autobase.key)
             if (autobase.encryptionKey) {
                 setEncryptionKey(autobase.encryptionKey)
-                saveEncryptionKey(autobase.encryptionKey, encKeyFilePath)
+                saveEncryptionKey(autobase.encryptionKey)
             }
             logger.log('[INFO] Guest became writable after', attempts, 'attempt(s)')
 
@@ -174,6 +183,12 @@ function waitForPeerConnection(remainingAttempts) {
 
 export function createInvite() {
     if (!autobase) return null
+    if (!canCreateMembershipInvite(membershipState, ownerAuthorityKeyPair)) {
+        setCurrentInvite(null)
+        inviteUsesRemaining = 0
+        logger.log('[WARNING] Invite creation rejected; only the owner device can create or revoke invites')
+        return null
+    }
 
     // Return an existing invite only while it is unexpired and unused.
     if (isInviteUsable(currentInvite, inviteUsesRemaining)) {
@@ -194,10 +209,13 @@ function rotateInviteAndNotifyFrontend() {
     deleteLegacyInviteFile(legacyInviteFilePath)
 
     const newZ32 = createInvite()
-    if (newZ32 && rpc) {
-        const req = rpc.request(RPC_GET_KEY)
-        req.send(newZ32)
-    }
+    sendInviteKeyToFrontend(newZ32 || '')
+}
+
+function sendInviteKeyToFrontend(inviteKey) {
+    if (!rpc) return
+    const req = rpc.request(RPC_GET_KEY)
+    req.send(inviteKey)
 }
 
 export function setupBlindPairing() {
@@ -232,12 +250,21 @@ export function setupBlindPairing() {
                 if (!autobase.writable) {
                     throw new Error('Host is not writable and cannot accept invite')
                 }
+                if (!canCreateMembershipInvite(membershipState, ownerAuthorityKeyPair)) {
+                    throw new Error('Only the owner device can accept invite candidates')
+                }
 
                 // Get joiner's writer key from userData
                 const writerKeyHex = candidate.userData.toString('hex')
 
-                // Add as writer
-                await autobase.append({ type: 'add-writer', key: writerKeyHex })
+                const membershipRecord = createAddWriterMembershipRecord({
+                    ownerAuthorityKeyPair,
+                    writerKey: writerKeyHex,
+                    baseKey: autobase.key,
+                    sequence: nextMembershipSequence(membershipState),
+                })
+                await autobase.append(membershipRecord)
+                await autobase.update()
 
                 // Send our base key + encryption key
                 candidate.confirm({
@@ -318,15 +345,52 @@ async function tearDownAutobaseSwarmStore() {
     }
 }
 
-export async function initAutobase(newBaseKey) {
+async function ensureOwnerMembership({ allowOwnerMigration }) {
+    if (membershipState.ownerAuthorityKey) return
+
+    if (!allowOwnerMigration) {
+        logger.log('[INFO] Owner membership migration skipped for joined base')
+        return
+    }
+    if (!autobase?.writable || !autobase?.local?.key || !autobase?.key) {
+        logger.log('[WARNING] Owner membership migration skipped; local base is not writable')
+        return
+    }
+
+    let keyPair = ownerAuthorityKeyPair
+    if (!keyPair) {
+        keyPair = createOwnerAuthorityKeyPair()
+        setOwnerAuthorityKeyPair(keyPair)
+        await saveOwnerAuthorityKey(keyPair.secretKey)
+    }
+
+    const record = createOwnerBootstrapRecord({
+        ownerAuthorityKeyPair: keyPair,
+        writerKey: autobase.local.key,
+        baseKey: autobase.key,
+    })
+    await autobase.append(record)
+    await autobase.update()
+
+    logger.log('[INFO] Bootstrapped owner-signed membership record', {
+        ownerAuthorityKey: ownerAuthorityPublicKeyHex(keyPair),
+    })
+}
+
+export async function initAutobase(newBaseKey, options = {}) {
     if (_initPromise) {
         logger.log('[WARNING] initAutobase already running — returning existing init promise')
         return _initPromise
     }
 
+    const allowOwnerMigration = options.allowOwnerMigration !== false
+
     _initPromise = (async () => {
 
         await tearDownAutobaseSwarmStore()
+        setMembershipState(createMembershipState())
+        setCurrentInvite(null)
+        inviteUsesRemaining = 0
 
         const baseStoragePath = `${storagePath}-local`
 
@@ -375,10 +439,13 @@ export async function initAutobase(newBaseKey) {
                 logger.log('[ERROR] Autobase appears corrupted. Wiping local state and recreating a new base...')
                 deleteBackendSecret('autobaseKey')
                 deleteBackendSecret('encryptionKey')
+                deleteBackendSecret('ownerAuthorityKey')
                 rmrfSafe(keyFilePath)
                 rmrfSafe(encKeyFilePath)
+                rmrfSafe(ownerAuthorityKeyFilePath)
                 rmrfSafe(baseStoragePath)
                 setEncryptionKey(null)
+                setOwnerAuthorityKeyPair(null)
                 // Clear the promise so recursive call can start fresh
                 _initPromise = null
                 return initAutobase(null)
@@ -396,13 +463,13 @@ export async function initAutobase(newBaseKey) {
 
         // Save the autobase key for persistence across restarts
         if (autobase.key && autobase.writable) {
-            saveAutobaseKey(autobase.key, keyFilePath)
+            saveAutobaseKey(autobase.key)
         }
 
         // Save encryption key after autobase is ready
         if (autobase.encryptionKey && autobase.writable) {
             setEncryptionKey(autobase.encryptionKey)
-            saveEncryptionKey(autobase.encryptionKey, encKeyFilePath)
+            saveEncryptionKey(autobase.encryptionKey)
         }
 
         autobase.on('append', async () => {
@@ -411,6 +478,7 @@ export async function initAutobase(newBaseKey) {
 
         // Load existing items from view and sync to frontend
         await autobase.update()
+        await ensureOwnerMembership({ allowOwnerMigration })
         const rebuiltList = await rebuildListFromPersistedOps()
         syncListToFrontend(rebuiltList)
 
@@ -478,10 +546,7 @@ export async function initAutobase(newBaseKey) {
 
         // Create invite and send to frontend
         const z32Invite = createInvite()
-        if (z32Invite && rpc) {
-            const req = rpc.request(RPC_GET_KEY)
-            req.send(z32Invite)
-        }
+        sendInviteKeyToFrontend(z32Invite || '')
     })()
 
     try {
@@ -500,7 +565,7 @@ export async function joinViaInvite(z32InviteStr) {
     }
 
     _joinPromise = (async () => {
-        const rollbackSnapshot = createJoinRollbackSnapshot({ currentList, baseKey, encryptionKey })
+        const rollbackSnapshot = createJoinRollbackSnapshot({ currentList, baseKey, encryptionKey, ownerAuthorityKeyPair })
         const normalizedInvite = normalizeInviteCode(z32InviteStr)
 
         // Clean up any leftover temp resources from a previous attempt
@@ -560,8 +625,10 @@ export async function joinViaInvite(z32InviteStr) {
             // 3. Use initAutobase to set up the joined base — same proven code
             //    path the host uses. Set encryption key first so initAutobase
             //    picks it up.
+            setOwnerAuthorityKeyPair(null)
+            await deleteOwnerAuthorityKey()
             setEncryptionKey(result.encryptionKey)
-            await initAutobase(result.key)
+            await initAutobase(result.key, { allowOwnerMigration: false })
 
             logger.log('[INFO] Guest initAutobase complete. writable:', autobase?.writable, '| swarm connections:', swarm?.connections?.size)
 
@@ -607,6 +674,9 @@ export async function joinViaInvite(z32InviteStr) {
                     rpc,
                     syncListCommand: SYNC_LIST,
                     setEncryptionKey,
+                    setOwnerAuthorityKeyPair,
+                    saveOwnerAuthorityKey,
+                    deleteOwnerAuthorityKey,
                     initAutobase,
                 })
             } catch (rollbackError) {

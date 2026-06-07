@@ -26,6 +26,7 @@ test('secret migration moves plaintext key files into secure storage and deletes
     const legacy = createLegacyFiles({
         [LEGACY_SECRET_FILES.autobaseKey]: 'A'.repeat(64),
         [LEGACY_SECRET_FILES.encryptionKey]: 'b'.repeat(64),
+        [LEGACY_SECRET_FILES.ownerAuthorityKey]: 'd'.repeat(128),
         [LEGACY_SECRET_FILES.localWriterKey]: 'c'.repeat(64),
         [LEGACY_SECRET_FILES.pairingInvite]: '{"id":"legacy-invite"}',
     })
@@ -41,11 +42,15 @@ test('secret migration moves plaintext key files into secure storage and deletes
     assert.deepEqual(prepared.backendPayload.secrets, {
         autobaseKey: 'a'.repeat(64),
         encryptionKey: 'b'.repeat(64),
+        ownerAuthorityKey: 'd'.repeat(128),
     })
     assert.equal(secure.values.get(secretStoreKey('autobaseKey')), 'a'.repeat(64))
     assert.equal(secure.values.get(secretStoreKey('encryptionKey')), 'b'.repeat(64))
-    assert.equal(secure.values.get(secretStoreKey('localWriterKey')), 'c'.repeat(64))
-    assert.equal(secure.values.get(secretStoreKey('pairingInvite')), '{"id":"legacy-invite"}')
+    assert.equal(secure.values.get(secretStoreKey('ownerAuthorityKey')), 'd'.repeat(128))
+    // The writer key and invite are never stored in the keychain — only their
+    // plaintext is cleaned up (invites must not be persisted, H3).
+    assert.equal(secure.values.has(secretStoreKey('localWriterKey')), false)
+    assert.equal(secure.values.has(secretStoreKey('pairingInvite')), false)
     assert.deepEqual(new Set(legacy.deleted), new Set(Object.values(LEGACY_SECRET_FILES)))
 
     const metadataRecord = JSON.parse(metadata.values.get(SECRET_METADATA_KEY))
@@ -59,6 +64,7 @@ test('secret migration is idempotent and re-readable from secure storage', async
     const legacy = createLegacyFiles({
         [LEGACY_SECRET_FILES.autobaseKey]: 'a'.repeat(64),
         [LEGACY_SECRET_FILES.encryptionKey]: 'b'.repeat(64),
+        [LEGACY_SECRET_FILES.ownerAuthorityKey]: 'd'.repeat(128),
     })
 
     await prepareBackendSecrets({
@@ -74,6 +80,7 @@ test('secret migration is idempotent and re-readable from secure storage', async
     assert.deepEqual(second.backendPayload.secrets, {
         autobaseKey: 'a'.repeat(64),
         encryptionKey: 'b'.repeat(64),
+        ownerAuthorityKey: 'd'.repeat(128),
     })
     assert.equal(legacy.reads.length >= 4, true)
     assert.deepEqual(legacy.remaining(), {})
@@ -84,6 +91,7 @@ test('secure-storage outage keeps plaintext files and boots through recovery pay
     const legacy = createLegacyFiles({
         [LEGACY_SECRET_FILES.autobaseKey]: 'a'.repeat(64),
         [LEGACY_SECRET_FILES.encryptionKey]: 'b'.repeat(64),
+        [LEGACY_SECRET_FILES.ownerAuthorityKey]: 'd'.repeat(128),
     })
 
     const prepared = await prepareBackendSecrets({
@@ -95,12 +103,36 @@ test('secure-storage outage keeps plaintext files and boots through recovery pay
     assert.deepEqual(prepared.backendPayload.secrets, {
         autobaseKey: 'a'.repeat(64),
         encryptionKey: 'b'.repeat(64),
+        ownerAuthorityKey: 'd'.repeat(128),
     })
     assert.deepEqual(legacy.deleted, [])
     assert.deepEqual(legacy.remaining(), {
         [LEGACY_SECRET_FILES.autobaseKey]: 'a'.repeat(64),
         [LEGACY_SECRET_FILES.encryptionKey]: 'b'.repeat(64),
+        [LEGACY_SECRET_FILES.ownerAuthorityKey]: 'd'.repeat(128),
     })
+})
+
+test('legacy writer-key and invite files are removed but never stored, even without secure storage', async () => {
+    const secure = createSecureStore({ available: false })
+    const legacy = createLegacyFiles({
+        [LEGACY_SECRET_FILES.localWriterKey]: 'c'.repeat(64),
+        [LEGACY_SECRET_FILES.pairingInvite]: '{"id":"legacy-invite"}',
+    })
+
+    const prepared = await prepareBackendSecrets({
+        secureStore: secure.adapter,
+        legacyFiles: legacy.adapter,
+    })
+
+    // Nothing durable to boot from, and the bearer/invite material is gone.
+    assert.deepEqual(prepared.backendPayload.secrets, {})
+    assert.equal(secure.values.size, 0)
+    assert.deepEqual(new Set(legacy.deleted), new Set([
+        LEGACY_SECRET_FILES.localWriterKey,
+        LEGACY_SECRET_FILES.pairingInvite,
+    ]))
+    assert.deepEqual(legacy.remaining(), {})
 })
 
 test('backend secret persistence writes and deletes via secure storage', async () => {
@@ -145,6 +177,26 @@ test('backend secret persistence falls back to session memory when secure storag
     assert.equal(memory.values.get('encryptionKey'), 'e'.repeat(64))
 })
 
+test('owner authority key is validated as 64-byte key material', async () => {
+    const secure = createSecureStore()
+
+    await persistBackendSecretRequest({
+        name: 'ownerAuthorityKey',
+        value: 'f'.repeat(128),
+    }, {
+        secureStore: secure.adapter,
+    })
+
+    assert.equal(secure.values.get(secretStoreKey('ownerAuthorityKey')), 'f'.repeat(128))
+
+    await assert.rejects(() => persistBackendSecretRequest({
+        name: 'ownerAuthorityKey',
+        value: 'f'.repeat(64),
+    }, {
+        secureStore: secure.adapter,
+    }), /Invalid secret value/)
+})
+
 function createSecureStore(options = {}) {
     const values = new Map(Object.entries(options.values ?? {}))
     return {
@@ -182,8 +234,11 @@ function createLegacyFiles(initialFiles = {}) {
                 return files[filename] ?? null
             },
             async deleteFile(filename) {
-                deleted.push(filename)
-                delete files[filename]
+                // Mirror the real Expo adapter, which no-ops on a missing file.
+                if (filename in files) {
+                    deleted.push(filename)
+                    delete files[filename]
+                }
             },
         },
     }

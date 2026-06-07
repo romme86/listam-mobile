@@ -135,7 +135,7 @@ export function createJoinConfirmationRequest(
         invite,
         pendingInvite: invite,
         title: 'Join this Listam invite?',
-        message: `${sourceText}\n\nJoining may switch this device from your current list base to the invited one. The invite grants writer access until a future re-key flow exists.${trustWarning}`,
+        message: `${sourceText}\n\nJoining may switch this device from your current list base to the invited one. Invites can be revoked before use, but removing a device after it joins requires a future re-key flow.${trustWarning}`,
     }
 }
 
