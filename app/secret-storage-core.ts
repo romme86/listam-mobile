@@ -3,14 +3,30 @@ export const SECRET_PAYLOAD_VERSION = 1
 export const SECRET_STORE_KEY_PREFIX = 'listam.secret.v1.'
 export const SECRET_METADATA_KEY = `${SECRET_STORE_KEY_PREFIX}metadata`
 
-export const LEGACY_SECRET_FILES = {
+// Durable key material the backend needs at boot. These are the only secrets
+// migrated into the platform keychain.
+export const SECURE_SECRET_FILES = {
     autobaseKey: 'lista-autobase-key.txt',
     encryptionKey: 'lista-encryption-key.txt',
+    ownerAuthorityKey: 'lista-owner-authority-key.txt',
+} as const
+
+// Legacy plaintext files that must be removed but are never re-stored:
+//  - the local writer key is derived from the corestore and has no consumer.
+//  - invite material is an expiring bearer secret that Phase 1 deliberately
+//    stopped persisting (H3); it must not be resurrected into secure storage.
+export const LEGACY_CLEANUP_FILES = {
     localWriterKey: 'lista-local-writer-key.txt',
     pairingInvite: 'lista-invite.json',
 } as const
 
-export type SecretName = keyof typeof LEGACY_SECRET_FILES
+// Full legacy file map, retained for diagnostics/tests.
+export const LEGACY_SECRET_FILES = {
+    ...SECURE_SECRET_FILES,
+    ...LEGACY_CLEANUP_FILES,
+} as const
+
+export type SecretName = keyof typeof SECURE_SECRET_FILES
 
 export type SecretMode = 'secure-store' | 'plaintext-recovery' | 'memory-recovery'
 
@@ -64,10 +80,15 @@ export type BackendSecretPersistRequest = {
     value?: string | null
 }
 
-const SECRET_NAMES = Object.keys(LEGACY_SECRET_FILES) as SecretName[]
-const BACKEND_SECRET_NAMES: SecretName[] = ['autobaseKey', 'encryptionKey']
-const HEX_SECRET_NAMES = new Set<SecretName>(['autobaseKey', 'encryptionKey', 'localWriterKey'])
-const HEX_32_BYTE = /^[0-9a-f]{64}$/i
+const SECRET_NAMES = Object.keys(SECURE_SECRET_FILES) as SecretName[]
+const BACKEND_SECRET_NAMES: SecretName[] = ['autobaseKey', 'encryptionKey', 'ownerAuthorityKey']
+const HEX_SECRET_BYTES: Record<SecretName, number> = {
+    autobaseKey: 32,
+    encryptionKey: 32,
+    ownerAuthorityKey: 64,
+}
+const CLEANUP_FILES = Object.values(LEGACY_CLEANUP_FILES)
+const HEX = /^[0-9a-f]+$/i
 
 export function secretStoreKey(name: SecretName): string {
     return `${SECRET_STORE_KEY_PREFIX}${name}`
@@ -78,12 +99,9 @@ export function normalizeSecretValue(name: SecretName, raw: unknown): string | n
     const trimmed = raw.trim()
     if (!trimmed) return null
 
-    if (HEX_SECRET_NAMES.has(name)) {
-        const hex = trimmed.toLowerCase()
-        return HEX_32_BYTE.test(hex) ? hex : null
-    }
-
-    return trimmed
+    const hex = trimmed.toLowerCase()
+    const bytes = HEX_SECRET_BYTES[name]
+    return HEX.test(hex) && hex.length === bytes * 2 ? hex : null
 }
 
 export function secretFingerprint(value: string): string {
@@ -115,6 +133,14 @@ export async function prepareBackendSecrets(
             secureSecrets,
             warnings,
         })
+    }
+
+    // Remove never-stored legacy plaintext (writer key, invite). These are pure
+    // liability: the writer key is unused and the invite is an expiring bearer
+    // secret that must not be persisted (H3). The backend also clears these at
+    // boot as a fallback if the adapter cannot reach them here.
+    if (adapters.legacyFiles) {
+        await deleteCleanupFiles(adapters.legacyFiles, warnings)
     }
 
     const memorySecrets = adapters.memoryStore?.snapshot() ?? {}
@@ -227,13 +253,26 @@ async function readSecureSecrets(
     return secrets
 }
 
+async function deleteCleanupFiles(
+    legacyFiles: LegacySecretFiles,
+    warnings: string[],
+) {
+    for (const filename of CLEANUP_FILES) {
+        try {
+            await legacyFiles.deleteFile(filename)
+        } catch {
+            warnings.push(`Legacy cleanup deletion failed for ${filename}.`)
+        }
+    }
+}
+
 async function readLegacySecrets(
     legacyFiles: LegacySecretFiles,
     warnings: string[],
 ): Promise<Partial<Record<SecretName, string>>> {
     const secrets: Partial<Record<SecretName, string>> = {}
     for (const name of SECRET_NAMES) {
-        const filename = LEGACY_SECRET_FILES[name]
+        const filename = SECURE_SECRET_FILES[name]
         try {
             const value = normalizeSecretValue(name, await legacyFiles.readFile(filename))
             if (value) secrets[name] = value
@@ -266,7 +305,7 @@ async function migrateLegacySecrets({
             try {
                 await writeAndConfirmSecret(secureStore, name, legacyValue)
                 secureSecrets[name] = legacyValue
-                await legacyFiles.deleteFile(LEGACY_SECRET_FILES[name])
+                await legacyFiles.deleteFile(SECURE_SECRET_FILES[name])
             } catch {
                 warnings.push(`Legacy migration failed for ${name}; plaintext copy kept for recovery.`)
             }
@@ -275,7 +314,7 @@ async function migrateLegacySecrets({
 
         if (secureValue === legacyValue) {
             try {
-                await legacyFiles.deleteFile(LEGACY_SECRET_FILES[name])
+                await legacyFiles.deleteFile(SECURE_SECRET_FILES[name])
             } catch {
                 warnings.push(`Legacy deletion failed for ${name}.`)
             }

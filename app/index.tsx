@@ -383,19 +383,19 @@ function AppInner() {
 
     const handleShare = useCallback(async () => {
         if (!autobaseInviteKey) {
-            snackbar.show('Invite key not ready yet — try again in a moment')
+            snackbar.show(isWorkletReady ? 'Only the owner device can create invites' : 'Invite key not ready yet — try again in a moment')
             return
         }
         try {
             const inviteLink = `https://listam.ch/join?invite=${encodeURIComponent(autobaseInviteKey)}`
             await Share.share({
-                message: `Join my Listam list:\n${inviteLink}\n\nInvite code: ${autobaseInviteKey}\n\nThis invite is single-use, expires in 10 minutes, and grants writer access until the list is re-keyed.`,
+                message: `Join my Listam list:\n${inviteLink}\n\nInvite code: ${autobaseInviteKey}\n\nThis invite is single-use, expires in 10 minutes, and can be revoked before use. Removing a joined device requires re-keying.`,
                 title: 'Join my Listam list',
             })
         } catch {
             snackbar.show('Could not open the share sheet', 'error')
         }
-    }, [autobaseInviteKey, snackbar])
+    }, [autobaseInviteKey, isWorkletReady, snackbar])
 
     const handleJoin = useCallback(() => {
         setJoinDialogVisible(true)
@@ -466,7 +466,6 @@ function AppInner() {
                 backgroundColor={t.colors.bg}
             />
             <Header
-                autobaseInviteKey={autobaseInviteKey}
                 peerCount={peerCount}
                 isWorkletReady={isWorkletReady}
                 onShare={handleShare}

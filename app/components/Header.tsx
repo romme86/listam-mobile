@@ -27,7 +27,6 @@ const SIZE_OPTIONS: SizeOption[] = ['small', 'medium', 'normal', 'large']
 const ITEM_ICON_VARIANT_OPTIONS: ItemIconVariant[] = ['illustrated', 'minimal']
 
 type HeaderProps = {
-    autobaseInviteKey: string
     peerCount: number
     isWorkletReady: boolean
     onShare: () => void
@@ -55,7 +54,6 @@ type HeaderProps = {
 
 export function Header(props: HeaderProps) {
     const {
-        autobaseInviteKey,
         peerCount,
         isWorkletReady,
         onShare,
@@ -91,7 +89,7 @@ export function Header(props: HeaderProps) {
     const overlayOpacity = useRef(new Animated.Value(0)).current
     const pulse = useRef(new Animated.Value(1)).current
 
-    const ready = isWorkletReady && !!autobaseInviteKey
+    const ready = isWorkletReady
     const status = !ready
         ? { label: 'Starting up…', color: t.colors.warning }
         : peerCount > 0

@@ -17,9 +17,10 @@ import {
 import b4a from 'b4a'
 import {syncListToFrontend, validateItem, addItem, updateItem, deleteItem} from './lib/item.mjs'
 const { IPC } = BareKit
-import {loadAutobaseKey, saveAutobaseKey, loadEncryptionKey} from "./lib/key.mjs"
+import {loadAutobaseKey, saveAutobaseKey, loadEncryptionKey, saveEncryptionKey, loadOwnerAuthorityKey, saveOwnerAuthorityKey, deleteLegacyKeyFile, deleteLegacyInviteFile} from "./lib/key.mjs"
 import {initAutobase, joinViaInvite, createInvite} from "./lib/network.mjs"
 import { parseBootSecretPayload } from './lib/secrets.mjs'
+import { isMembershipRecord, reduceMembershipOperation } from './lib/membership.mjs'
 import {
     autobase,
     store,
@@ -29,10 +30,13 @@ import {
     rpc,
     currentList,
     baseKey,
+    membershipState,
     setRpc,
     setCurrentList,
     setBaseKey,
-    setEncryptionKey
+    setEncryptionKey,
+    setMembershipState,
+    setOwnerAuthorityKeyPair
 } from "./lib/state.mjs"
 import fs from "bare-fs"
 import { logger } from './lib/logger.mjs'
@@ -56,6 +60,7 @@ const bootSecrets = parseBootSecretPayload(Bare.argv[3] || '')
 export const keyFilePath = baseDir ? join(baseDir, 'lista-autobase-key.txt') : './autobase-key.txt';
 const localWriterKeyFilePath = baseDir ? join(baseDir, 'lista-local-writer-key.txt') : './local-writer-key.txt';
 export const encKeyFilePath = baseDir ? join(baseDir, 'lista-encryption-key.txt') : './encryption-key.txt';
+export const ownerAuthorityKeyFilePath = baseDir ? join(baseDir, 'lista-owner-authority-key.txt') : './owner-authority-key.txt';
 export const legacyInviteFilePath = baseDir ? join(baseDir, 'lista-invite.json') : './invite.json';
 
 const LOCK_PATH = baseDir ? join(baseDir, 'lista.lock') : './lista.lock'
@@ -93,17 +98,35 @@ if (baseKeyHex) {
     }
 }
 
-// If no key from argv, try loading from file (for restart persistence)
+// If no key from argv, load from the adapter boot payload, falling back to the
+// backend's own legacy plaintext file (authoritative path) so an existing base
+// is never lost if the pre-boot migration could not reach the file.
+let autobaseKeyFromLegacyFile = false
+let encryptionKeyFromLegacyFile = false
+let ownerAuthorityKeyFromLegacyFile = false
+let loadedEncryptionKey = null
+let loadedOwnerAuthorityKeyPair = null
 if (!baseKey) {
-    setBaseKey(loadAutobaseKey(bootSecrets))
+    const loaded = loadAutobaseKey(bootSecrets, keyFilePath)
+    setBaseKey(loaded.key)
+    autobaseKeyFromLegacyFile = loaded.source === 'legacy-file'
 }
 
 // Load encryption key if we have a base key (for restart persistence)
 if (baseKey) {
-    const loadedEncKey = loadEncryptionKey(bootSecrets)
-    if (loadedEncKey) {
-        setEncryptionKey(loadedEncKey)
+    const loaded = loadEncryptionKey(bootSecrets, encKeyFilePath)
+    if (loaded.key) {
+        setEncryptionKey(loaded.key)
+        loadedEncryptionKey = loaded.key
+        encryptionKeyFromLegacyFile = loaded.source === 'legacy-file'
     }
+}
+
+const loadedOwnerAuthority = loadOwnerAuthorityKey(bootSecrets, ownerAuthorityKeyFilePath)
+if (loadedOwnerAuthority.keyPair) {
+    setOwnerAuthorityKeyPair(loadedOwnerAuthority.keyPair)
+    loadedOwnerAuthorityKeyPair = loadedOwnerAuthority.keyPair
+    ownerAuthorityKeyFromLegacyFile = loadedOwnerAuthority.source === 'legacy-file'
 }
 
 // Create RPC server
@@ -136,10 +159,8 @@ let rpcGenerated = new RPC(IPC, async (req, error) => {
                     break
                 }
                 const z32Invite = createInvite()
-                if (z32Invite) {
-                    const keyReq = rpc.request(RPC_GET_KEY)
-                    keyReq.send(z32Invite)
-                }
+                const keyReq = rpc.request(RPC_GET_KEY)
+                keyReq.send(z32Invite || '')
                 break
             }
             case RPC_JOIN_KEY: {
@@ -152,9 +173,9 @@ let rpcGenerated = new RPC(IPC, async (req, error) => {
             case RPC_CREATE_INVITE: {
                 logger.log('[INFO] Command RPC_CREATE_INVITE')
                 const z32Invite = createInvite()
-                if (z32Invite && rpc) {
+                if (rpc) {
                     const keyReq = rpc.request(RPC_GET_KEY)
-                    keyReq.send(z32Invite)
+                    keyReq.send(z32Invite || '')
                 }
                 break
             }
@@ -169,6 +190,38 @@ let rpcGenerated = new RPC(IPC, async (req, error) => {
     }
 })
 setRpc(rpcGenerated)
+
+// Re-secure any key material that was only found in the backend's own legacy
+// plaintext files, then remove the plaintext once the secure write is
+// acknowledged. The backend owns the authoritative file paths, so this is the
+// safety net if the frontend's pre-boot migration could not reach them. Also
+// clear the unused writer-key / invite plaintext (never re-stored).
+await reconcileLegacyKeyFiles()
+
+async function reconcileLegacyKeyFiles() {
+    if (autobaseKeyFromLegacyFile && baseKey) {
+        if (await saveAutobaseKey(baseKey)) {
+            deleteLegacyKeyFile(keyFilePath)
+            logger.log('[INFO] Migrated legacy autobase key file into secure storage')
+        }
+    }
+    if (encryptionKeyFromLegacyFile && loadedEncryptionKey) {
+        if (await saveEncryptionKey(loadedEncryptionKey)) {
+            deleteLegacyKeyFile(encKeyFilePath)
+            logger.log('[INFO] Migrated legacy encryption key file into secure storage')
+        }
+    }
+    if (ownerAuthorityKeyFromLegacyFile && loadedOwnerAuthorityKeyPair?.secretKey) {
+        if (await saveOwnerAuthorityKey(loadedOwnerAuthorityKeyPair.secretKey)) {
+            deleteLegacyKeyFile(ownerAuthorityKeyFilePath)
+            logger.log('[INFO] Migrated legacy owner authority key file into secure storage')
+        }
+    }
+    // The local writer key is derived from the corestore (no consumer) and the
+    // invite is an expiring bearer secret (H3); neither is ever re-stored.
+    deleteLegacyKeyFile(localWriterKeyFilePath)
+    deleteLegacyInviteFile(legacyInviteFilePath)
+}
 
 // Initialize Autobase for the initial baseKey (from argv or new)
 await initAutobase(baseKey).then(() => {
@@ -248,22 +301,31 @@ export async function apply (nodes, view, host) {
     for (const { value } of nodes) {
         if (!value) continue
 
-        // Handle writer membership updates coming from blind pairing
-        if (value.type === 'add-writer' && typeof value.key === 'string') {
-            try {
-                const writerKey = Buffer.from(value.key, 'hex')
-                await host.addWriter(writerKey, { indexer: true })
-                logger.log('[INFO] Added writer from add-writer op')
-
-                // Log whether the added writer is our own key (for debugging),
-                // without printing the raw key material.
-                if (autobase?.local) {
-                    const ourKeyHex = autobase.local.key.toString('hex')
-                    logger.log('[INFO] add-writer is our own key:', value.key === ourKeyHex)
-                }
-            } catch (err) {
-                logger.log('[ERROR] Failed to add writer from add-writer op:', err)
+        if (isMembershipRecord(value)) {
+            const result = reduceMembershipOperation(value, membershipState, { baseKey: autobase?.key })
+            setMembershipState(result.state)
+            if (!result.ok) {
+                logger.log('[WARNING] Rejected membership op', { reason: result.reason })
+                continue
             }
+
+            if (result.effect?.addWriterKey) {
+                try {
+                    const writerKey = Buffer.from(result.effect.addWriterKey, 'hex')
+                    await host.addWriter(writerKey, { indexer: true })
+                    logger.log('[INFO] Added writer from owner-signed membership op')
+                } catch (err) {
+                    logger.log('[ERROR] Failed to add writer from membership op:', err)
+                }
+            }
+            continue
+        }
+
+        // Legacy add-writer records are intentionally no longer authoritative.
+        // Phase 3 only supports revoking unused invites; true member removal
+        // requires the Phase 4 re-key flow.
+        if (value.type === 'add-writer' && typeof value.key === 'string') {
+            logger.log('[WARNING] Rejected legacy add-writer op; owner-signed membership is required')
             continue
         }
 
