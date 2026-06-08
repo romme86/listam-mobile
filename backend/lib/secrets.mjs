@@ -7,6 +7,8 @@ const BUFFER_SECRET_BYTES = new Map([
     ['autobaseKey', 32],
     ['encryptionKey', 32],
     ['ownerAuthorityKey', 64],
+    ['epochKey', 32],
+    ['epochEncryptionKey', 32],
 ])
 const PERSIST_ACK_TIMEOUT_MS = 8000
 const PERSIST_RETRIES = 2

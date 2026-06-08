@@ -26,8 +26,25 @@ import {
     SYNC_LIST,
     RPC_CREATE_INVITE,
     RPC_PERSIST_SECRET,
+    RPC_REMOVE_MEMBER,
+    RPC_GET_MEMBERS,
+    RPC_GET_OWNER_RECOVERY_CODE,
+    RPC_RECOVER_OWNER,
 } from '../../rpc-commands.mjs'
 import type { ListEntry } from '@/app/components/_types'
+
+export type MembershipMember = {
+    writerKey: string
+    isOwner: boolean
+    isSelf: boolean
+}
+
+export type MembershipRoster = {
+    currentEpoch: number
+    ownerWriterKey: string | null
+    canAdminister: boolean
+    writers: MembershipMember[]
+}
 
 const GLOBAL_KEY = '__LISTAM_WORKLET_SINGLETON__' as const
 
@@ -58,6 +75,9 @@ type UseWorkletResult = {
     setIsJoining: React.Dispatch<React.SetStateAction<boolean>>
     isJoiningRef: React.MutableRefObject<boolean>
     joinPhase: JoinPhase
+    membershipRoster: MembershipRoster | null
+    ownerRecoveryCode: string | null
+    clearOwnerRecoveryCode: () => void
     sendRPC: (command: number, payload?: string) => void
 }
 
@@ -71,6 +91,9 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
     const [peerCount, setPeerCount] = useState(0)
     const [isJoining, setIsJoining] = useState(false)
     const [joinPhase, setJoinPhase] = useState<JoinPhase>(null)
+    const [membershipRoster, setMembershipRoster] = useState<MembershipRoster | null>(null)
+    const [ownerRecoveryCode, setOwnerRecoveryCode] = useState<string | null>(null)
+    const clearOwnerRecoveryCode = useCallback(() => setOwnerRecoveryCode(null), [])
 
     const rpcRef = useRef<any>(null)
     const workletRef = useRef<Worklet | null>(null)
@@ -183,6 +206,33 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                             const msg = payload.message || 'Could not connect to this invite. Please try again.'
                             if (notifyRef.current) notifyRef.current(msg, 'error')
                             else Alert.alert('Connection failed', msg)
+                        } else if (payload.type === 'membership-roster') {
+                            setMembershipRoster(payload.roster ?? null)
+                        } else if (payload.type === 'owner-recovery-code') {
+                            if (payload.code) {
+                                setOwnerRecoveryCode(payload.code)
+                            } else if (notifyRef.current) {
+                                notifyRef.current('Only the owner device can reveal a recovery code.', 'error')
+                            }
+                        } else if (payload.type === 'owner-recovered') {
+                            if (notifyRef.current) notifyRef.current('Ownership restored on this device.', 'success')
+                        } else if (payload.type === 'owner-recovery-failed') {
+                            const msg = payload.reason === 'no-owner-on-base'
+                                ? 'This list has no recorded owner to recover.'
+                                : 'That recovery code is not valid for this list.'
+                            if (notifyRef.current) notifyRef.current(msg, 'error')
+                        } else if (payload.type === 'member-removed') {
+                            if (notifyRef.current) {
+                                notifyRef.current(payload.snapshot === false
+                                    ? 'Member removed — re-keyed, but new devices may need a manual sync.'
+                                    : 'Member removed and access re-keyed.', payload.snapshot === false ? 'info' : 'success')
+                            }
+                        } else if (payload.type === 'member-removal-failed') {
+                            if (notifyRef.current) notifyRef.current('Could not remove that member.', 'error')
+                        } else if (payload.type === 'member-removal-incomplete') {
+                            if (notifyRef.current) {
+                                notifyRef.current('Removed member lost content access, but may still be able to edit. Review needed.', 'error')
+                            }
                         } else {
                             console.log('RPC_MESSAGE payload (unhandled type):', payload)
                         }
@@ -291,8 +341,21 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         setIsJoining,
         isJoiningRef,
         joinPhase,
+        membershipRoster,
+        ownerRecoveryCode,
+        clearOwnerRecoveryCode,
         sendRPC,
     }
 }
 
-export { RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_JOIN_KEY, RPC_CREATE_INVITE }
+export {
+    RPC_UPDATE,
+    RPC_DELETE,
+    RPC_ADD,
+    RPC_JOIN_KEY,
+    RPC_CREATE_INVITE,
+    RPC_REMOVE_MEMBER,
+    RPC_GET_MEMBERS,
+    RPC_GET_OWNER_RECOVERY_CODE,
+    RPC_RECOVER_OWNER,
+}

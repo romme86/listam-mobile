@@ -31,6 +31,7 @@ type HeaderProps = {
     isWorkletReady: boolean
     onShare: () => void
     onJoin: () => void
+    onManageMembers: () => void
     trialDaysRemaining?: number
     menuVisible: boolean
     onMenuToggle: () => void
@@ -58,6 +59,7 @@ export function Header(props: HeaderProps) {
         isWorkletReady,
         onShare,
         onJoin,
+        onManageMembers,
         trialDaysRemaining,
         menuVisible,
         onMenuToggle,
@@ -196,6 +198,15 @@ export function Header(props: HeaderProps) {
                                     color={t.colors.text}
                                 />
                                 <Text style={styles.menuLabel}>{isGridView ? 'List View' : 'Grid View'}</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.menuRow}
+                                onPress={() => { onManageMembers(); closeMenu() }}
+                                activeOpacity={0.6}
+                            >
+                                <Ionicons name="people-outline" size={22} color={t.colors.text} />
+                                <Text style={styles.menuLabel}>Members & recovery</Text>
                             </TouchableOpacity>
 
                             <Text style={styles.sectionLabel}>Display</Text>

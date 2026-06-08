@@ -3,11 +3,13 @@ import fs from "bare-fs"
 import BlindPairing from "blind-pairing"
 import z32 from "z32"
 import { apply, open, storagePath, peerKeysString, keyFilePath, encKeyFilePath, ownerAuthorityKeyFilePath, legacyInviteFilePath } from "../backend.mjs"
-import { saveAutobaseKey, saveEncryptionKey, saveOwnerAuthorityKey, deleteOwnerAuthorityKey, deleteLegacyInviteFile } from "./key.mjs"
+import { saveAutobaseKey, saveEncryptionKey, saveOwnerAuthorityKey, deleteOwnerAuthorityKey, saveEpochKey, deleteEpochKey, saveEpochEncryptionKey, deleteEpochEncryptionKey, deleteLegacyInviteFile } from "./key.mjs"
 import { deleteBackendSecret } from "./secrets.mjs"
 import { INVITE_MAX_USES, isInviteUsable, reserveInviteUse, withInvitePolicy } from "./invite-policy.mjs"
 import { createJoinRollbackSnapshot, restoreJoinRollbackSnapshot } from "./join-rollback.mjs"
+import { performMemberRemovalRekey } from "./rekey.mjs"
 import {
+    buildMembershipRoster,
     canCreateMembershipInvite,
     createAddWriterMembershipRecord,
     createMembershipState,
@@ -15,7 +17,14 @@ import {
     createOwnerBootstrapRecord,
     nextMembershipSequence,
     ownerAuthorityPublicKeyHex,
+    reduceMembershipLog,
 } from "./membership.mjs"
+import { ownerRecoveryCodeFromKeyPair, recoverOwnerAuthorityFromCode } from "./owner-recovery.mjs"
+import {
+    createEpochEncryptionKeyPair,
+    epochPublicKeyHex,
+    generateEpochKey,
+} from './key-epochs.mjs'
 import { RPC_MESSAGE, RPC_GET_KEY, SYNC_LIST } from "../../rpc-commands.mjs"
 import Corestore from "corestore"
 import Autobase from "autobase"
@@ -34,6 +43,8 @@ import {
     currentInvite,
     encryptionKey,
     ownerAuthorityKeyPair,
+    epochKey,
+    epochEncryptionKeyPair,
     membershipState,
     setAutobase,
     setAddedStaticPeers,
@@ -47,11 +58,13 @@ import {
     setCurrentInvite,
     setEncryptionKey,
     setOwnerAuthorityKeyPair,
+    setEpochKey,
+    setEpochEncryptionKeyPair,
     setMembershipState,
     isPendingJoinSuccess,
     setIsPendingJoinSuccess
 } from "./state.mjs"
-import { rebuildListFromPersistedOps, syncListToFrontend } from "./item.mjs"
+import { enqueueWrite, prepareListAppendOperation, rebuildListFromPersistedOps, readPersistedMembershipRecords, syncListToFrontend } from "./item.mjs"
 import { logger } from "./logger.mjs"
 
 let _initPromise = null
@@ -254,14 +267,16 @@ export function setupBlindPairing() {
                     throw new Error('Only the owner device can accept invite candidates')
                 }
 
-                // Get joiner's writer key from userData
-                const writerKeyHex = candidate.userData.toString('hex')
+                // Get joiner's writer key and epoch public key from userData.
+                const joiner = parseJoinCandidateUserData(candidate.userData)
+                if (!joiner?.writerKey) throw new Error('Join candidate did not provide a writer key')
 
                 const membershipRecord = createAddWriterMembershipRecord({
                     ownerAuthorityKeyPair,
-                    writerKey: writerKeyHex,
+                    writerKey: joiner.writerKey,
                     baseKey: autobase.key,
                     sequence: nextMembershipSequence(membershipState),
+                    epochPublicKey: joiner.epochPublicKey,
                 })
                 await autobase.append(membershipRecord)
                 await autobase.update()
@@ -269,7 +284,9 @@ export function setupBlindPairing() {
                 // Send our base key + encryption key
                 candidate.confirm({
                     key: autobase.key,
-                    encryptionKey: autobase.encryptionKey
+                    encryptionKey: autobase.encryptionKey,
+                    epochKey,
+                    epoch: membershipState.currentEpoch || 1,
                 })
             } catch (e) {
                 logger.log('[ERROR] Failed to accept invite candidate:', e)
@@ -346,7 +363,12 @@ async function tearDownAutobaseSwarmStore() {
 }
 
 async function ensureOwnerMembership({ allowOwnerMigration }) {
-    if (membershipState.ownerAuthorityKey) return
+    if (membershipState.ownerAuthorityKey) {
+        if (allowOwnerMigration && ownerAuthorityKeyPair) {
+            await ensureLocalEpochSecrets()
+        }
+        return
+    }
 
     if (!allowOwnerMigration) {
         logger.log('[INFO] Owner membership migration skipped for joined base')
@@ -364,10 +386,15 @@ async function ensureOwnerMembership({ allowOwnerMigration }) {
         await saveOwnerAuthorityKey(keyPair.secretKey)
     }
 
+    const { localEpochEncryptionKeyPair, localEpochKey } = await ensureLocalEpochSecrets()
+
     const record = createOwnerBootstrapRecord({
         ownerAuthorityKeyPair: keyPair,
         writerKey: autobase.local.key,
         baseKey: autobase.key,
+        epochPublicKey: epochPublicKeyHex(localEpochEncryptionKeyPair),
+        epochKey: localEpochKey,
+        epoch: 1,
     })
     await autobase.append(record)
     await autobase.update()
@@ -375,6 +402,24 @@ async function ensureOwnerMembership({ allowOwnerMigration }) {
     logger.log('[INFO] Bootstrapped owner-signed membership record', {
         ownerAuthorityKey: ownerAuthorityPublicKeyHex(keyPair),
     })
+}
+
+async function ensureLocalEpochSecrets() {
+    let localEpochEncryptionKeyPair = epochEncryptionKeyPair
+    if (!localEpochEncryptionKeyPair) {
+        localEpochEncryptionKeyPair = createEpochEncryptionKeyPair()
+        setEpochEncryptionKeyPair(localEpochEncryptionKeyPair)
+        await saveEpochEncryptionKey(localEpochEncryptionKeyPair.secretKey)
+    }
+
+    let localEpochKey = epochKey
+    if (!localEpochKey) {
+        localEpochKey = generateEpochKey()
+        setEpochKey(localEpochKey)
+        await saveEpochKey(localEpochKey)
+    }
+
+    return { localEpochEncryptionKeyPair, localEpochKey }
 }
 
 export async function initAutobase(newBaseKey, options = {}) {
@@ -440,12 +485,16 @@ export async function initAutobase(newBaseKey, options = {}) {
                 deleteBackendSecret('autobaseKey')
                 deleteBackendSecret('encryptionKey')
                 deleteBackendSecret('ownerAuthorityKey')
+                deleteBackendSecret('epochKey')
+                deleteBackendSecret('epochEncryptionKey')
                 rmrfSafe(keyFilePath)
                 rmrfSafe(encKeyFilePath)
                 rmrfSafe(ownerAuthorityKeyFilePath)
                 rmrfSafe(baseStoragePath)
                 setEncryptionKey(null)
                 setOwnerAuthorityKeyPair(null)
+                setEpochKey(null)
+                setEpochEncryptionKeyPair(null)
                 // Clear the promise so recursive call can start fresh
                 _initPromise = null
                 return initAutobase(null)
@@ -478,9 +527,18 @@ export async function initAutobase(newBaseKey, options = {}) {
 
         // Load existing items from view and sync to frontend
         await autobase.update()
+        // Rebuild membership state from the records apply() persisted into the
+        // view. Autobase does not re-run apply over history on restart, so
+        // without this the owner key, writer set, and sequence high-water mark
+        // would be empty here — re-bootstrapping the owner on every launch and
+        // reusing sequence numbers. Seeding from the durable log makes the
+        // bootstrap below run exactly once and keeps sequences monotonic.
+        const persistedMembership = await readPersistedMembershipRecords()
+        setMembershipState(reduceMembershipLog(persistedMembership, { baseKey: autobase.key }))
         await ensureOwnerMembership({ allowOwnerMigration })
         const rebuiltList = await rebuildListFromPersistedOps()
         syncListToFrontend(rebuiltList)
+        broadcastMembershipRoster()
 
         // Add static peers only once
         if (!addedStaticPeers && peerKeysString) {
@@ -565,8 +623,16 @@ export async function joinViaInvite(z32InviteStr) {
     }
 
     _joinPromise = (async () => {
-        const rollbackSnapshot = createJoinRollbackSnapshot({ currentList, baseKey, encryptionKey, ownerAuthorityKeyPair })
+        const rollbackSnapshot = createJoinRollbackSnapshot({
+            currentList,
+            baseKey,
+            encryptionKey,
+            ownerAuthorityKeyPair,
+            epochKey,
+            epochEncryptionKeyPair,
+        })
         const normalizedInvite = normalizeInviteCode(z32InviteStr)
+        const joinEpochEncryptionKeyPair = createEpochEncryptionKeyPair()
 
         // Clean up any leftover temp resources from a previous attempt
         cleanupTempSwarm()
@@ -602,7 +668,11 @@ export async function joinViaInvite(z32InviteStr) {
 
                 _tempPairing.addCandidate({
                     invite: z32.decode(normalizedInvite),
-                    userData: localWriterKey,
+                    userData: Buffer.from(JSON.stringify({
+                        version: 1,
+                        writerKey: localWriterKey.toString('hex'),
+                        epochPublicKey: epochPublicKeyHex(joinEpochEncryptionKeyPair),
+                    })),
                     onadd: async (paired) => {
                         clearTimeout(timeout)
                         resolve(paired)
@@ -614,6 +684,9 @@ export async function joinViaInvite(z32InviteStr) {
 
             if (!result?.key || !result?.encryptionKey) {
                 throw new Error('Pairing returned incomplete credentials')
+            }
+            if (!result?.epochKey) {
+                throw new Error('Pairing returned no epoch key')
             }
 
             // Notify frontend: phase 2 — permission (waiting for write access)
@@ -627,6 +700,10 @@ export async function joinViaInvite(z32InviteStr) {
             //    picks it up.
             setOwnerAuthorityKeyPair(null)
             await deleteOwnerAuthorityKey()
+            setEpochEncryptionKeyPair(joinEpochEncryptionKeyPair)
+            await saveEpochEncryptionKey(joinEpochEncryptionKeyPair.secretKey)
+            setEpochKey(result.epochKey)
+            await saveEpochKey(result.epochKey)
             setEncryptionKey(result.encryptionKey)
             await initAutobase(result.key, { allowOwnerMigration: false })
 
@@ -677,6 +754,12 @@ export async function joinViaInvite(z32InviteStr) {
                     setOwnerAuthorityKeyPair,
                     saveOwnerAuthorityKey,
                     deleteOwnerAuthorityKey,
+                    setEpochKey,
+                    saveEpochKey,
+                    deleteEpochKey,
+                    setEpochEncryptionKeyPair,
+                    saveEpochEncryptionKey,
+                    deleteEpochEncryptionKey,
                     initAutobase,
                 })
             } catch (rollbackError) {
@@ -691,6 +774,89 @@ export async function joinViaInvite(z32InviteStr) {
 
     try { return await _joinPromise }
     finally { _joinPromise = null }
+}
+
+export async function removeMemberAndRotateEpoch(writerKey) {
+    // The orchestration (validation, grant construction, epoch rotation,
+    // rollback, and post-commit snapshot retry) lives in rekey.mjs so it can be
+    // unit-tested without the BareKit-bound backend graph. Pass the current
+    // state values and persistence setters; rekey.mjs snapshots them for
+    // rollback. prepareListAppendOperation reads live state itself, so the
+    // snapshot is encrypted under the rotated epoch once apply() has advanced it.
+    const result = await performMemberRemovalRekey(writerKey, {
+        autobase,
+        epochKey,
+        membershipState,
+        ownerAuthorityKeyPair,
+        currentList,
+        prepareListAppendOperation,
+        enqueueWrite,
+        setEpochKey,
+        saveEpochKey,
+        deleteEpochKey,
+        setMembershipState,
+        logger,
+    })
+    if (result.committed) broadcastMembershipRoster()
+    broadcastMessage(result.ok
+        ? { type: 'member-removed', writerKey: normalizeHex(writerKey, 32), snapshot: result.snapshot !== false }
+        : { type: 'member-removal-failed', reason: result.reason })
+    return result.ok
+}
+
+// Build the membership roster for the frontend: who the writers are, which one
+// is the owner, which one is this device, and whether this device can administer
+// (hold owner authority). Writer keys are opaque public identifiers, not secrets.
+export function broadcastMembershipRoster() {
+    const localWriterKey = autobase?.local?.key ? autobase.local.key.toString('hex') : null
+    const roster = buildMembershipRoster(membershipState, {
+        localWriterKey,
+        hasOwnerAuthority: !!ownerAuthorityKeyPair && canCreateMembershipInvite(membershipState, ownerAuthorityKeyPair),
+    })
+    broadcastMessage({ type: 'membership-roster', roster })
+}
+
+// Reveal the owner recovery code so the owner can store it offline. Returns null
+// unless this device currently holds owner authority. The code IS the owner
+// secret — it is sent to the frontend for display only and never logged.
+export function sendOwnerRecoveryCodeToFrontend() {
+    if (!ownerAuthorityKeyPair || !canCreateMembershipInvite(membershipState, ownerAuthorityKeyPair)) {
+        logger.log('[WARNING] Owner recovery code requested but this device is not the owner')
+        broadcastMessage({ type: 'owner-recovery-code', code: null, reason: 'not-owner' })
+        return
+    }
+    const code = ownerRecoveryCodeFromKeyPair(ownerAuthorityKeyPair)
+    logger.log('[AUDIT] Owner recovery code revealed to the owner for offline backup')
+    broadcastMessage({ type: 'owner-recovery-code', code })
+}
+
+// Restore owner authority on this device from a recovery code. The code is
+// verified against the owner public key the base records, so a wrong code (or a
+// code for another base) is rejected without side effects.
+export async function recoverOwnerAuthority(code) {
+    if (!membershipState?.ownerAuthorityKey) {
+        logger.log('[WARNING] Owner recovery requested but the base has no recorded owner')
+        broadcastMessage({ type: 'owner-recovery-failed', reason: 'no-owner-on-base' })
+        return { ok: false, reason: 'no-owner-on-base' }
+    }
+    if (ownerAuthorityKeyPair && canCreateMembershipInvite(membershipState, ownerAuthorityKeyPair)) {
+        broadcastMessage({ type: 'owner-recovered', alreadyOwner: true })
+        return { ok: true, alreadyOwner: true }
+    }
+
+    const recovered = recoverOwnerAuthorityFromCode(code, membershipState.ownerAuthorityKey)
+    if (!recovered) {
+        logger.log('[WARNING] Owner recovery rejected an invalid or mismatched recovery code')
+        broadcastMessage({ type: 'owner-recovery-failed', reason: 'invalid-code' })
+        return { ok: false, reason: 'invalid-code' }
+    }
+
+    setOwnerAuthorityKeyPair(recovered)
+    await saveOwnerAuthorityKey(recovered.secretKey)
+    logger.log('[AUDIT] Owner authority recovered from recovery code')
+    broadcastMembershipRoster()
+    broadcastMessage({ type: 'owner-recovered' })
+    return { ok: true }
 }
 
 
@@ -723,4 +889,29 @@ function rmrfSafe(p) {
 function normalizeInviteCode(raw) {
     if (typeof raw !== 'string') return ''
     return raw.trim().replace(/\s+/g, '')
+}
+
+function parseJoinCandidateUserData(userData) {
+    if (!userData) return null
+
+    try {
+        const text = Buffer.from(userData).toString('utf8')
+        const parsed = JSON.parse(text)
+        const writerKey = normalizeHex(parsed?.writerKey, 32)
+        const epochPublicKey = normalizeHex(parsed?.epochPublicKey, 32)
+        if (writerKey) return { writerKey, epochPublicKey }
+    } catch {}
+
+    const writerKey = normalizeHex(Buffer.from(userData), 32)
+    return writerKey ? { writerKey, epochPublicKey: null } : null
+}
+
+function normalizeHex(value, bytes) {
+    if (Buffer.isBuffer(value) || value instanceof Uint8Array) {
+        const buffer = Buffer.from(value)
+        return buffer.length === bytes ? buffer.toString('hex') : null
+    }
+    if (typeof value !== 'string') return null
+    const hex = value.trim().toLowerCase()
+    return /^[0-9a-f]+$/i.test(hex) && hex.length === bytes * 2 ? hex : null
 }

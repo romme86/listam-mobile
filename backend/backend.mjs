@@ -10,17 +10,24 @@ import {
     RPC_ADD_FROM_BACKEND,
     RPC_UPDATE_FROM_BACKEND,
     RPC_DELETE_FROM_BACKEND,
+    RPC_MESSAGE,
     SYNC_LIST,
     RPC_REQUEST_SYNC,
-    RPC_CREATE_INVITE
+    RPC_CREATE_INVITE,
+    RPC_REMOVE_MEMBER,
+    RPC_GET_MEMBERS,
+    RPC_GET_OWNER_RECOVERY_CODE,
+    RPC_RECOVER_OWNER
 } from '../rpc-commands.mjs'
 import b4a from 'b4a'
 import {syncListToFrontend, validateItem, addItem, updateItem, deleteItem} from './lib/item.mjs'
 const { IPC } = BareKit
-import {loadAutobaseKey, saveAutobaseKey, loadEncryptionKey, saveEncryptionKey, loadOwnerAuthorityKey, saveOwnerAuthorityKey, deleteLegacyKeyFile, deleteLegacyInviteFile} from "./lib/key.mjs"
-import {initAutobase, joinViaInvite, createInvite} from "./lib/network.mjs"
+import {loadAutobaseKey, saveAutobaseKey, loadEncryptionKey, saveEncryptionKey, loadOwnerAuthorityKey, saveOwnerAuthorityKey, deleteLegacyKeyFile, deleteLegacyInviteFile, loadEpochKey, saveEpochKey, deleteEpochKey, loadEpochEncryptionKey, saveEpochEncryptionKey} from "./lib/key.mjs"
+import {initAutobase, joinViaInvite, createInvite, removeMemberAndRotateEpoch, broadcastMembershipRoster, sendOwnerRecoveryCodeToFrontend, recoverOwnerAuthority} from "./lib/network.mjs"
 import { parseBootSecretPayload } from './lib/secrets.mjs'
 import { isMembershipRecord, reduceMembershipOperation } from './lib/membership.mjs'
+import { removeWriterAtConsensus } from './lib/writer-removal.mjs'
+import { decryptEncryptedListOperation, decryptEpochGrantForWriter, epochKeyHashHex, isEncryptedListOperation } from './lib/key-epochs.mjs'
 import {
     autobase,
     store,
@@ -30,13 +37,17 @@ import {
     rpc,
     currentList,
     baseKey,
+    epochKey,
+    epochEncryptionKeyPair,
     membershipState,
     setRpc,
     setCurrentList,
     setBaseKey,
     setEncryptionKey,
     setMembershipState,
-    setOwnerAuthorityKeyPair
+    setOwnerAuthorityKeyPair,
+    setEpochKey,
+    setEpochEncryptionKeyPair
 } from "./lib/state.mjs"
 import fs from "bare-fs"
 import { logger } from './lib/logger.mjs'
@@ -129,6 +140,16 @@ if (loadedOwnerAuthority.keyPair) {
     ownerAuthorityKeyFromLegacyFile = loadedOwnerAuthority.source === 'legacy-file'
 }
 
+const loadedEpoch = loadEpochKey(bootSecrets)
+if (loadedEpoch.key) {
+    setEpochKey(loadedEpoch.key)
+}
+
+const loadedEpochEncryption = loadEpochEncryptionKey(bootSecrets)
+if (loadedEpochEncryption.keyPair) {
+    setEpochEncryptionKeyPair(loadedEpochEncryption.keyPair)
+}
+
 // Create RPC server
 let rpcGenerated = new RPC(IPC, async (req, error) => {
     logger.log('[INFO] Got a request from react', req)
@@ -177,6 +198,28 @@ let rpcGenerated = new RPC(IPC, async (req, error) => {
                     const keyReq = rpc.request(RPC_GET_KEY)
                     keyReq.send(z32Invite || '')
                 }
+                break
+            }
+            case RPC_REMOVE_MEMBER: {
+                logger.log('[INFO] Command RPC_REMOVE_MEMBER')
+                const data = JSON.parse(req.data.toString())
+                await removeMemberAndRotateEpoch(data.writerKey)
+                break
+            }
+            case RPC_GET_MEMBERS: {
+                logger.log('[INFO] Command RPC_GET_MEMBERS')
+                broadcastMembershipRoster()
+                break
+            }
+            case RPC_GET_OWNER_RECOVERY_CODE: {
+                logger.log('[INFO] Command RPC_GET_OWNER_RECOVERY_CODE')
+                sendOwnerRecoveryCodeToFrontend()
+                break
+            }
+            case RPC_RECOVER_OWNER: {
+                logger.log('[INFO] Command RPC_RECOVER_OWNER')
+                const data = JSON.parse(req.data.toString())
+                await recoverOwnerAuthority(data.code)
                 break
             }
             case RPC_REQUEST_SYNC: {
@@ -292,6 +335,17 @@ export function open (store) {
     return view
 }
 
+// Send a one-off status/event message to the frontend over RPC_MESSAGE.
+function notifyFrontend(payload) {
+    if (!rpc) return
+    try {
+        const req = rpc.request(RPC_MESSAGE)
+        req.send(JSON.stringify(payload))
+    } catch (e) {
+        logger.log('[ERROR] Failed to notify frontend:', e)
+    }
+}
+
 export async function apply (nodes, view, host) {
     if (autobase?.closing) {
         logger.log('[WARNING] Apply called while Autobase is closing; skipping.')
@@ -309,6 +363,18 @@ export async function apply (nodes, view, host) {
                 continue
             }
 
+            // Persist accepted membership records into the linearized view so the
+            // reduced membership state can be rebuilt after a restart. Autobase
+            // does not re-run apply over already-applied history on reopen, so
+            // state derived only in memory (owner key, writers, sequence
+            // high-water mark) would otherwise be lost — causing sequence reuse
+            // and writer-set divergence between peers. See rebuildMembershipFromPersistedOps.
+            await view.append({ op: 'membership', record: value })
+
+            if (result.effect?.epochGrants) {
+                await adoptGrantedEpochKey(result)
+            }
+
             if (result.effect?.addWriterKey) {
                 try {
                     const writerKey = Buffer.from(result.effect.addWriterKey, 'hex')
@@ -318,70 +384,144 @@ export async function apply (nodes, view, host) {
                     logger.log('[ERROR] Failed to add writer from membership op:', err)
                 }
             }
+            if (result.effect?.removeWriterKey) {
+                const writerKey = Buffer.from(result.effect.removeWriterKey, 'hex')
+                const outcome = await removeWriterAtConsensus({ host, writerKey, logger })
+                if (outcome.removed) {
+                    logger.log('[AUDIT] Removed writer from owner-signed membership op', result.effect.audit)
+                } else {
+                    // The epoch already rotated, so the removed member loses read
+                    // access to new content even if the consensus-layer removal
+                    // did not take. Surface it so the owner knows the member may
+                    // still be able to append and can intervene.
+                    logger.log('[AUDIT] Writer removal only partially enforced (epoch rotated, consensus removal failed)', {
+                        ...result.effect.audit,
+                        reason: outcome.reason,
+                    })
+                    notifyFrontend({ type: 'member-removal-incomplete', writerKey: result.effect.removeWriterKey, reason: outcome.reason })
+                }
+                if (autobase?.local?.key?.toString('hex') === result.effect.removeWriterKey) {
+                    setEpochKey(null)
+                    await deleteEpochKey()
+                    logger.log('[AUDIT] Local writer was removed; retired local epoch key')
+                }
+            }
+
+            // The writer set changed; refresh the frontend roster.
+            if (result.effect?.addWriterKey || result.effect?.removeWriterKey) {
+                broadcastMembershipRoster()
+            }
             continue
         }
+
+        const operation = unwrapListOperation(value)
+        if (!operation) continue
 
         // Legacy add-writer records are intentionally no longer authoritative.
         // Phase 3 only supports revoking unused invites; true member removal
         // requires the Phase 4 re-key flow.
-        if (value.type === 'add-writer' && typeof value.key === 'string') {
+        if (operation.type === 'add-writer' && typeof operation.key === 'string') {
             logger.log('[WARNING] Rejected legacy add-writer op; owner-signed membership is required')
             continue
         }
 
-        if (value.type === 'add') {
-            if (!validateItem(value.value)) {
-                logger.log('[WARNING] Invalid item schema in add operation:', value.value)
+        if (operation.type === 'add') {
+            if (!validateItem(operation.value)) {
+                logger.log('[WARNING] Invalid item schema in add operation:', operation.value)
                 continue
             }
-            logger.log('[INFO] Applying add operation for item:', value.value)
-            await view.append({ op: 'add', ...value.value })
-            setCurrentList([value.value, ...currentList.filter(i => i.text !== value.value.text)])
+            logger.log('[INFO] Applying add operation for item:', operation.value)
+            await view.append({ op: 'add', ...operation.value })
+            setCurrentList([operation.value, ...currentList.filter(i => i.text !== operation.value.text)])
             const addReq = rpc.request(RPC_ADD_FROM_BACKEND)
-            addReq.send(JSON.stringify(value.value))
+            addReq.send(JSON.stringify(operation.value))
             continue
         }
 
-        if (value.type === 'delete') {
-            if (!validateItem(value.value)) {
-                logger.log('[WARNING] Invalid item schema in delete operation:', value.value)
+        if (operation.type === 'delete') {
+            if (!validateItem(operation.value)) {
+                logger.log('[WARNING] Invalid item schema in delete operation:', operation.value)
                 continue
             }
-            logger.log('[INFO] Applying delete operation for item:', value.value)
-            await view.append({ op: 'delete', text: value.value.text })
-            setCurrentList(currentList.filter(i => i.text !== value.value.text))
+            logger.log('[INFO] Applying delete operation for item:', operation.value)
+            await view.append({ op: 'delete', text: operation.value.text })
+            setCurrentList(currentList.filter(i => i.text !== operation.value.text))
             const deleteReq = rpc.request(RPC_DELETE_FROM_BACKEND)
-            deleteReq.send(JSON.stringify(value.value))
+            deleteReq.send(JSON.stringify(operation.value))
             continue
         }
 
-        if (value.type === 'update') {
-            if (!validateItem(value.value)) {
-                logger.log('[WARNING] Invalid item schema in update operation:', value.value)
+        if (operation.type === 'update') {
+            if (!validateItem(operation.value)) {
+                logger.log('[WARNING] Invalid item schema in update operation:', operation.value)
                 continue
             }
-            logger.log('[INFO] Applying update operation for item:', value.value)
-            await view.append({ op: 'update', ...value.value })
+            logger.log('[INFO] Applying update operation for item:', operation.value)
+            await view.append({ op: 'update', ...operation.value })
             setCurrentList(currentList.map(i =>
-                i.text === value.value.text ? value.value : i
+                i.text === operation.value.text ? operation.value : i
             ))
             const updateReq = rpc.request(RPC_UPDATE_FROM_BACKEND)
-            updateReq.send(JSON.stringify(value.value))
+            updateReq.send(JSON.stringify(operation.value))
             continue
         }
 
-        if (value.type === 'list') {
-            if (!Array.isArray(value.value)) {
-                logger.log('[WARNING] Invalid list operation payload, expected array:', value.value)
+        if (operation.type === 'list') {
+            if (!Array.isArray(operation.value)) {
+                logger.log('[WARNING] Invalid list operation payload, expected array:', operation.value)
                 continue
             }
-            logger.log('[INFO] Applying list operation for items:', value.value)
+            logger.log('[INFO] Applying list operation for items:', operation.value)
+            await view.append({ op: 'list', items: operation.value.filter(validateItem) })
             const updateReq = rpc.request(SYNC_LIST)
-            updateReq.send(JSON.stringify(value.value))
+            updateReq.send(JSON.stringify(operation.value))
             continue
         }
 
         // All other values are appended to the view (for future use)
-        await view.append(value)
+        await view.append(operation)
     }
+}
+
+async function adoptGrantedEpochKey(result) {
+    if (!autobase?.local?.key || !epochEncryptionKeyPair) return
+
+    const localWriterKey = autobase.local.key.toString('hex')
+    const grantedEpochKey = decryptEpochGrantForWriter(
+        result.effect.epochGrants,
+        localWriterKey,
+        epochEncryptionKeyPair,
+    )
+    if (!grantedEpochKey) return
+
+    if (epochKeyHashHex(grantedEpochKey) !== result.effect.epochKeyHash) {
+        logger.log('[WARNING] Ignoring epoch grant with mismatched key hash')
+        return
+    }
+
+    setEpochKey(grantedEpochKey)
+    await saveEpochKey(grantedEpochKey)
+    logger.log('[INFO] Adopted granted epoch key', {
+        epoch: result.state.currentEpoch,
+        epochKeyHash: result.effect.epochKeyHash,
+    })
+}
+
+function unwrapListOperation(value) {
+    if (!isEncryptedListOperation(value)) return value
+
+    if (Number(value.epoch) !== Number(membershipState?.currentEpoch)) {
+        logger.log('[WARNING] Ignoring encrypted list op for inactive epoch', {
+            opEpoch: value.epoch,
+            currentEpoch: membershipState?.currentEpoch,
+        })
+        return null
+    }
+
+    const operation = decryptEncryptedListOperation(value, epochKey)
+    if (!operation) {
+        logger.log('[WARNING] Could not decrypt encrypted list op for current epoch')
+        return null
+    }
+    return operation
 }

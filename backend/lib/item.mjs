@@ -2,14 +2,19 @@
 // Add item operation (backend creates the canonical item)
 import {RPC_MESSAGE} from "../../rpc-commands.mjs";
 import {generateId} from "./util.mjs";
-import {autobase, store, rpc, currentList} from './state.mjs'
+import {autobase, store, rpc, currentList, epochKey, membershipState} from './state.mjs'
 import {SYNC_LIST} from "../../rpc-commands.mjs";
 import { logger } from "./logger.mjs"
+import { createEncryptedListOperation } from './key-epochs.mjs'
 
 // --- WRITE SERIALIZATION (prevents concurrent autobase.append / flush races) ---
 let _writeChain = Promise.resolve()
 
-function enqueueWrite (fn) {
+// Exported so the membership re-key flow (rekey.mjs) can serialize its
+// epoch-rotation appends against list writes through the same chain — otherwise
+// a concurrent addItem could land between the epoch flip and the re-encrypted
+// snapshot and be tagged with a mismatched epoch.
+export function enqueueWrite (fn) {
     // ensures writes run one-at-a-time even if RPC calls arrive concurrently
     _writeChain = _writeChain.then(fn, fn)
     return _writeChain
@@ -59,7 +64,7 @@ export async function addItem (text, listId) {
         // Get length before append to verify it increases
         // const lengthBefore = autobase.local.length
 
-        await autobase.append(op)
+        await autobase.append(prepareListAppendOperation(op))
 
         // Flush to disk and verify persistence
         // const persisted = await persistAndVerify(lengthBefore + 1, 'ADD')
@@ -105,7 +110,7 @@ export async function updateItem (item) {
         }
         const lengthBefore = autobase.local.length
 
-        await autobase.append(op)
+        await autobase.append(prepareListAppendOperation(op))
 
         // const persisted = await persistAndVerify(lengthBefore + 1, 'UPDATE')
         // if (!persisted) {
@@ -150,7 +155,7 @@ export async function deleteItem (item) {
         }
         const lengthBefore = autobase.local.length
 
-        await autobase.append(op)
+        await autobase.append(prepareListAppendOperation(op))
 
         // const persisted = await persistAndVerify(lengthBefore + 1, 'DELETE')
         // if (!persisted) {
@@ -181,6 +186,12 @@ export function syncListToFrontend (currentList) {
     } catch (e) {
         logger.log('[ERROR] Failed to sync list to frontend:', e)
     }
+}
+
+export function prepareListAppendOperation(op) {
+    const currentEpoch = Number(membershipState?.currentEpoch) || 0
+    if (!epochKey || currentEpoch <= 0) return op
+    return createEncryptedListOperation(op, epochKey, currentEpoch) || op
 }
 
 // Persist and verify that an operation was written to disk
@@ -230,6 +241,18 @@ export async function rebuildListFromPersistedOps() {
             const entry = await view.get(i)
             if (!entry) continue
 
+            // Membership records share the view but are not list items; the
+            // membership rebuild consumes them instead (readPersistedMembershipRecords).
+            if (entry.op === 'membership') continue
+
+            if (entry.op === 'list' && Array.isArray(entry.items)) {
+                itemMap.clear()
+                for (const item of entry.items) {
+                    if (validateItem(item)) itemMap.set(item.text, item)
+                }
+                continue
+            }
+
             if (entry.op === 'delete') {
                 itemMap.delete(entry.text)
             } else if (entry.op === 'add' || entry.op === 'update') {
@@ -246,4 +269,32 @@ export async function rebuildListFromPersistedOps() {
 
     const rebuiltList = Array.from(itemMap.values())
     return rebuiltList
+}
+
+// Read the owner-signed membership records that apply() persisted into the view,
+// in linearized order. Callers fold these back through reduceMembershipLog to
+// restore membership state after a restart (the in-memory state is not durable).
+export async function readPersistedMembershipRecords() {
+    await autobase.update()
+    if (!autobase || !autobase.view) {
+        logger.log('[WARNING] readPersistedMembershipRecords: autobase or view not available')
+        return []
+    }
+
+    const view = autobase.view
+    const length = view.length
+    const records = []
+
+    for (let i = 0; i < length; i++) {
+        try {
+            const entry = await view.get(i)
+            if (entry && entry.op === 'membership' && entry.record) {
+                records.push(entry.record)
+            }
+        } catch (e) {
+            logger.log(`[ERROR] readPersistedMembershipRecords: error reading entry ${i}:`, e.message)
+        }
+    }
+
+    return records
 }

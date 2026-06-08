@@ -15,10 +15,17 @@ export let baseKey = null
 export let currentTopic = null
 export let encryptionKey = null       // Buffer — Autobase encryption key
 export let ownerAuthorityKeyPair = null
+export let epochKey = null            // Buffer — app-level current list epoch key
+export let epochEncryptionKeyPair = null
 export let membershipState = {
     ownerAuthorityKey: null,
+    ownerWriterKey: null,
     highestSequence: 0,
+    currentEpoch: 0,
+    currentEpochKeyHash: null,
     writers: new Set(),
+    writerEpochPublicKeys: new Map(),
+    removedWriters: new Map(),
 }
 
 // Blind pairing
@@ -59,6 +66,8 @@ export function setBaseKey(val) { baseKey = val }
 export function setCurrentTopic(val) { currentTopic = val }
 export function setEncryptionKey(val) { encryptionKey = val }
 export function setOwnerAuthorityKeyPair(val) { ownerAuthorityKeyPair = val }
+export function setEpochKey(val) { epochKey = val }
+export function setEpochEncryptionKeyPair(val) { epochEncryptionKeyPair = val }
 export function setMembershipState(val) { membershipState = val }
 export function setPairing(val) { pairing = val }
 export function setPairingMember(val) { pairingMember = val }

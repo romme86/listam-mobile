@@ -11,11 +11,23 @@ import {
 import * as Linking from 'expo-linking'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { useWorklet, RPC_UPDATE, RPC_DELETE, RPC_ADD, RPC_JOIN_KEY, type NotifyType } from './hooks/_useWorklet'
+import {
+    useWorklet,
+    RPC_UPDATE,
+    RPC_DELETE,
+    RPC_ADD,
+    RPC_JOIN_KEY,
+    RPC_REMOVE_MEMBER,
+    RPC_GET_MEMBERS,
+    RPC_GET_OWNER_RECOVERY_CODE,
+    RPC_RECOVER_OWNER,
+    type NotifyType,
+} from './hooks/_useWorklet'
 import { useSubscription } from './hooks/useSubscription'
 import { useReduceMotion } from './hooks/useReduceMotion'
 import { Header } from './components/Header'
 import { JoinDialog } from './components/JoinDialog'
+import { MembersDialog } from './components/MembersDialog'
 import { JoiningOverlay, P2P_MESSAGES } from './components/JoiningOverlay'
 import { Paywall } from './components/Paywall'
 import { LoyaltyCardScanner } from './components/LoyaltyCardScanner'
@@ -76,6 +88,9 @@ function AppInner() {
         setIsJoining,
         isJoiningRef,
         joinPhase,
+        membershipRoster,
+        ownerRecoveryCode,
+        clearOwnerRecoveryCode,
         sendRPC,
     } = useWorklet(notify)
 
@@ -83,6 +98,8 @@ function AppInner() {
 
     const [joinDialogVisible, setJoinDialogVisible] = useState(false)
     const [joinKeyInput, setJoinKeyInput] = useState('')
+    const [membersDialogVisible, setMembersDialogVisible] = useState(false)
+    const [recoverCodeInput, setRecoverCodeInput] = useState('')
     const [currentP2PMessage, setCurrentP2PMessage] = useState(0)
     const [isGridView, setIsGridView] = useState(false)
     const [categoriesEnabled, setCategoriesEnabled] = useState(true)
@@ -401,6 +418,35 @@ function AppInner() {
         setJoinDialogVisible(true)
     }, [])
 
+    const handleManageMembers = useCallback(() => {
+        setMembersDialogVisible(true)
+        sendRPC(RPC_GET_MEMBERS)
+    }, [sendRPC])
+
+    const handleRemoveMember = useCallback((writerKey: string) => {
+        sendRPC(RPC_REMOVE_MEMBER, JSON.stringify({ writerKey }))
+    }, [sendRPC])
+
+    const handleRevealRecoveryCode = useCallback(() => {
+        sendRPC(RPC_GET_OWNER_RECOVERY_CODE)
+    }, [sendRPC])
+
+    const handleRecoverOwnership = useCallback(() => {
+        const code = recoverCodeInput.trim()
+        if (!code) {
+            snackbar.show('Enter your recovery code', 'error')
+            return
+        }
+        sendRPC(RPC_RECOVER_OWNER, JSON.stringify({ code }))
+        setRecoverCodeInput('')
+    }, [recoverCodeInput, sendRPC, snackbar])
+
+    const handleCloseMembers = useCallback(() => {
+        setMembersDialogVisible(false)
+        setRecoverCodeInput('')
+        clearOwnerRecoveryCode()
+    }, [clearOwnerRecoveryCode])
+
     const handleJoinSubmit = useCallback(() => {
         if (!joinKeyInput.trim()) {
             snackbar.show('Enter an invite key', 'error')
@@ -470,6 +516,7 @@ function AppInner() {
                 isWorkletReady={isWorkletReady}
                 onShare={handleShare}
                 onJoin={handleJoin}
+                onManageMembers={handleManageMembers}
                 trialDaysRemaining={subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
                 menuVisible={menuVisible}
                 onMenuToggle={() => setMenuVisible(v => !v)}
@@ -506,6 +553,18 @@ function AppInner() {
                 setJoinKeyInput={setJoinKeyInput}
                 onSubmit={handleJoinSubmit}
                 onCancel={handleJoinCancel}
+            />
+            <MembersDialog
+                visible={membersDialogVisible}
+                roster={membershipRoster}
+                recoveryCode={ownerRecoveryCode}
+                recoverCodeInput={recoverCodeInput}
+                setRecoverCodeInput={setRecoverCodeInput}
+                onRemoveMember={handleRemoveMember}
+                onRevealRecoveryCode={handleRevealRecoveryCode}
+                onDismissRecoveryCode={clearOwnerRecoveryCode}
+                onRecoverOwnership={handleRecoverOwnership}
+                onClose={handleCloseMembers}
             />
             <JoiningOverlay
                 visible={isJoining}
