@@ -81,7 +81,7 @@ function makeHarness({ state, owner, epochKey, writable = true, appendBehavior =
         epochKey,
         membershipState: state,
         ownerAuthorityKeyPair: owner,
-        currentList,
+        getCurrentList: () => currentList,
         prepareListAppendOperation(op) {
             calls.snapshots.push(op)
             return { snapshotOp: op }
