@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { AnimatedIconButton } from './AnimatedIconButton'
 import { useTheme, cardColor, type Theme } from '../theme'
 import { useReduceMotion } from '../hooks/useReduceMotion'
-import type { LoyaltyCard } from './LoyaltyCardScanner'
+import type { LoyaltyCardHandle } from '../store/loyaltyCardsSlice'
 import type { ItemIconVariant } from './itemIconMap'
 import type { SizeOption } from './_types'
 
@@ -48,9 +48,9 @@ type HeaderProps = {
     onListTextSizeChange: (size: SizeOption) => void
     itemIconVariant: ItemIconVariant
     onItemIconVariantChange: (variant: ItemIconVariant) => void
-    loyaltyCards: LoyaltyCard[]
+    loyaltyCards: LoyaltyCardHandle[]
     onScanCard: () => void
-    onSelectCard: (card: LoyaltyCard) => void
+    onSelectCard: (card: LoyaltyCardHandle) => void
 }
 
 export function Header(props: HeaderProps) {

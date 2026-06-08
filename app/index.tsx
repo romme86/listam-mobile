@@ -8,6 +8,7 @@ import {
     Platform,
     UIManager,
 } from 'react-native'
+import { Provider } from 'react-redux'
 import * as Linking from 'expo-linking'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -23,6 +24,21 @@ import {
     RPC_RECOVER_OWNER,
     type NotifyType,
 } from './hooks/_useWorklet'
+import { store } from './store/store'
+import { useAppDispatch, useAppSelector } from './store/hooks'
+import { listsActions } from './store/listsSlice'
+import {
+    preferencesActions,
+    selectPreferences,
+    isSizeOption,
+    isItemIconVariant,
+} from './store/preferencesSlice'
+import {
+    loyaltyCardsActions,
+    selectLoyaltyCardHandles,
+    toLoyaltyCardHandle,
+    type LoyaltyCardHandle,
+} from './store/loyaltyCardsSlice'
 import { useSubscription } from './hooks/useSubscription'
 import { useReduceMotion } from './hooks/useReduceMotion'
 import { Header } from './components/Header'
@@ -62,16 +78,57 @@ const PREF_GRID_ICON_SIZE = '@lista_grid_icon_size'
 const PREF_LIST_TEXT_SIZE = '@lista_list_text_size'
 const PREF_CATEGORY_HEADERS = '@lista_category_headers'
 const PREF_ITEM_ICON_VARIANT = '@lista_item_icon_variant'
+const PREF_LOCALE_CHOICE = '@lista_locale_choice'
 
-const SIZE_VALUES: SizeOption[] = ['small', 'medium', 'normal', 'large']
-const isSizeOption = (value: string | null): value is SizeOption =>
-    value !== null && (SIZE_VALUES as string[]).includes(value)
+function parseStoredLoyaltyCards(raw: string | null): LoyaltyCard[] {
+    if (!raw) return []
+    try {
+        const parsed = JSON.parse(raw)
+        if (!Array.isArray(parsed)) return []
+        return parsed
+            .filter((card): card is LoyaltyCard => (
+                card &&
+                typeof card.id === 'string' &&
+                typeof card.name === 'string' &&
+                typeof card.data === 'string'
+            ))
+            .map((card) => ({
+                id: card.id,
+                name: card.name,
+                data: card.data,
+                type: typeof card.type === 'string' ? card.type : 'unknown',
+            }))
+    } catch {
+        return []
+    }
+}
+
+function indexLoyaltyCardPayloads(cards: LoyaltyCard[]): Record<string, LoyaltyCard> {
+    return cards.reduce<Record<string, LoyaltyCard>>((acc, card) => {
+        acc[card.id] = card
+        return acc
+    }, {})
+}
+
+function serializeLoyaltyCardPayloads(cardsById: Record<string, LoyaltyCard>): string {
+    return JSON.stringify(Object.values(cardsById))
+}
 
 function AppInner() {
     const t = useTheme()
     const insets = useSafeAreaInsets()
     const snackbar = useSnackbar()
     const reduceMotion = useReduceMotion()
+    const dispatch = useAppDispatch()
+    const {
+        isGridView,
+        categoriesEnabled,
+        categoryHeadersVisible,
+        gridIconSize,
+        listTextSize,
+        itemIconVariant,
+    } = useAppSelector(selectPreferences)
+    const loyaltyCards = useAppSelector(selectLoyaltyCardHandles)
 
     const notify = useCallback(
         (message: string, type: NotifyType = 'info') => snackbar.show(message, type),
@@ -80,7 +137,6 @@ function AppInner() {
 
     const {
         dataList,
-        setDataList,
         autobaseInviteKey,
         peerCount,
         isWorkletReady,
@@ -101,19 +157,13 @@ function AppInner() {
     const [membersDialogVisible, setMembersDialogVisible] = useState(false)
     const [recoverCodeInput, setRecoverCodeInput] = useState('')
     const [currentP2PMessage, setCurrentP2PMessage] = useState(0)
-    const [isGridView, setIsGridView] = useState(false)
-    const [categoriesEnabled, setCategoriesEnabled] = useState(true)
-    const [categoryHeadersVisible, setCategoryHeadersVisible] = useState(true)
-    const [gridIconSize, setGridIconSize] = useState<SizeOption>('normal')
-    const [listTextSize, setListTextSize] = useState<SizeOption>('normal')
-    const [itemIconVariant, setItemIconVariant] = useState<ItemIconVariant>('illustrated')
     const [menuVisible, setMenuVisible] = useState(false)
-    const [loyaltyCards, setLoyaltyCards] = useState<LoyaltyCard[]>([])
     const [scannerVisible, setScannerVisible] = useState(false)
     const [selectedCard, setSelectedCard] = useState<LoyaltyCard | null>(null)
     const [isAdding, setIsAdding] = useState(false)
     const [addText, setAddText] = useState('')
 
+    const loyaltyCardPayloadsRef = useRef<Record<string, LoyaltyCard>>({})
     const pendingConfirmedInviteRef = useRef('')
     const pendingJoinConfirmationInviteRef = useRef('')
     const initialDeepLinkHandledRef = useRef(false)
@@ -204,76 +254,91 @@ function AppInner() {
             PREF_LIST_TEXT_SIZE,
             PREF_CATEGORY_HEADERS,
             PREF_ITEM_ICON_VARIANT,
-        ]).then(([[, grid], [, cats], [, cards], [, gridSize], [, textSize], [, categoryHeaders], [, iconVariant]]) => {
-            if (grid !== null) setIsGridView(grid === 'true')
-            if (cats !== null) setCategoriesEnabled(cats === 'true')
-            if (isSizeOption(gridSize)) setGridIconSize(gridSize)
-            if (isSizeOption(textSize)) setListTextSize(textSize)
-            if (categoryHeaders !== null) setCategoryHeadersVisible(categoryHeaders === 'true')
-            if (iconVariant === 'illustrated' || iconVariant === 'minimal') setItemIconVariant(iconVariant)
-            if (cards !== null) {
-                try { setLoyaltyCards(JSON.parse(cards)) } catch {}
-            }
+            PREF_LOCALE_CHOICE,
+        ]).then(([[, grid], [, cats], [, cards], [, gridSize], [, textSize], [, categoryHeaders], [, iconVariant], [, localeChoice]]) => {
+            dispatch(preferencesActions.preferencesHydrated({
+                ...(grid !== null ? { isGridView: grid === 'true' } : {}),
+                ...(cats !== null ? { categoriesEnabled: cats === 'true' } : {}),
+                ...(isSizeOption(gridSize) ? { gridIconSize: gridSize } : {}),
+                ...(isSizeOption(textSize) ? { listTextSize: textSize } : {}),
+                ...(categoryHeaders !== null ? { categoryHeadersVisible: categoryHeaders === 'true' } : {}),
+                ...(isItemIconVariant(iconVariant) ? { itemIconVariant: iconVariant } : {}),
+                ...(localeChoice !== null && localeChoice.trim() ? { localeChoice } : {}),
+            }))
+
+            const storedCards = parseStoredLoyaltyCards(cards)
+            loyaltyCardPayloadsRef.current = indexLoyaltyCardPayloads(storedCards)
+            dispatch(loyaltyCardsActions.loyaltyCardsHydrated(storedCards.map(toLoyaltyCardHandle)))
         })
-    }, [])
+    }, [dispatch])
 
     const handleToggleView = useCallback(() => {
-        setIsGridView((prev) => {
-            AsyncStorage.setItem(PREF_GRID_VIEW, String(!prev))
-            return !prev
-        })
-    }, [])
+        const next = !isGridView
+        dispatch(preferencesActions.gridViewSet(next))
+        AsyncStorage.setItem(PREF_GRID_VIEW, String(next))
+    }, [dispatch, isGridView])
 
     const handleToggleCategories = useCallback(() => {
-        setCategoriesEnabled((prev) => {
-            AsyncStorage.setItem(PREF_CATEGORIES, String(!prev))
-            return !prev
-        })
-    }, [])
+        const next = !categoriesEnabled
+        dispatch(preferencesActions.categoriesEnabledSet(next))
+        AsyncStorage.setItem(PREF_CATEGORIES, String(next))
+    }, [categoriesEnabled, dispatch])
 
     const handleGridIconSizeChange = useCallback((size: SizeOption) => {
-        setGridIconSize(size)
+        dispatch(preferencesActions.gridIconSizeSet(size))
         AsyncStorage.setItem(PREF_GRID_ICON_SIZE, size)
-    }, [])
+    }, [dispatch])
 
     const handleListTextSizeChange = useCallback((size: SizeOption) => {
-        setListTextSize(size)
+        dispatch(preferencesActions.listTextSizeSet(size))
         AsyncStorage.setItem(PREF_LIST_TEXT_SIZE, size)
-    }, [])
+    }, [dispatch])
 
     const handleItemIconVariantChange = useCallback((variant: ItemIconVariant) => {
-        setItemIconVariant(variant)
+        dispatch(preferencesActions.itemIconVariantSet(variant))
         AsyncStorage.setItem(PREF_ITEM_ICON_VARIANT, variant)
-    }, [])
+    }, [dispatch])
 
     const handleToggleCategoryHeaders = useCallback(() => {
-        setCategoryHeadersVisible((prev) => {
-            AsyncStorage.setItem(PREF_CATEGORY_HEADERS, String(!prev))
-            return !prev
-        })
-    }, [])
+        const next = !categoryHeadersVisible
+        dispatch(preferencesActions.categoryHeadersVisibleSet(next))
+        AsyncStorage.setItem(PREF_CATEGORY_HEADERS, String(next))
+    }, [categoryHeadersVisible, dispatch])
 
     const handleCardScanned = useCallback((card: LoyaltyCard) => {
-        setLoyaltyCards((prev) => {
-            const next = [...prev, card]
-            AsyncStorage.setItem(PREF_LOYALTY_CARDS, JSON.stringify(next))
-            return next
-        })
+        const nextPayloads = { ...loyaltyCardPayloadsRef.current, [card.id]: card }
+        loyaltyCardPayloadsRef.current = nextPayloads
+        dispatch(loyaltyCardsActions.loyaltyCardAdded(toLoyaltyCardHandle(card)))
+        AsyncStorage.setItem(PREF_LOYALTY_CARDS, serializeLoyaltyCardPayloads(nextPayloads))
         setScannerVisible(false)
         snackbar.show(`Saved ${card.name} card`, 'success')
-    }, [snackbar])
+    }, [dispatch, snackbar])
 
     const handleDeleteCard = useCallback((id: string) => {
-        setLoyaltyCards((prev) => {
-            const next = prev.filter((c) => c.id !== id)
-            AsyncStorage.setItem(PREF_LOYALTY_CARDS, JSON.stringify(next))
-            return next
-        })
-    }, [])
+        const nextPayloads = { ...loyaltyCardPayloadsRef.current }
+        delete nextPayloads[id]
+        loyaltyCardPayloadsRef.current = nextPayloads
+        dispatch(loyaltyCardsActions.loyaltyCardRemoved(id))
+        AsyncStorage.setItem(PREF_LOYALTY_CARDS, serializeLoyaltyCardPayloads(nextPayloads))
+    }, [dispatch])
 
-    const handleSelectCard = useCallback((card: LoyaltyCard) => {
-        setSelectedCard(card)
-    }, [])
+    const handleSelectCard = useCallback((card: LoyaltyCardHandle) => {
+        const payload = loyaltyCardPayloadsRef.current[card.payloadRef] ?? loyaltyCardPayloadsRef.current[card.id]
+        if (payload) {
+            setSelectedCard(payload)
+            return
+        }
+
+        AsyncStorage.getItem(PREF_LOYALTY_CARDS)
+            .then((raw) => {
+                const storedCards = parseStoredLoyaltyCards(raw)
+                loyaltyCardPayloadsRef.current = indexLoyaltyCardPayloads(storedCards)
+                const reloaded = loyaltyCardPayloadsRef.current[card.payloadRef] ?? loyaltyCardPayloadsRef.current[card.id]
+                if (reloaded) setSelectedCard(reloaded)
+                else snackbar.show('Could not load that loyalty card', 'error')
+            })
+            .catch(() => snackbar.show('Could not load that loyalty card', 'error'))
+    }, [snackbar])
 
     useEffect(() => {
         const handleIncomingUrl = (url: string | null) => {
@@ -322,35 +387,35 @@ function AppInner() {
 
     const handleToggleDone = useCallback((index: number) => {
         animate()
-        setDataList((prevList) => {
-            const newList = [...prevList]
-            const current = newList[index]
-            if (!current) return prevList
+        const newList = [...dataList]
+        const current = newList[index]
+        if (!current) return
 
-            const updatedItem: ListEntry = {
-                ...current,
-                isDone: !current.isDone,
-                timeOfCompletion: !current.isDone ? Date.now() : 0,
-            }
+        const updatedItem: ListEntry = {
+            ...current,
+            isDone: !current.isDone,
+            timeOfCompletion: !current.isDone ? Date.now() : 0,
+            updatedAt: Date.now(),
+        }
 
-            newList.splice(index, 1)
-            if (updatedItem.isDone) {
-                newList.push(updatedItem)
-            } else {
-                newList.unshift(updatedItem)
-            }
+        newList.splice(index, 1)
+        if (updatedItem.isDone) {
+            newList.push(updatedItem)
+        } else {
+            newList.unshift(updatedItem)
+        }
 
-            sendRPC(RPC_UPDATE, JSON.stringify({ item: updatedItem }))
-            return newList
-        })
-    }, [animate, sendRPC, setDataList])
+        dispatch(listsActions.selectedListItemsReplaced(newList))
+        sendRPC(RPC_UPDATE, JSON.stringify({ item: updatedItem }))
+    }, [animate, dataList, dispatch, sendRPC])
 
     const handleDelete = useCallback((index: number) => {
         const deletedItem = dataList[index]
+        if (!deletedItem) return
         animate()
-        setDataList((prevList) => prevList.filter((_, i) => i !== index))
+        dispatch(listsActions.listItemDeleted(deletedItem))
         sendRPC(RPC_DELETE, JSON.stringify({ item: deletedItem }))
-    }, [animate, dataList, sendRPC, setDataList])
+    }, [animate, dataList, dispatch, sendRPC])
 
     const handleInsert = useCallback((_index: number, text: string) => {
         sendRPC(RPC_ADD, JSON.stringify(text))
@@ -366,19 +431,22 @@ function AppInner() {
             return
         }
         animate()
-        setDataList((prev) => prev.map((item, i) => (i === index ? { ...item, text: trimmed } : item)))
-        sendRPC(RPC_DELETE, JSON.stringify({ item: old }))
-        sendRPC(RPC_ADD, JSON.stringify(trimmed))
-    }, [animate, dataList, sendRPC, setDataList, snackbar])
+        // Rename is an in-place update, not delete+add: it preserves the item's
+        // stable id (so duplicate-name convergence holds), its done state, and its
+        // position. The id rides along in `...old` even for backfilled legacy items.
+        const updatedItem = { ...old, text: trimmed, updatedAt: Date.now() }
+        dispatch(listsActions.listItemUpdated(updatedItem))
+        sendRPC(RPC_UPDATE, JSON.stringify({ item: updatedItem }))
+    }, [animate, dataList, dispatch, sendRPC, snackbar])
 
     const handleClearCompleted = useCallback(() => {
         const done = dataList.filter((item) => item.isDone)
         if (done.length === 0) return
         animate()
-        setDataList((prev) => prev.filter((item) => !item.isDone))
+        dispatch(listsActions.selectedListItemsReplaced(dataList.filter((item) => !item.isDone)))
         done.forEach((item) => sendRPC(RPC_DELETE, JSON.stringify({ item })))
         haptics.success()
-    }, [animate, dataList, sendRPC, setDataList])
+    }, [animate, dataList, dispatch, sendRPC])
 
     const handleRequestAdd = useCallback(() => {
         setAddText('')
@@ -482,13 +550,13 @@ function AppInner() {
                         dataList.forEach((item) => {
                             sendRPC(RPC_DELETE, JSON.stringify({ item }))
                         })
-                        setDataList([])
+                        dispatch(listsActions.selectedListItemsReplaced([]))
                         haptics.delete()
                     },
                 },
             ]
         )
-    }, [animate, dataList, sendRPC, setDataList])
+    }, [animate, dataList, dispatch, sendRPC])
 
     const remaining = dataList.reduce((acc, item) => acc + (item.isDone ? 0 : 1), 0)
     const doneCount = dataList.length - remaining
@@ -626,11 +694,13 @@ function AppInner() {
 
 export default function App() {
     return (
-        <SafeAreaProvider>
-            <SnackbarProvider>
-                <AppInner />
-            </SnackbarProvider>
-        </SafeAreaProvider>
+        <Provider store={store}>
+            <SafeAreaProvider>
+                <SnackbarProvider>
+                    <AppInner />
+                </SnackbarProvider>
+            </SafeAreaProvider>
+        </Provider>
     )
 }
 
