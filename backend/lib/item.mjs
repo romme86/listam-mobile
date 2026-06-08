@@ -6,6 +6,13 @@ import {autobase, store, rpc, currentList, epochKey, membershipState} from './st
 import {SYNC_LIST} from "../../rpc-commands.mjs";
 import { logger } from "./logger.mjs"
 import { createEncryptedListOperation } from './key-epochs.mjs'
+import {
+    DEFAULT_LIST_ID,
+    DEFAULT_LIST_TYPE,
+    createListOperation,
+    normalizeListItem,
+    reduceListViewEntries,
+} from './list-reducer.mjs'
 
 // --- WRITE SERIALIZATION (prevents concurrent autobase.append / flush races) ---
 let _writeChain = Promise.resolve()
@@ -20,7 +27,7 @@ export function enqueueWrite (fn) {
     return _writeChain
 }
 
-export async function addItem (text, listId) {
+export async function addItem (text, listId = DEFAULT_LIST_ID, listType = DEFAULT_LIST_TYPE) {
     if (!autobase) {
         logger.log('[WARNING] addItem called before Autobase is initialized')
         return false
@@ -40,20 +47,20 @@ export async function addItem (text, listId) {
 
     logger.log('[INFO] Command RPC_ADD addItem')
 
+    const now = Date.now()
     const item = {
         id: generateId(),                    // extra metadata, frontend can ignore
         text,
         isDone: false,
-        listId: listId || null,
+        listId: listId || DEFAULT_LIST_ID,
+        listType: listType || DEFAULT_LIST_TYPE,
         timeOfCompletion: 0,
-        updatedAt: Date.now(),
-        timestamp: Date.now(),
+        updatedAt: now,
+        timestamp: now,
     }
 
-    const op = {
-        type: 'add',
-        value: item
-    }
+    const op = createListOperation('add', item, { listId, listType })
+    if (!op) return false
 
     return enqueueWrite(async () => {
         if (!autobase) return false
@@ -97,10 +104,11 @@ export async function updateItem (item) {
 
     logger.log('[INFO] Command RPC_UPDATE updateItem')
 
-    const op = {
-        type: 'update',
-        value: item
-    }
+    const op = createListOperation('update', {
+        ...item,
+        updatedAt: typeof item?.updatedAt === 'number' ? item.updatedAt : Date.now(),
+    })
+    if (!op) return false
 
     return enqueueWrite(async () => {
         if (!autobase) return false
@@ -142,10 +150,8 @@ export async function deleteItem (item) {
 
     logger.log('[INFO] Command RPC_DELETE deleteItem')
 
-    const op = {
-        type: 'delete',
-        value: item
-    }
+    const op = createListOperation('delete', item)
+    if (!op) return false
 
     return enqueueWrite(async () => {
         if (!autobase) return false
@@ -169,20 +175,16 @@ export async function deleteItem (item) {
 
 // Simple inline schema validation matching the mobile ListEntry
 export function validateItem (item) {
-    if (typeof item !== 'object' || item === null) return false
-    if (typeof item.text !== 'string') return false
-    if (typeof item.isDone !== 'boolean') return false
-    if (typeof item.timeOfCompletion !== 'number') return false
-    return true
+    return normalizeListItem(item) !== null
 }
 
 // Send current list to frontend
-export function syncListToFrontend (currentList) {
-    if (!rpc || !currentList) return
+export function syncListToFrontend (list = currentList) {
+    if (!rpc || !Array.isArray(list)) return
     try {
         const req = rpc.request(SYNC_LIST)
-        req.send(JSON.stringify(currentList))
-        logger.log('[INFO] Synced list to frontend:', currentList.length, 'items')
+        req.send(JSON.stringify(list))
+        logger.log('[INFO] Synced list to frontend:', list.length, 'items')
     } catch (e) {
         logger.log('[ERROR] Failed to sync list to frontend:', e)
     }
@@ -234,7 +236,7 @@ export async function rebuildListFromPersistedOps() {
 
     const view = autobase.view
     const length = view.length
-    const itemMap = new Map()
+    const entries = []
 
     for (let i = 0; i < length; i++) {
         try {
@@ -245,30 +247,13 @@ export async function rebuildListFromPersistedOps() {
             // membership rebuild consumes them instead (readPersistedMembershipRecords).
             if (entry.op === 'membership') continue
 
-            if (entry.op === 'list' && Array.isArray(entry.items)) {
-                itemMap.clear()
-                for (const item of entry.items) {
-                    if (validateItem(item)) itemMap.set(item.text, item)
-                }
-                continue
-            }
-
-            if (entry.op === 'delete') {
-                itemMap.delete(entry.text)
-            } else if (entry.op === 'add' || entry.op === 'update') {
-                const { op, ...item } = entry
-                itemMap.set(item.text, item)
-            } else if (entry.text !== undefined && validateItem(entry)) {
-                // Backward compat: old view entries without op field
-                itemMap.set(entry.text, entry)
-            }
+            entries.push(entry)
         } catch (e) {
             logger.log(`[ERROR] rebuildListFromPersistedOps: error reading entry ${i}:`, e.message)
         }
     }
 
-    const rebuiltList = Array.from(itemMap.values())
-    return rebuiltList
+    return reduceListViewEntries(entries).items
 }
 
 // Read the owner-signed membership records that apply() persisted into the view,

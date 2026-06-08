@@ -13,6 +13,7 @@ import { groupByCategory } from './categoryGrouping'
 import { CATEGORY_ICONS } from './categoryConstants'
 import { EmptyState } from './EmptyState'
 import { useTheme, type Theme } from '../theme'
+import { identityKey } from '../listProjection'
 
 const TOTAL_ITEM_HEIGHT = ITEM_HEIGHT + SPACING
 
@@ -63,7 +64,7 @@ export default function InertialElasticList({
                 entry,
                 originalIndex: i,
                 visualIndex: i,
-                key: `item-${i}-${entry.text}-${entry.timeOfCompletion}`,
+                key: `item-${identityKey(entry)}`,
             }))
         }
 
@@ -88,7 +89,7 @@ export default function InertialElasticList({
                     entry: indexed.entry,
                     originalIndex: indexed.originalIndex,
                     visualIndex,
-                    key: `item-${indexed.originalIndex}-${indexed.entry.text}-${indexed.entry.timeOfCompletion}`,
+                    key: `item-${identityKey(indexed.entry)}`,
                 })
                 visualIndex++
             }

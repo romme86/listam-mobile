@@ -15,6 +15,7 @@ import { GridCard } from './GridCard'
 import { EmptyState } from './EmptyState'
 import type { ItemIconVariant } from './itemIconMap'
 import { useTheme, type Theme } from '../theme'
+import { identityKey } from '../listProjection'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const CARD_MARGIN = 6
@@ -69,7 +70,7 @@ export function VisualGridList({
 
     const renderCard = (indexed: IndexedEntry, cardKey: number) => (
         <GridCard
-            key={`${indexed.entry.text}-${indexed.entry.timeOfCompletion}-${cardKey}`}
+            key={identityKey(indexed.entry)}
             item={indexed.entry}
             originalIndex={indexed.originalIndex}
             cardKey={cardKey}

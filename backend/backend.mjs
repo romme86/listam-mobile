@@ -21,6 +21,11 @@ import {
 } from '../rpc-commands.mjs'
 import b4a from 'b4a'
 import {syncListToFrontend, validateItem, addItem, updateItem, deleteItem} from './lib/item.mjs'
+import {
+    applyOperationToList,
+    createListViewEntry,
+    normalizeListOperation,
+} from './lib/list-reducer.mjs'
 const { IPC } = BareKit
 import {loadAutobaseKey, saveAutobaseKey, loadEncryptionKey, saveEncryptionKey, loadOwnerAuthorityKey, saveOwnerAuthorityKey, deleteLegacyKeyFile, deleteLegacyInviteFile, loadEpochKey, saveEpochKey, deleteEpochKey, loadEpochEncryptionKey, saveEpochEncryptionKey} from "./lib/key.mjs"
 import {initAutobase, joinViaInvite, createInvite, removeMemberAndRotateEpoch, broadcastMembershipRoster, sendOwnerRecoveryCodeToFrontend, recoverOwnerAuthority} from "./lib/network.mjs"
@@ -159,8 +164,12 @@ let rpcGenerated = new RPC(IPC, async (req, error) => {
     try {
         switch (req.command) {
             case RPC_ADD: {
-                const text = JSON.parse(b4a.toString(req.data))
-                await addItem(text)
+                const payload = JSON.parse(b4a.toString(req.data))
+                if (typeof payload === 'string') {
+                    await addItem(payload)
+                } else {
+                    await addItem(payload?.text, payload?.listId, payload?.listType)
+                }
                 break
             }
             case RPC_UPDATE: {
@@ -414,16 +423,19 @@ export async function apply (nodes, view, host) {
             continue
         }
 
-        const operation = unwrapListOperation(value)
-        if (!operation) continue
+        const unwrappedOperation = unwrapListOperation(value)
+        if (!unwrappedOperation) continue
 
         // Legacy add-writer records are intentionally no longer authoritative.
         // Phase 3 only supports revoking unused invites; true member removal
         // requires the Phase 4 re-key flow.
-        if (operation.type === 'add-writer' && typeof operation.key === 'string') {
+        if (unwrappedOperation.type === 'add-writer' && typeof unwrappedOperation.key === 'string') {
             logger.log('[WARNING] Rejected legacy add-writer op; owner-signed membership is required')
             continue
         }
+
+        const operation = normalizeListOperation(unwrappedOperation)
+        if (!operation) continue
 
         if (operation.type === 'add') {
             if (!validateItem(operation.value)) {
@@ -431,8 +443,8 @@ export async function apply (nodes, view, host) {
                 continue
             }
             logger.log('[INFO] Applying add operation for item:', operation.value)
-            await view.append({ op: 'add', ...operation.value })
-            setCurrentList([operation.value, ...currentList.filter(i => i.text !== operation.value.text)])
+            await view.append(createListViewEntry(operation))
+            setCurrentList(applyOperationToList(currentList, operation))
             const addReq = rpc.request(RPC_ADD_FROM_BACKEND)
             addReq.send(JSON.stringify(operation.value))
             continue
@@ -444,8 +456,8 @@ export async function apply (nodes, view, host) {
                 continue
             }
             logger.log('[INFO] Applying delete operation for item:', operation.value)
-            await view.append({ op: 'delete', text: operation.value.text })
-            setCurrentList(currentList.filter(i => i.text !== operation.value.text))
+            await view.append(createListViewEntry(operation))
+            setCurrentList(applyOperationToList(currentList, operation))
             const deleteReq = rpc.request(RPC_DELETE_FROM_BACKEND)
             deleteReq.send(JSON.stringify(operation.value))
             continue
@@ -457,10 +469,8 @@ export async function apply (nodes, view, host) {
                 continue
             }
             logger.log('[INFO] Applying update operation for item:', operation.value)
-            await view.append({ op: 'update', ...operation.value })
-            setCurrentList(currentList.map(i =>
-                i.text === operation.value.text ? operation.value : i
-            ))
+            await view.append(createListViewEntry(operation))
+            setCurrentList(applyOperationToList(currentList, operation))
             const updateReq = rpc.request(RPC_UPDATE_FROM_BACKEND)
             updateReq.send(JSON.stringify(operation.value))
             continue
@@ -472,9 +482,11 @@ export async function apply (nodes, view, host) {
                 continue
             }
             logger.log('[INFO] Applying list operation for items:', operation.value)
-            await view.append({ op: 'list', items: operation.value.filter(validateItem) })
+            await view.append(createListViewEntry(operation))
+            const nextList = applyOperationToList(currentList, operation)
+            setCurrentList(nextList)
             const updateReq = rpc.request(SYNC_LIST)
-            updateReq.send(JSON.stringify(operation.value))
+            updateReq.send(JSON.stringify(nextList))
             continue
         }
 

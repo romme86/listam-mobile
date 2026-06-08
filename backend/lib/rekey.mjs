@@ -18,6 +18,7 @@ import {
     epochKeyHashHex,
     generateEpochKey as defaultGenerateEpochKey,
 } from './key-epochs.mjs'
+import { createListOperation } from './list-reducer.mjs'
 
 const HEX = /^[0-9a-f]+$/i
 const WRITER_KEY_BYTES = 32
@@ -195,10 +196,7 @@ async function appendEpochSnapshot({ autobase, prepareListAppendOperation, curre
     const totalAttempts = Math.max(1, Number(retries) + 1)
     for (let attempt = 1; attempt <= totalAttempts; attempt++) {
         try {
-            await autobase.append(prepareListAppendOperation({
-                type: 'list',
-                value: currentList,
-            }))
+            await autobase.append(prepareListAppendOperation(createListOperation('list', currentList)))
             await autobase.update()
             return true
         } catch (e) {
