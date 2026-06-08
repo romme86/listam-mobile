@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, type MutableRefObject } from 'react'
 import { Alert } from 'react-native'
 import { haptics } from '../feedback'
 import * as FileSystemExpo from 'expo-file-system'
@@ -12,6 +12,14 @@ import {
     prepareBackendSecretPayload,
     persistBackendSecretFromPayload,
 } from '../secrets'
+import { useAppDispatch, useAppSelector } from '../store/hooks'
+import { listsActions, selectSelectedListItems } from '../store/listsSlice'
+import { selectSyncState, syncActions, type JoinPhase } from '../store/syncSlice'
+import {
+    devicesActions,
+    selectMembershipRoster,
+    type MembershipRoster,
+} from '../store/devicesSlice'
 import {
     RPC_MESSAGE,
     RPC_RESET,
@@ -33,18 +41,8 @@ import {
 } from '../../rpc-commands.mjs'
 import type { ListEntry } from '@/app/components/_types'
 
-export type MembershipMember = {
-    writerKey: string
-    isOwner: boolean
-    isSelf: boolean
-}
-
-export type MembershipRoster = {
-    currentEpoch: number
-    ownerWriterKey: string | null
-    canAdminister: boolean
-    writers: MembershipMember[]
-}
+export type { MembershipMember, MembershipRoster } from '../store/devicesSlice'
+export type { JoinPhase } from '../store/syncSlice'
 
 const GLOBAL_KEY = '__LISTAM_WORKLET_SINGLETON__' as const
 
@@ -63,17 +61,14 @@ function getGlobalState(): GlobalWorkletState {
     return g[GLOBAL_KEY] as GlobalWorkletState
 }
 
-export type JoinPhase = 'pairing' | 'permission' | 'syncing' | null
-
 type UseWorkletResult = {
     dataList: ListEntry[]
-    setDataList: React.Dispatch<React.SetStateAction<ListEntry[]>>
     autobaseInviteKey: string
     peerCount: number
     isWorkletReady: boolean
     isJoining: boolean
-    setIsJoining: React.Dispatch<React.SetStateAction<boolean>>
-    isJoiningRef: React.MutableRefObject<boolean>
+    setIsJoining: (isJoining: boolean) => void
+    isJoiningRef: MutableRefObject<boolean>
     joinPhase: JoinPhase
     membershipRoster: MembershipRoster | null
     ownerRecoveryCode: string | null
@@ -85,13 +80,16 @@ export type NotifyType = 'info' | 'success' | 'error'
 export type NotifyFn = (message: string, type?: NotifyType) => void
 
 export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
-    const [dataList, setDataList] = useState<ListEntry[]>([])
-    const [isWorkletReady, setIsWorkletReady] = useState(false)
-    const [autobaseInviteKey, setAutobaseInviteKey] = useState('')
-    const [peerCount, setPeerCount] = useState(0)
-    const [isJoining, setIsJoining] = useState(false)
-    const [joinPhase, setJoinPhase] = useState<JoinPhase>(null)
-    const [membershipRoster, setMembershipRoster] = useState<MembershipRoster | null>(null)
+    const dispatch = useAppDispatch()
+    const dataList = useAppSelector(selectSelectedListItems)
+    const membershipRoster = useAppSelector(selectMembershipRoster)
+    const {
+        autobaseInviteKey,
+        peerCount,
+        isWorkletReady,
+        isJoining,
+        joinPhase,
+    } = useAppSelector(selectSyncState)
     const [ownerRecoveryCode, setOwnerRecoveryCode] = useState<string | null>(null)
     const clearOwnerRecoveryCode = useCallback(() => setOwnerRecoveryCode(null), [])
 
@@ -100,6 +98,14 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
     const isJoiningRef = useRef(false)
     const notifyRef = useRef<NotifyFn | undefined>(onNotify)
     notifyRef.current = onNotify
+
+    const setIsJoining = useCallback((nextIsJoining: boolean) => {
+        dispatch(syncActions.joiningSet(nextIsJoining))
+    }, [dispatch])
+
+    useEffect(() => {
+        isJoiningRef.current = isJoining
+    }, [isJoining])
 
     const sendRPC = useCallback((command: number, payload?: string) => {
         if (!rpcRef.current) {
@@ -140,7 +146,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         ])
 
         const { IPC } = worklet
-        rpcRef.current = new RPC(IPC, (reqFromBackend) => {
+        rpcRef.current = new RPC(IPC as any, (reqFromBackend) => {
             if (reqFromBackend.command === RPC_PERSIST_SECRET) {
                 const replySecretAck = (stored: boolean, mode?: string) => {
                     try {
@@ -180,15 +186,15 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                         const payload = JSON.parse(dataStr)
                         if (payload.type === 'peer-count') {
                             const count = typeof payload.count === 'number' ? payload.count : 0
-                            setPeerCount(count)
+                            dispatch(syncActions.peerCountSet(count))
                         } else if (payload.type === 'join-phase') {
-                            setJoinPhase(payload.phase || null)
+                            dispatch(syncActions.joinPhaseSet(payload.phase || null))
                         } else if (payload.type === 'not-writable') {
                             const msg = payload.message || 'You can’t edit yet — waiting for write access from the host.'
                             if (notifyRef.current) notifyRef.current(msg, 'info')
                             else Alert.alert('Please wait', msg)
                         } else if (payload.type === 'join-success') {
-                            setJoinPhase(null)
+                            dispatch(syncActions.joinPhaseSet(null))
                             if (isJoiningRef.current) {
                                 isJoiningRef.current = false
                                 setIsJoining(false)
@@ -197,7 +203,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                             if (notifyRef.current) notifyRef.current('Connected — your lists are now synced', 'success')
                             else Alert.alert('Success!', 'Connected to peer successfully. Your lists are now synced.')
                         } else if (payload.type === 'join-error') {
-                            setJoinPhase(null)
+                            dispatch(syncActions.joinPhaseSet(null))
                             if (isJoiningRef.current) {
                                 isJoiningRef.current = false
                                 setIsJoining(false)
@@ -207,7 +213,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                             if (notifyRef.current) notifyRef.current(msg, 'error')
                             else Alert.alert('Connection failed', msg)
                         } else if (payload.type === 'membership-roster') {
-                            setMembershipRoster(payload.roster ?? null)
+                            dispatch(devicesActions.rosterReceived(payload.roster ?? null))
                         } else if (payload.type === 'owner-recovery-code') {
                             if (payload.code) {
                                 setOwnerRecoveryCode(payload.code)
@@ -245,15 +251,16 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
             }
             if (reqFromBackend.command === RPC_RESET) {
                 console.log('RPC RESET')
-                setDataList(() => [])
-                setAutobaseInviteKey('')
+                dispatch(listsActions.selectedListCleared())
+                dispatch(syncActions.autobaseInviteKeySet(''))
+                dispatch(devicesActions.rosterReceived(null))
             }
             if (reqFromBackend.command === SYNC_LIST) {
                 console.log('SYNC_LIST')
                 if (reqFromBackend.data) {
                     console.log('data from bare', b4a.toString(reqFromBackend.data))
                     const listToSync = JSON.parse(b4a.toString(reqFromBackend.data))
-                    setDataList(listToSync)
+                    dispatch(listsActions.selectedListItemsSynced(listToSync))
                 }
             }
             if (reqFromBackend.command === RPC_DELETE_FROM_BACKEND) {
@@ -261,7 +268,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                 if (reqFromBackend.data) {
                     console.log('data from bare', b4a.toString(reqFromBackend.data))
                     const itemToDelete = JSON.parse(b4a.toString(reqFromBackend.data))
-                    setDataList((prevList) => prevList.filter((item) => item.text !== itemToDelete.text))
+                    dispatch(listsActions.listItemDeleted(itemToDelete))
                 }
             }
             if (reqFromBackend.command === RPC_UPDATE_FROM_BACKEND) {
@@ -269,11 +276,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                 if (reqFromBackend.data) {
                     console.log('data from bare', b4a.toString(reqFromBackend.data))
                     const itemToUpdate = JSON.parse(b4a.toString(reqFromBackend.data))
-                    setDataList((prevList) => {
-                        return prevList.map((item) =>
-                            item.text === itemToUpdate.text ? { ...item, isDone: itemToUpdate.isDone, timeOfCompletion: itemToUpdate.timeOfCompletion } : item
-                        )
-                    })
+                    dispatch(listsActions.listItemUpdated(itemToUpdate))
                 }
             }
             if (reqFromBackend.command === RPC_ADD_FROM_BACKEND) {
@@ -281,22 +284,22 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                 if (reqFromBackend.data) {
                     console.log('data from bare', b4a.toString(reqFromBackend.data))
                     const itemToAdd = JSON.parse(b4a.toString(reqFromBackend.data))
-                    setDataList((prevList) => [itemToAdd, ...prevList.filter((item) => item.text !== itemToAdd.text)])
+                    dispatch(listsActions.listItemAdded(itemToAdd))
                 }
             }
             if (reqFromBackend.command === RPC_GET_KEY) {
                 console.log('RPC_GET_KEY')
                 if (reqFromBackend.data != null) {
                     const data = b4a.toString(reqFromBackend.data)
-                    setAutobaseInviteKey(data)
+                    dispatch(syncActions.autobaseInviteKeySet(data))
                 } else {
                     console.log('data from bare is null, empty or undefined')
                 }
             }
         })
 
-        setIsWorkletReady(true)
-    }, [])
+        dispatch(syncActions.workletReadySet(true))
+    }, [dispatch, setIsJoining])
 
     useEffect(() => {
         const g = getGlobalState()
@@ -311,6 +314,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                 .catch(() => {
                     g.started = false
                     workletStarted = false
+                    dispatch(syncActions.workletReadySet(false))
                     if (notifyRef.current) {
                         notifyRef.current('Could not start the Listam backend.', 'error')
                     }
@@ -322,18 +326,17 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
             } else if (g.worklet)     {
                 workletRef.current = g.worklet
             }
-            setIsWorkletReady(true)
+            dispatch(syncActions.workletReadySet(true))
         }
 
         return () => {
             workletRef.current = null
             rpcRef.current = null
         }
-    }, [startWorklet])
+    }, [dispatch, startWorklet])
 
     return {
         dataList,
-        setDataList,
         autobaseInviteKey,
         peerCount,
         isWorkletReady,

@@ -2,7 +2,7 @@ import React, { useMemo } from 'react'
 import { View, Text, Modal, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native'
 import { makeDialogStyles } from './_styles'
 import { useTheme } from '../theme'
-import type { MembershipRoster } from '../hooks/_useWorklet'
+import type { MembershipRoster } from '../store/devicesSlice'
 
 type MembersDialogProps = {
     visible: boolean
