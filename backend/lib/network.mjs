@@ -56,6 +56,7 @@ import {
     setPairing,
     setPairingMember,
     setCurrentInvite,
+    setCurrentList,
     setEncryptionKey,
     setOwnerAuthorityKeyPair,
     setEpochKey,
@@ -113,6 +114,7 @@ function waitForWritable() {
         // Sync whatever items have replicated so far
         try {
             const list = await rebuildListFromPersistedOps()
+            setCurrentList(list)
             if (list.length > 0) syncListToFrontend(list)
         } catch (_) {}
 
@@ -537,6 +539,7 @@ export async function initAutobase(newBaseKey, options = {}) {
         setMembershipState(reduceMembershipLog(persistedMembership, { baseKey: autobase.key }))
         await ensureOwnerMembership({ allowOwnerMigration })
         const rebuiltList = await rebuildListFromPersistedOps()
+        setCurrentList(rebuiltList)
         syncListToFrontend(rebuiltList)
         broadcastMembershipRoster()
 

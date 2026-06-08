@@ -14,6 +14,7 @@ import {
     epochPublicKeyHex,
     generateEpochKey,
 } from './key-epochs.mjs'
+import { createListOperation } from './list-reducer.mjs'
 
 const baseKey = Buffer.from('ab'.repeat(32), 'hex')
 const ownerWriterKey = Buffer.from('11'.repeat(32), 'hex')
@@ -131,7 +132,7 @@ test('re-key removes the writer, advances the epoch, and the emitted record veri
     // Membership record first, then the re-encrypted snapshot.
     assert.equal(calls.appends.length, 2)
     assert.equal(calls.snapshots.length, 1)
-    assert.deepEqual(calls.appends[1], { snapshotOp: { type: 'list', value: currentList } })
+    assert.deepEqual(calls.appends[1], { snapshotOp: createListOperation('list', currentList) })
 
     // The membership record actually applies: it removes the guest and rotates
     // to epoch 2, and its epoch-key hash matches the rotated key that was saved.
