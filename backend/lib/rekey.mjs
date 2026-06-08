@@ -45,7 +45,7 @@ export async function performMemberRemovalRekey(writerKey, deps) {
         epochKey,
         membershipState,
         ownerAuthorityKeyPair,
-        currentList,
+        getCurrentList,
         prepareListAppendOperation,
         setEpochKey,
         saveEpochKey,
@@ -142,10 +142,13 @@ export async function performMemberRemovalRekey(writerKey, deps) {
         }
         committed = true
 
+        // Read the list fresh inside the serialized unit (after apply advanced
+        // the epoch) so the snapshot reflects every write ordered before the
+        // re-key — not a stale copy captured when the RPC arrived.
         snapshotWritten = await appendEpochSnapshot({
             autobase,
             prepareListAppendOperation,
-            currentList,
+            currentList: getCurrentList(),
             retries: snapshotRetries,
             logger,
         })

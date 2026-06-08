@@ -788,7 +788,9 @@ export async function removeMemberAndRotateEpoch(writerKey) {
         epochKey,
         membershipState,
         ownerAuthorityKeyPair,
-        currentList,
+        // Pass a getter, not the array: the live `currentList` binding is read
+        // fresh inside the serialized write unit so the snapshot is current.
+        getCurrentList: () => currentList,
         prepareListAppendOperation,
         enqueueWrite,
         setEpochKey,
