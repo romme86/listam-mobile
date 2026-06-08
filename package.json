@@ -65,6 +65,7 @@
     "react-native-safe-area-context": "5.6.2",
     "react-native-svg": "^15.12.1",
     "react-native-worklets": "0.5.1",
+    "sodium-universal": "^5.0.1",
     "z32": "^1.1.0"
   },
   "devDependencies": {

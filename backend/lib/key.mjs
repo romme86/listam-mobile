@@ -7,6 +7,7 @@ import {
     secretFingerprint,
 } from './secrets.mjs'
 import { createOwnerAuthorityKeyPair } from './membership.mjs'
+import { createEpochEncryptionKeyPair } from './key-epochs.mjs'
 
 const HEX = /^[0-9a-f]+$/i
 
@@ -138,6 +139,64 @@ export function loadOwnerAuthorityKey(bootSecrets, legacyFilePath) {
 
 export function deleteOwnerAuthorityKey() {
     return deleteBackendSecret('ownerAuthorityKey')
+}
+
+export async function saveEpochKey(key) {
+    const ok = await persistBackendSecret('epochKey', key)
+    if (ok) {
+        logger.log('[INFO] Saved epoch key through secure adapter', {
+            fingerprint: secretFingerprint(key.toString('hex')),
+        })
+    } else {
+        logger.log('[ERROR] Could not durably persist epoch key through secure adapter')
+    }
+    return ok
+}
+
+export function loadEpochKey(bootSecrets) {
+    const fromBoot = getBootSecretBuffer(bootSecrets, 'epochKey')
+    if (fromBoot) {
+        logger.log('[INFO] Loaded epoch key from secure adapter', {
+            fingerprint: secretFingerprint(fromBoot.toString('hex')),
+        })
+        return { key: fromBoot, source: 'secure' }
+    }
+    return { key: null, source: null }
+}
+
+export function deleteEpochKey() {
+    return deleteBackendSecret('epochKey')
+}
+
+export async function saveEpochEncryptionKey(secretKey) {
+    const ok = await persistBackendSecret('epochEncryptionKey', secretKey)
+    if (ok) {
+        logger.log('[INFO] Saved epoch encryption key through secure adapter', {
+            fingerprint: secretFingerprint(secretKey.toString('hex')),
+        })
+    } else {
+        logger.log('[ERROR] Could not durably persist epoch encryption key through secure adapter')
+    }
+    return ok
+}
+
+export function loadEpochEncryptionKey(bootSecrets) {
+    const fromBoot = getBootSecretBuffer(bootSecrets, 'epochEncryptionKey')
+    if (fromBoot) {
+        const keyPair = createEpochEncryptionKeyPair(fromBoot)
+        if (keyPair) {
+            logger.log('[INFO] Loaded epoch encryption key from secure adapter', {
+                fingerprint: secretFingerprint(fromBoot.toString('hex')),
+            })
+            return { keyPair, source: 'secure' }
+        }
+        logger.log('[ERROR] Ignoring invalid epoch encryption key from secure adapter')
+    }
+    return { keyPair: null, source: null }
+}
+
+export function deleteEpochEncryptionKey() {
+    return deleteBackendSecret('epochEncryptionKey')
 }
 
 // Remove stale invite files from the old plaintext invite-persistence path.

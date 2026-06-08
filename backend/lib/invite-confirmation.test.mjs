@@ -43,7 +43,8 @@ test('deep links require confirmation instead of starting a join immediately', (
     assert.equal(request.status, 'needs-confirmation')
     assert.equal(request.invite, 'abc')
     assert.equal(request.pendingInvite, 'abc')
-    assert.match(request.message, /may switch this device/)
+    assert.match(request.message, /switches this device/)
+    assert.match(request.message, /gives up ownership/)
 })
 
 test('cancel clears pending invite without confirming a join', () => {

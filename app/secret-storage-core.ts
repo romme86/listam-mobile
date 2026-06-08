@@ -9,6 +9,8 @@ export const SECURE_SECRET_FILES = {
     autobaseKey: 'lista-autobase-key.txt',
     encryptionKey: 'lista-encryption-key.txt',
     ownerAuthorityKey: 'lista-owner-authority-key.txt',
+    epochKey: 'lista-epoch-key.txt',
+    epochEncryptionKey: 'lista-epoch-encryption-key.txt',
 } as const
 
 // Legacy plaintext files that must be removed but are never re-stored:
@@ -81,11 +83,13 @@ export type BackendSecretPersistRequest = {
 }
 
 const SECRET_NAMES = Object.keys(SECURE_SECRET_FILES) as SecretName[]
-const BACKEND_SECRET_NAMES: SecretName[] = ['autobaseKey', 'encryptionKey', 'ownerAuthorityKey']
+const BACKEND_SECRET_NAMES: SecretName[] = ['autobaseKey', 'encryptionKey', 'ownerAuthorityKey', 'epochKey', 'epochEncryptionKey']
 const HEX_SECRET_BYTES: Record<SecretName, number> = {
     autobaseKey: 32,
     encryptionKey: 32,
     ownerAuthorityKey: 64,
+    epochKey: 32,
+    epochEncryptionKey: 32,
 }
 const CLEANUP_FILES = Object.values(LEGACY_CLEANUP_FILES)
 const HEX = /^[0-9a-f]+$/i

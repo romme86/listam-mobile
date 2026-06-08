@@ -12,3 +12,7 @@ export const RPC_DELETE_FROM_BACKEND = 10
 export const RPC_REQUEST_SYNC = 11
 export const RPC_CREATE_INVITE = 12
 export const RPC_PERSIST_SECRET = 13
+export const RPC_REMOVE_MEMBER = 14
+export const RPC_GET_MEMBERS = 15
+export const RPC_GET_OWNER_RECOVERY_CODE = 16
+export const RPC_RECOVER_OWNER = 17

@@ -27,6 +27,8 @@ test('secret migration moves plaintext key files into secure storage and deletes
         [LEGACY_SECRET_FILES.autobaseKey]: 'A'.repeat(64),
         [LEGACY_SECRET_FILES.encryptionKey]: 'b'.repeat(64),
         [LEGACY_SECRET_FILES.ownerAuthorityKey]: 'd'.repeat(128),
+        [LEGACY_SECRET_FILES.epochKey]: 'e'.repeat(64),
+        [LEGACY_SECRET_FILES.epochEncryptionKey]: 'f'.repeat(64),
         [LEGACY_SECRET_FILES.localWriterKey]: 'c'.repeat(64),
         [LEGACY_SECRET_FILES.pairingInvite]: '{"id":"legacy-invite"}',
     })
@@ -43,10 +45,14 @@ test('secret migration moves plaintext key files into secure storage and deletes
         autobaseKey: 'a'.repeat(64),
         encryptionKey: 'b'.repeat(64),
         ownerAuthorityKey: 'd'.repeat(128),
+        epochKey: 'e'.repeat(64),
+        epochEncryptionKey: 'f'.repeat(64),
     })
     assert.equal(secure.values.get(secretStoreKey('autobaseKey')), 'a'.repeat(64))
     assert.equal(secure.values.get(secretStoreKey('encryptionKey')), 'b'.repeat(64))
     assert.equal(secure.values.get(secretStoreKey('ownerAuthorityKey')), 'd'.repeat(128))
+    assert.equal(secure.values.get(secretStoreKey('epochKey')), 'e'.repeat(64))
+    assert.equal(secure.values.get(secretStoreKey('epochEncryptionKey')), 'f'.repeat(64))
     // The writer key and invite are never stored in the keychain — only their
     // plaintext is cleaned up (invites must not be persisted, H3).
     assert.equal(secure.values.has(secretStoreKey('localWriterKey')), false)
@@ -65,6 +71,8 @@ test('secret migration is idempotent and re-readable from secure storage', async
         [LEGACY_SECRET_FILES.autobaseKey]: 'a'.repeat(64),
         [LEGACY_SECRET_FILES.encryptionKey]: 'b'.repeat(64),
         [LEGACY_SECRET_FILES.ownerAuthorityKey]: 'd'.repeat(128),
+        [LEGACY_SECRET_FILES.epochKey]: 'e'.repeat(64),
+        [LEGACY_SECRET_FILES.epochEncryptionKey]: 'f'.repeat(64),
     })
 
     await prepareBackendSecrets({
@@ -81,6 +89,8 @@ test('secret migration is idempotent and re-readable from secure storage', async
         autobaseKey: 'a'.repeat(64),
         encryptionKey: 'b'.repeat(64),
         ownerAuthorityKey: 'd'.repeat(128),
+        epochKey: 'e'.repeat(64),
+        epochEncryptionKey: 'f'.repeat(64),
     })
     assert.equal(legacy.reads.length >= 4, true)
     assert.deepEqual(legacy.remaining(), {})
@@ -92,6 +102,8 @@ test('secure-storage outage keeps plaintext files and boots through recovery pay
         [LEGACY_SECRET_FILES.autobaseKey]: 'a'.repeat(64),
         [LEGACY_SECRET_FILES.encryptionKey]: 'b'.repeat(64),
         [LEGACY_SECRET_FILES.ownerAuthorityKey]: 'd'.repeat(128),
+        [LEGACY_SECRET_FILES.epochKey]: 'e'.repeat(64),
+        [LEGACY_SECRET_FILES.epochEncryptionKey]: 'f'.repeat(64),
     })
 
     const prepared = await prepareBackendSecrets({
@@ -104,12 +116,16 @@ test('secure-storage outage keeps plaintext files and boots through recovery pay
         autobaseKey: 'a'.repeat(64),
         encryptionKey: 'b'.repeat(64),
         ownerAuthorityKey: 'd'.repeat(128),
+        epochKey: 'e'.repeat(64),
+        epochEncryptionKey: 'f'.repeat(64),
     })
     assert.deepEqual(legacy.deleted, [])
     assert.deepEqual(legacy.remaining(), {
         [LEGACY_SECRET_FILES.autobaseKey]: 'a'.repeat(64),
         [LEGACY_SECRET_FILES.encryptionKey]: 'b'.repeat(64),
         [LEGACY_SECRET_FILES.ownerAuthorityKey]: 'd'.repeat(128),
+        [LEGACY_SECRET_FILES.epochKey]: 'e'.repeat(64),
+        [LEGACY_SECRET_FILES.epochEncryptionKey]: 'f'.repeat(64),
     })
 })
 
@@ -192,6 +208,33 @@ test('owner authority key is validated as 64-byte key material', async () => {
     await assert.rejects(() => persistBackendSecretRequest({
         name: 'ownerAuthorityKey',
         value: 'f'.repeat(64),
+    }, {
+        secureStore: secure.adapter,
+    }), /Invalid secret value/)
+})
+
+test('epoch keys are validated as 32-byte key material', async () => {
+    const secure = createSecureStore()
+
+    await persistBackendSecretRequest({
+        name: 'epochKey',
+        value: 'a'.repeat(64),
+    }, {
+        secureStore: secure.adapter,
+    })
+    await persistBackendSecretRequest({
+        name: 'epochEncryptionKey',
+        value: 'b'.repeat(64),
+    }, {
+        secureStore: secure.adapter,
+    })
+
+    assert.equal(secure.values.get(secretStoreKey('epochKey')), 'a'.repeat(64))
+    assert.equal(secure.values.get(secretStoreKey('epochEncryptionKey')), 'b'.repeat(64))
+
+    await assert.rejects(() => persistBackendSecretRequest({
+        name: 'epochKey',
+        value: 'a'.repeat(128),
     }, {
         secureStore: secure.adapter,
     }), /Invalid secret value/)
