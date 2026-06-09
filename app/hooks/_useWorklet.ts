@@ -5,9 +5,9 @@ import * as FileSystemExpo from 'expo-file-system'
 import { toByteArray } from 'base64-js'
 import { Worklet } from 'react-native-bare-kit'
 import RPC from 'bare-rpc'
-import b4a from 'b4a'
 import backendBundleB64 from '../app.ios.bundle.mjs'
 // import backendBundleB64 from '../assets/backend.android.bundle.mjs'
+import { decodeBackendRequest } from '@listam/client'
 import {
     prepareBackendSecretPayload,
     persistBackendSecretFromPayload,
@@ -21,24 +21,16 @@ import {
     type MembershipRoster,
 } from '../store/devicesSlice'
 import {
-    RPC_MESSAGE,
-    RPC_RESET,
     RPC_UPDATE,
     RPC_DELETE,
     RPC_ADD,
-    RPC_GET_KEY,
-    RPC_ADD_FROM_BACKEND,
-    RPC_UPDATE_FROM_BACKEND,
-    RPC_DELETE_FROM_BACKEND,
     RPC_JOIN_KEY,
-    SYNC_LIST,
     RPC_CREATE_INVITE,
-    RPC_PERSIST_SECRET,
     RPC_REMOVE_MEMBER,
     RPC_GET_MEMBERS,
     RPC_GET_OWNER_RECOVERY_CODE,
     RPC_RECOVER_OWNER,
-} from '../../rpc-commands.mjs'
+} from '@listam/protocol'
 import type { ListEntry } from '@/app/components/_types'
 
 export type { MembershipMember, MembershipRoster } from '../store/devicesSlice'
@@ -147,17 +139,22 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
 
         const { IPC } = worklet
         rpcRef.current = new RPC(IPC as any, (reqFromBackend) => {
-            if (reqFromBackend.command === RPC_PERSIST_SECRET) {
-                const replySecretAck = (stored: boolean, mode?: string) => {
-                    try {
-                        reqFromBackend.reply(JSON.stringify({ stored, mode }))
-                    } catch {
-                        // Reply channel closed; backend will fall back to its retry/timeout.
+            const event = decodeBackendRequest(reqFromBackend)
+
+            switch (event.type) {
+                case 'persist-secret': {
+                    const replySecretAck = (stored: boolean, mode?: string) => {
+                        try {
+                            reqFromBackend.reply(JSON.stringify({ stored, mode }))
+                        } catch {
+                            // Reply channel closed; backend will fall back to its retry/timeout.
+                        }
                     }
-                }
-                if (reqFromBackend.data) {
-                    const payload = b4a.toString(reqFromBackend.data)
-                    void persistBackendSecretFromPayload(payload)
+                    if (!event.payload) {
+                        replySecretAck(false)
+                        return
+                    }
+                    void persistBackendSecretFromPayload(event.payload)
                         .then((result) => {
                             if (result.warning) {
                                 if (notifyRef.current) notifyRef.current(result.warning, 'info')
@@ -172,129 +169,103 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                             }
                             replySecretAck(false)
                         })
-                } else {
-                    replySecretAck(false)
+                    return
                 }
-                return
-            }
-            if (reqFromBackend.command === RPC_MESSAGE) {
-                console.log('RPC MESSAGE req', reqFromBackend)
-                if (reqFromBackend.data) {
-                    const dataStr = b4a.toString(reqFromBackend.data)
-                    console.log('data from bare', dataStr)
-                    try {
-                        const payload = JSON.parse(dataStr)
-                        if (payload.type === 'peer-count') {
-                            const count = typeof payload.count === 'number' ? payload.count : 0
-                            dispatch(syncActions.peerCountSet(count))
-                        } else if (payload.type === 'join-phase') {
-                            dispatch(syncActions.joinPhaseSet(payload.phase || null))
-                        } else if (payload.type === 'not-writable') {
-                            const msg = payload.message || 'You can’t edit yet — waiting for write access from the host.'
-                            if (notifyRef.current) notifyRef.current(msg, 'info')
-                            else Alert.alert('Please wait', msg)
-                        } else if (payload.type === 'join-success') {
-                            dispatch(syncActions.joinPhaseSet(null))
-                            if (isJoiningRef.current) {
-                                isJoiningRef.current = false
-                                setIsJoining(false)
-                            }
-                            haptics.success()
-                            if (notifyRef.current) notifyRef.current('Connected — your lists are now synced', 'success')
-                            else Alert.alert('Success!', 'Connected to peer successfully. Your lists are now synced.')
-                        } else if (payload.type === 'join-error') {
-                            dispatch(syncActions.joinPhaseSet(null))
-                            if (isJoiningRef.current) {
-                                isJoiningRef.current = false
-                                setIsJoining(false)
-                            }
-                            haptics.error()
-                            const msg = payload.message || 'Could not connect to this invite. Please try again.'
-                            if (notifyRef.current) notifyRef.current(msg, 'error')
-                            else Alert.alert('Connection failed', msg)
-                        } else if (payload.type === 'membership-roster') {
-                            dispatch(devicesActions.rosterReceived(payload.roster ?? null))
-                        } else if (payload.type === 'owner-recovery-code') {
-                            if (payload.code) {
-                                setOwnerRecoveryCode(payload.code)
-                            } else if (notifyRef.current) {
-                                notifyRef.current('Only the owner device can reveal a recovery code.', 'error')
-                            }
-                        } else if (payload.type === 'owner-recovered') {
-                            if (notifyRef.current) notifyRef.current('Ownership restored on this device.', 'success')
-                        } else if (payload.type === 'owner-recovery-failed') {
-                            const msg = payload.reason === 'no-owner-on-base'
-                                ? 'This list has no recorded owner to recover.'
-                                : 'That recovery code is not valid for this list.'
-                            if (notifyRef.current) notifyRef.current(msg, 'error')
-                        } else if (payload.type === 'member-removed') {
-                            if (notifyRef.current) {
-                                notifyRef.current(payload.snapshot === false
-                                    ? 'Member removed — re-keyed, but new devices may need a manual sync.'
-                                    : 'Member removed and access re-keyed.', payload.snapshot === false ? 'info' : 'success')
-                            }
-                        } else if (payload.type === 'member-removal-failed') {
-                            if (notifyRef.current) notifyRef.current('Could not remove that member.', 'error')
-                        } else if (payload.type === 'member-removal-incomplete') {
-                            if (notifyRef.current) {
-                                notifyRef.current('Removed member lost content access, but may still be able to edit. Review needed.', 'error')
-                            }
-                        } else {
-                            console.log('RPC_MESSAGE payload (unhandled type):', payload)
+                case 'message': {
+                    const payload = event.payload
+                    if (payload.type === 'peer-count') {
+                        const count = typeof payload.count === 'number' ? payload.count : 0
+                        dispatch(syncActions.peerCountSet(count))
+                    } else if (payload.type === 'join-phase') {
+                        dispatch(syncActions.joinPhaseSet(payload.phase || null))
+                    } else if (payload.type === 'not-writable') {
+                        const msg = payload.message || 'You can’t edit yet — waiting for write access from the host.'
+                        if (notifyRef.current) notifyRef.current(msg, 'info')
+                        else Alert.alert('Please wait', msg)
+                    } else if (payload.type === 'join-success') {
+                        dispatch(syncActions.joinPhaseSet(null))
+                        if (isJoiningRef.current) {
+                            isJoiningRef.current = false
+                            setIsJoining(false)
                         }
-                    } catch (e) {
-                        console.warn('Invalid RPC_MESSAGE payload', dataStr)
+                        haptics.success()
+                        if (notifyRef.current) notifyRef.current('Connected — your lists are now synced', 'success')
+                        else Alert.alert('Success!', 'Connected to peer successfully. Your lists are now synced.')
+                    } else if (payload.type === 'join-error') {
+                        dispatch(syncActions.joinPhaseSet(null))
+                        if (isJoiningRef.current) {
+                            isJoiningRef.current = false
+                            setIsJoining(false)
+                        }
+                        haptics.error()
+                        const msg = payload.message || 'Could not connect to this invite. Please try again.'
+                        if (notifyRef.current) notifyRef.current(msg, 'error')
+                        else Alert.alert('Connection failed', msg)
+                    } else if (payload.type === 'membership-roster') {
+                        dispatch(devicesActions.rosterReceived(payload.roster ?? null))
+                    } else if (payload.type === 'owner-recovery-code') {
+                        if (payload.code) {
+                            setOwnerRecoveryCode(payload.code)
+                        } else if (notifyRef.current) {
+                            notifyRef.current('Only the owner device can reveal a recovery code.', 'error')
+                        }
+                    } else if (payload.type === 'owner-recovered') {
+                        if (notifyRef.current) notifyRef.current('Ownership restored on this device.', 'success')
+                    } else if (payload.type === 'owner-recovery-failed') {
+                        const msg = payload.reason === 'no-owner-on-base'
+                            ? 'This list has no recorded owner to recover.'
+                            : 'That recovery code is not valid for this list.'
+                        if (notifyRef.current) notifyRef.current(msg, 'error')
+                    } else if (payload.type === 'member-removed') {
+                        if (notifyRef.current) {
+                            notifyRef.current(payload.snapshot === false
+                                ? 'Member removed — re-keyed, but new devices may need a manual sync.'
+                                : 'Member removed and access re-keyed.', payload.snapshot === false ? 'info' : 'success')
+                        }
+                    } else if (payload.type === 'member-removal-failed') {
+                        if (notifyRef.current) notifyRef.current('Could not remove that member.', 'error')
+                    } else if (payload.type === 'member-removal-incomplete') {
+                        if (notifyRef.current) {
+                            notifyRef.current('Removed member lost content access, but may still be able to edit. Review needed.', 'error')
+                        }
+                    } else {
+                        console.log('RPC_MESSAGE payload (unhandled type):', payload)
                     }
-                } else {
+                    return
+                }
+                case 'message-empty':
                     console.log('RPC_MESSAGE without data')
-                }
-            }
-            if (reqFromBackend.command === RPC_RESET) {
-                console.log('RPC RESET')
-                dispatch(listsActions.selectedListCleared())
-                dispatch(syncActions.autobaseInviteKeySet(''))
-                dispatch(devicesActions.rosterReceived(null))
-            }
-            if (reqFromBackend.command === SYNC_LIST) {
-                console.log('SYNC_LIST')
-                if (reqFromBackend.data) {
-                    console.log('data from bare', b4a.toString(reqFromBackend.data))
-                    const listToSync = JSON.parse(b4a.toString(reqFromBackend.data))
-                    dispatch(listsActions.selectedListItemsSynced(listToSync))
-                }
-            }
-            if (reqFromBackend.command === RPC_DELETE_FROM_BACKEND) {
-                console.log('RPC_DELETE_FROM_BACKEND')
-                if (reqFromBackend.data) {
-                    console.log('data from bare', b4a.toString(reqFromBackend.data))
-                    const itemToDelete = JSON.parse(b4a.toString(reqFromBackend.data))
-                    dispatch(listsActions.listItemDeleted(itemToDelete))
-                }
-            }
-            if (reqFromBackend.command === RPC_UPDATE_FROM_BACKEND) {
-                console.log('RPC_UPDATE_FROM_BACKEND')
-                if (reqFromBackend.data) {
-                    console.log('data from bare', b4a.toString(reqFromBackend.data))
-                    const itemToUpdate = JSON.parse(b4a.toString(reqFromBackend.data))
-                    dispatch(listsActions.listItemUpdated(itemToUpdate))
-                }
-            }
-            if (reqFromBackend.command === RPC_ADD_FROM_BACKEND) {
-                console.log('RPC_ADD_FROM_BACKEND')
-                if (reqFromBackend.data) {
-                    console.log('data from bare', b4a.toString(reqFromBackend.data))
-                    const itemToAdd = JSON.parse(b4a.toString(reqFromBackend.data))
-                    dispatch(listsActions.listItemAdded(itemToAdd))
-                }
-            }
-            if (reqFromBackend.command === RPC_GET_KEY) {
-                console.log('RPC_GET_KEY')
-                if (reqFromBackend.data != null) {
-                    const data = b4a.toString(reqFromBackend.data)
-                    dispatch(syncActions.autobaseInviteKeySet(data))
-                } else {
-                    console.log('data from bare is null, empty or undefined')
-                }
+                    return
+                case 'reset':
+                    dispatch(listsActions.selectedListCleared())
+                    dispatch(syncActions.autobaseInviteKeySet(''))
+                    dispatch(devicesActions.rosterReceived(null))
+                    return
+                case 'sync-list':
+                    if (Array.isArray(event.items)) {
+                        dispatch(listsActions.selectedListItemsSynced(event.items as ListEntry[]))
+                    }
+                    return
+                case 'delete-from-backend':
+                    dispatch(listsActions.listItemDeleted(event.item as ListEntry))
+                    return
+                case 'update-from-backend':
+                    dispatch(listsActions.listItemUpdated(event.item as ListEntry))
+                    return
+                case 'add-from-backend':
+                    dispatch(listsActions.listItemAdded(event.item as ListEntry))
+                    return
+                case 'invite-key':
+                    if (event.key != null) {
+                        dispatch(syncActions.autobaseInviteKeySet(event.key))
+                    }
+                    return
+                case 'invalid-json':
+                    console.warn('Invalid backend RPC payload', event)
+                    return
+                case 'unknown':
+                    console.log('Unknown backend RPC event', event)
+                    return
             }
         })
 

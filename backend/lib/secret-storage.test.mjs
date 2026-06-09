@@ -1,25 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import ts from 'typescript'
-
-const modulePath = resolve(dirname(fileURLToPath(import.meta.url)), '../../app/secret-storage-core.ts')
-const source = await readFile(modulePath, 'utf8')
-const { outputText } = ts.transpileModule(source, {
-    compilerOptions: {
-        module: ts.ModuleKind.ES2022,
-        target: ts.ScriptTarget.ES2022,
-    },
-})
-const {
+import {
     LEGACY_SECRET_FILES,
     SECRET_METADATA_KEY,
     prepareBackendSecrets,
     persistBackendSecretRequest,
     secretStoreKey,
-} = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`)
+} from '@listam/secrets'
 
 test('secret migration moves plaintext key files into secure storage and deletes the legacy copies', async () => {
     const secure = createSecureStore()

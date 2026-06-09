@@ -1,5 +1,5 @@
-// Typed UI wrapper over the shared list-identity module. The implementation is
-// shared verbatim with the backend reducer (see ../list-identity.mjs) so the
+// Typed UI wrapper over the shared domain package. The implementation is
+// shared verbatim with the backend reducer, so the
 // materialized view and the UI projection cannot drift on ids, ordering,
 // duplicate names, or last-write-wins resolution.
 import type { ListEntry } from './components/_types'
@@ -13,7 +13,7 @@ import {
     updateListEntry as sharedUpdateListEntry,
     deleteListEntry as sharedDeleteListEntry,
     sameListEntry as sharedSameListEntry,
-} from '../list-identity.mjs'
+} from '@listam/domain/identity'
 
 export const DEFAULT_LIST_ID: string = SHARED_DEFAULT_LIST_ID
 export const DEFAULT_LIST_TYPE: string = SHARED_DEFAULT_LIST_TYPE

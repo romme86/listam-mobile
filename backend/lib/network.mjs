@@ -25,7 +25,7 @@ import {
     epochPublicKeyHex,
     generateEpochKey,
 } from './key-epochs.mjs'
-import { RPC_MESSAGE, RPC_GET_KEY, SYNC_LIST } from "../../rpc-commands.mjs"
+import { RPC_MESSAGE, RPC_GET_KEY, SYNC_LIST } from "@listam/protocol"
 import Corestore from "corestore"
 import Autobase from "autobase"
 import b4a from "b4a"

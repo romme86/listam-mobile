@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { parseLogArgs, redactForLog, redactString } from './logger.mjs'
+import { parseLogArgs, redactForLog, redactString } from '@listam/logging'
 
 test('redacts key and invite-shaped strings', () => {
     const hex = 'a'.repeat(64)

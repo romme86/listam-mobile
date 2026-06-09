@@ -1,12 +1,12 @@
 import type { ImageSourcePropType } from 'react-native'
-import { getCategoryForItem } from './categoryLookup'
 import {
     containsLookupTerm,
     getFirstAsciiLetter,
+    getCategoryForItem,
     normalizeGroceryText,
+    TRANSLATED_ITEM_TO_EN,
     toRawLookupText,
-} from './groceryText'
-import { TRANSLATED_ITEM_TO_EN } from './itemTranslations'
+} from '@listam/grocery'
 
 // Static require maps — React Native needs literal require() calls
 

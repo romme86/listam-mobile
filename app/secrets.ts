@@ -13,7 +13,7 @@ import {
     type MemorySecretStore,
     type SecretName,
     type SecureSecretStore,
-} from './secret-storage-core'
+} from '@listam/secrets'
 
 const KEYCHAIN_SERVICE = 'listam.secrets.v1'
 
