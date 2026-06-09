@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme, type Theme } from '../theme'
+import { useI18n } from '../i18n'
 
 type Props = {
     remaining: number
@@ -12,10 +13,13 @@ type Props = {
 
 export function SummaryBar({ remaining, doneCount, onClearCompleted }: Props) {
     const t = useTheme()
+    const i18n = useI18n()
     const insets = useSafeAreaInsets()
     const styles = useMemo(() => makeStyles(t), [t])
 
-    const label = remaining === 0 ? 'All done' : `${remaining} ${remaining === 1 ? 'item' : 'items'} left`
+    const label = remaining === 0
+        ? i18n.t('main.summary.allDone')
+        : i18n.t('main.summary.itemsLeft', { count: remaining })
 
     return (
         <View style={[styles.pill, { bottom: insets.bottom + 20 }]} pointerEvents="box-none">
@@ -30,7 +34,7 @@ export function SummaryBar({ remaining, doneCount, onClearCompleted }: Props) {
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                         <Ionicons name="checkmark-done-outline" size={16} color={t.colors.accent} />
-                        <Text style={styles.clearText}>Clear done</Text>
+                        <Text style={styles.clearText}>{i18n.t('main.summary.clearDone')}</Text>
                     </TouchableOpacity>
                 </>
             )}

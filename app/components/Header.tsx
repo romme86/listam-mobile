@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { AnimatedIconButton } from './AnimatedIconButton'
 import { useTheme, cardColor, type Theme } from '../theme'
 import { useReduceMotion } from '../hooks/useReduceMotion'
+import { useI18n, type LocaleChoice } from '../i18n'
 import type { LoyaltyCardHandle } from '../store/loyaltyCardsSlice'
 import type { ItemIconVariant } from './itemIconMap'
 import type { SizeOption } from './_types'
@@ -25,6 +26,19 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window')
 const HEADER_ICON_SIZE = 22
 const SIZE_OPTIONS: SizeOption[] = ['small', 'medium', 'normal', 'large']
 const ITEM_ICON_VARIANT_OPTIONS: ItemIconVariant[] = ['illustrated', 'minimal']
+
+function sizeLabelKey(size: SizeOption) {
+    switch (size) {
+        case 'small':
+            return 'header.size.small'
+        case 'medium':
+            return 'header.size.medium'
+        case 'large':
+            return 'header.size.large'
+        default:
+            return 'header.size.normal'
+    }
+}
 
 type HeaderProps = {
     peerCount: number
@@ -48,6 +62,8 @@ type HeaderProps = {
     onListTextSizeChange: (size: SizeOption) => void
     itemIconVariant: ItemIconVariant
     onItemIconVariantChange: (variant: ItemIconVariant) => void
+    localeChoice: LocaleChoice
+    onLocaleChoiceChange: (choice: LocaleChoice) => void
     loyaltyCards: LoyaltyCardHandle[]
     onScanCard: () => void
     onSelectCard: (card: LoyaltyCardHandle) => void
@@ -76,12 +92,15 @@ export function Header(props: HeaderProps) {
         onListTextSizeChange,
         itemIconVariant,
         onItemIconVariantChange,
+        localeChoice,
+        onLocaleChoiceChange,
         loyaltyCards,
         onScanCard,
         onSelectCard,
     } = props
 
     const t = useTheme()
+    const i18n = useI18n()
     const reduceMotion = useReduceMotion()
     const styles = useMemo(() => makeStyles(t), [t])
 
@@ -93,10 +112,10 @@ export function Header(props: HeaderProps) {
 
     const ready = isWorkletReady
     const status = !ready
-        ? { label: 'Starting up…', color: t.colors.warning }
+        ? { label: i18n.t('header.status.starting'), color: t.colors.warning }
         : peerCount > 0
-            ? { label: `Synced · ${peerCount} ${peerCount === 1 ? 'device' : 'devices'}`, color: t.colors.accent }
-            : { label: 'Ready · share to sync', color: t.colors.textTertiary }
+            ? { label: i18n.t('header.status.synced', { count: peerCount }), color: t.colors.accent }
+            : { label: i18n.t('header.status.ready'), color: t.colors.textTertiary }
 
     useEffect(() => {
         if (!ready && !reduceMotion) {
@@ -141,7 +160,9 @@ export function Header(props: HeaderProps) {
                         <Ionicons name="menu-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
                     </AnimatedIconButton>
                     {trialDaysRemaining !== undefined && trialDaysRemaining <= 7 && (
-                        <Text style={styles.trialText}>{trialDaysRemaining} days left</Text>
+                        <Text style={styles.trialText}>
+                            {i18n.t('header.trialDaysLeft', { count: trialDaysRemaining })}
+                        </Text>
                     )}
                 </View>
 
@@ -197,7 +218,9 @@ export function Header(props: HeaderProps) {
                                     size={22}
                                     color={t.colors.text}
                                 />
-                                <Text style={styles.menuLabel}>{isGridView ? 'List View' : 'Grid View'}</Text>
+                                <Text style={styles.menuLabel}>
+                                    {i18n.t(isGridView ? 'header.action.listView' : 'header.action.gridView')}
+                                </Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
@@ -206,14 +229,14 @@ export function Header(props: HeaderProps) {
                                 activeOpacity={0.6}
                             >
                                 <Ionicons name="people-outline" size={22} color={t.colors.text} />
-                                <Text style={styles.menuLabel}>Members & recovery</Text>
+                                <Text style={styles.menuLabel}>{i18n.t('header.action.membersRecovery')}</Text>
                             </TouchableOpacity>
 
-                            <Text style={styles.sectionLabel}>Display</Text>
+                            <Text style={styles.sectionLabel}>{i18n.t('header.section.display')}</Text>
 
                             <View style={styles.menuRow}>
                                 <Ionicons name="pricetags-outline" size={22} color={t.colors.text} />
-                                <Text style={styles.menuLabel}>Categories</Text>
+                                <Text style={styles.menuLabel}>{i18n.t('header.setting.categories')}</Text>
                                 <Switch
                                     value={categoriesEnabled}
                                     onValueChange={onToggleCategories}
@@ -224,7 +247,7 @@ export function Header(props: HeaderProps) {
 
                             <View style={styles.menuRow}>
                                 <Ionicons name="albums-outline" size={22} color={t.colors.text} />
-                                <Text style={styles.menuLabel}>Category Headers</Text>
+                                <Text style={styles.menuLabel}>{i18n.t('header.setting.categoryHeaders')}</Text>
                                 <Switch
                                     value={categoryHeadersVisible}
                                     onValueChange={onToggleCategoryHeaders}
@@ -235,34 +258,47 @@ export function Header(props: HeaderProps) {
 
                             {isGridView ? (
                                 <SegmentedSetting
-                                    title="Grid Icon Size"
+                                    title={i18n.t('header.setting.gridIconSize')}
                                     options={SIZE_OPTIONS}
                                     value={gridIconSize}
                                     onChange={onGridIconSizeChange}
                                     styles={styles}
-                                    labelFor={(o) => o[0].toUpperCase() + o.slice(1)}
+                                    labelFor={(o) => i18n.t(sizeLabelKey(o))}
                                 />
                             ) : (
                                 <SegmentedSetting
-                                    title="List Text Size"
+                                    title={i18n.t('header.setting.listTextSize')}
                                     options={SIZE_OPTIONS}
                                     value={listTextSize}
                                     onChange={onListTextSizeChange}
                                     styles={styles}
-                                    labelFor={(o) => o[0].toUpperCase() + o.slice(1)}
+                                    labelFor={(o) => i18n.t(sizeLabelKey(o))}
                                 />
                             )}
 
                             <SegmentedSetting
-                                title="Item Icons"
+                                title={i18n.t('header.setting.itemIcons')}
                                 options={ITEM_ICON_VARIANT_OPTIONS}
                                 value={itemIconVariant}
                                 onChange={onItemIconVariantChange}
                                 styles={styles}
-                                labelFor={(o) => (o === 'illustrated' ? 'Illustrated' : 'Minimal')}
+                                labelFor={(o) => i18n.t(o === 'illustrated'
+                                    ? 'header.iconVariant.illustrated'
+                                    : 'header.iconVariant.minimal')}
                             />
 
-                            <Text style={styles.sectionLabel}>Loyalty Cards</Text>
+                            <Text style={styles.sectionLabel}>{i18n.t('header.section.language')}</Text>
+
+                            <SegmentedSetting
+                                title={i18n.t('header.setting.appLanguage')}
+                                options={i18n.localeChoices}
+                                value={localeChoice}
+                                onChange={onLocaleChoiceChange}
+                                styles={styles}
+                                labelFor={i18n.labelForLocaleChoice}
+                            />
+
+                            <Text style={styles.sectionLabel}>{i18n.t('header.section.loyaltyCards')}</Text>
 
                             <TouchableOpacity
                                 style={styles.menuRow}
@@ -270,7 +306,7 @@ export function Header(props: HeaderProps) {
                                 activeOpacity={0.6}
                             >
                                 <Ionicons name="scan-outline" size={22} color={t.colors.text} />
-                                <Text style={styles.menuLabel}>Scan Loyalty Card</Text>
+                                <Text style={styles.menuLabel}>{i18n.t('header.action.scanLoyaltyCard')}</Text>
                             </TouchableOpacity>
 
                             {loyaltyCards.map((card) => (
@@ -287,7 +323,7 @@ export function Header(props: HeaderProps) {
                                 </TouchableOpacity>
                             ))}
 
-                            <Text style={styles.sectionLabel}>Danger Zone</Text>
+                            <Text style={styles.sectionLabel}>{i18n.t('header.section.dangerZone')}</Text>
 
                             <TouchableOpacity
                                 style={[styles.menuRow, styles.dangerRow]}
@@ -295,7 +331,9 @@ export function Header(props: HeaderProps) {
                                 activeOpacity={0.6}
                             >
                                 <Ionicons name="trash-outline" size={22} color={t.colors.danger} />
-                                <Text style={[styles.menuLabel, { color: t.colors.danger }]}>Delete All</Text>
+                                <Text style={[styles.menuLabel, { color: t.colors.danger }]}>
+                                    {i18n.t('header.action.deleteAll')}
+                                </Text>
                             </TouchableOpacity>
                         </ScrollView>
                     </Animated.View>
@@ -488,10 +526,12 @@ function makeStyles(t: Theme) {
         },
         optionRow: {
             flexDirection: 'row',
+            flexWrap: 'wrap',
             gap: t.spacing.sm,
         },
         optionButton: {
             flex: 1,
+            minWidth: 68,
             borderRadius: t.radius.sm,
             borderWidth: 1,
             borderColor: t.colors.border,

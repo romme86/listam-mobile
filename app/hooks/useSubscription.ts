@@ -15,6 +15,7 @@ import {
     type ProductSubscription,
     type EventSubscription,
 } from 'react-native-iap'
+import { useI18n } from '../i18n'
 
 const TRIAL_START_KEY = '@lista_trial_start'
 const TRIAL_DURATION_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
@@ -36,6 +37,7 @@ export type SubscriptionState = {
 }
 
 export function useSubscription() {
+    const i18n = useI18n()
     const [state, setState] = useState<SubscriptionState>({
         isLoading: true,
         isSubscribed: false,
@@ -162,7 +164,7 @@ export function useSubscription() {
 
     const purchase = useCallback(async () => {
         if (!state.product) {
-            setState((prev) => ({ ...prev, error: 'No subscription available' }))
+            setState((prev) => ({ ...prev, error: i18n.t('paywall.noSubscriptionAvailable') }))
             return
         }
 
@@ -197,14 +199,14 @@ export function useSubscription() {
                 })
             }
         } catch (err: unknown) {
-            const errorMessage = err instanceof Error ? err.message : 'Purchase failed'
+            const errorMessage = err instanceof Error ? err.message : i18n.t('paywall.purchaseFailed')
             setState((prev) => ({
                 ...prev,
                 error: errorMessage,
                 isLoading: false,
             }))
         }
-    }, [state.product])
+    }, [i18n, state.product])
 
     const restore = useCallback(async () => {
         setState((prev) => ({ ...prev, isLoading: true, error: null }))
@@ -219,17 +221,17 @@ export function useSubscription() {
                 ...prev,
                 isSubscribed: hasActiveSubscription,
                 isLoading: false,
-                error: hasActiveSubscription ? null : 'No active subscription found',
+                error: hasActiveSubscription ? null : i18n.t('paywall.noActiveSubscription'),
             }))
         } catch (err: unknown) {
-            const errorMessage = err instanceof Error ? err.message : 'Restore failed'
+            const errorMessage = err instanceof Error ? err.message : i18n.t('paywall.restoreFailed')
             setState((prev) => ({
                 ...prev,
                 error: errorMessage,
                 isLoading: false,
             }))
         }
-    }, [])
+    }, [i18n])
 
     const shouldShowPaywall = !state.isLoading && !state.isSubscribed && !state.isTrialActive
 

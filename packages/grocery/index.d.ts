@@ -22,4 +22,4 @@ export function containsLookupTerm(text: string, term: string): boolean
 export function detectDominantLanguage(items: string[]): SupportedLang
 export function getCategoryForItem(text: unknown, preferredLang?: SupportedLang): string
 export function getDisplayCategoryName(canonicalKey: string, lang: SupportedLang): string
-export function groupByCategory<T extends { text?: string; isDone?: boolean }>(data: T[]): Array<CategorySection<T>>
+export function groupByCategory<T extends { text?: string; isDone?: boolean }>(data: T[], preferredLang?: SupportedLang): Array<CategorySection<T>>

@@ -1,12 +1,11 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
+import { isLocaleChoice, type LocaleChoice } from '@listam/i18n'
 import type { RootState } from './store'
 import type { SizeOption } from '../components/_types'
 import type { ItemIconVariant } from '../components/itemIconMap'
 
 export const SIZE_VALUES: SizeOption[] = ['small', 'medium', 'normal', 'large']
 export const ITEM_ICON_VARIANTS: ItemIconVariant[] = ['illustrated', 'minimal']
-
-export type LocaleChoice = 'system' | string
 
 export type PreferencesState = {
     isGridView: boolean
@@ -42,7 +41,7 @@ const preferencesSlice = createSlice({
             if (isSizeOption(next.gridIconSize)) state.gridIconSize = next.gridIconSize
             if (isSizeOption(next.listTextSize)) state.listTextSize = next.listTextSize
             if (isItemIconVariant(next.itemIconVariant)) state.itemIconVariant = next.itemIconVariant
-            if (typeof next.localeChoice === 'string' && next.localeChoice.trim()) {
+            if (isLocaleChoice(next.localeChoice)) {
                 state.localeChoice = next.localeChoice
             }
         },
@@ -65,7 +64,7 @@ const preferencesSlice = createSlice({
             state.itemIconVariant = action.payload
         },
         localeChoiceSet(state, action: PayloadAction<LocaleChoice>) {
-            state.localeChoice = action.payload || 'system'
+            state.localeChoice = isLocaleChoice(action.payload) ? action.payload : 'system'
         },
     },
 })

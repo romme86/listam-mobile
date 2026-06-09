@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { haptics } from '../feedback'
 import { useTheme, type Theme } from '../theme'
+import { useI18n } from '../i18n'
 import type { ListEntry } from './_types'
 import { getIconForItem, type ItemIconVariant } from './itemIconMap'
 
@@ -37,6 +38,7 @@ export function GridCard({
     reduceMotion = false,
 }: GridCardProps) {
     const t = useTheme()
+    const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
     const bubbleScale = useRef(new Animated.Value(1)).current
     const bubbleOpacity = useRef(new Animated.Value(0)).current
@@ -74,12 +76,12 @@ export function GridCard({
 
     const confirmDelete = useCallback(() => {
         Alert.alert(
-            'Remove item',
-            `Remove "${item.text}"?`,
+            i18n.t('main.grid.removeItem.title'),
+            i18n.t('main.grid.removeItem.message', { item: item.text }),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: i18n.t('common.cancel'), style: 'cancel' },
                 {
-                    text: 'Remove',
+                    text: i18n.t('common.remove'),
                     style: 'destructive',
                     onPress: () => {
                         haptics.delete()
@@ -88,7 +90,7 @@ export function GridCard({
                 },
             ]
         )
-    }, [item.text, originalIndex, onDelete])
+    }, [i18n, item.text, originalIndex, onDelete])
 
     return (
         <TouchableOpacity
@@ -99,7 +101,7 @@ export function GridCard({
             accessibilityRole="checkbox"
             accessibilityState={{ checked: item.isDone }}
             accessibilityLabel={item.text}
-            accessibilityHint="Double tap to toggle done. Long-press to remove."
+            accessibilityHint={i18n.t('main.grid.accessibilityHint')}
         >
             <View style={styles.iconContainer}>
                 <Image

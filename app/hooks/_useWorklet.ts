@@ -20,6 +20,7 @@ import {
     selectMembershipRoster,
     type MembershipRoster,
 } from '../store/devicesSlice'
+import { useI18n } from '../i18n'
 import {
     RPC_UPDATE,
     RPC_DELETE,
@@ -72,6 +73,7 @@ export type NotifyType = 'info' | 'success' | 'error'
 export type NotifyFn = (message: string, type?: NotifyType) => void
 
 export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
+    const i18n = useI18n()
     const dispatch = useAppDispatch()
     const dataList = useAppSelector(selectSelectedListItems)
     const membershipRoster = useAppSelector(selectMembershipRoster)
@@ -89,7 +91,9 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
     const workletRef = useRef<Worklet | null>(null)
     const isJoiningRef = useRef(false)
     const notifyRef = useRef<NotifyFn | undefined>(onNotify)
+    const i18nRef = useRef(i18n)
     notifyRef.current = onNotify
+    i18nRef.current = i18n
 
     const setIsJoining = useCallback((nextIsJoining: boolean) => {
         dispatch(syncActions.joiningSet(nextIsJoining))
@@ -119,8 +123,8 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         const preparedSecrets = await prepareBackendSecretPayload(String(baseDir))
         if (preparedSecrets.mode !== 'secure-store') {
             const msg = preparedSecrets.mode === 'plaintext-recovery'
-                ? 'Secure storage is unavailable; using the legacy key files for this session.'
-                : 'Secure storage is unavailable; key material can only be cached for this session.'
+                ? i18nRef.current.t('backend.secureStorage.legacy')
+                : i18nRef.current.t('backend.secureStorage.session')
             if (notifyRef.current) notifyRef.current(msg, 'info')
         }
 
@@ -165,7 +169,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                         })
                         .catch(() => {
                             if (notifyRef.current) {
-                                notifyRef.current('Could not persist backend key material securely.', 'error')
+                                notifyRef.current(i18nRef.current.t('backend.secretPersistFailed'), 'error')
                             }
                             replySecretAck(false)
                         })
@@ -179,9 +183,9 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                     } else if (payload.type === 'join-phase') {
                         dispatch(syncActions.joinPhaseSet(payload.phase || null))
                     } else if (payload.type === 'not-writable') {
-                        const msg = payload.message || 'You can’t edit yet — waiting for write access from the host.'
+                        const msg = payload.message || i18nRef.current.t('backend.notWritable')
                         if (notifyRef.current) notifyRef.current(msg, 'info')
-                        else Alert.alert('Please wait', msg)
+                        else Alert.alert(i18nRef.current.t('backend.notWritable.title'), msg)
                     } else if (payload.type === 'join-success') {
                         dispatch(syncActions.joinPhaseSet(null))
                         if (isJoiningRef.current) {
@@ -189,8 +193,11 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                             setIsJoining(false)
                         }
                         haptics.success()
-                        if (notifyRef.current) notifyRef.current('Connected — your lists are now synced', 'success')
-                        else Alert.alert('Success!', 'Connected to peer successfully. Your lists are now synced.')
+                        if (notifyRef.current) notifyRef.current(i18nRef.current.t('backend.joinSuccess'), 'success')
+                        else Alert.alert(
+                            i18nRef.current.t('backend.joinSuccess.title'),
+                            i18nRef.current.t('backend.joinSuccess.alertMessage')
+                        )
                     } else if (payload.type === 'join-error') {
                         dispatch(syncActions.joinPhaseSet(null))
                         if (isJoiningRef.current) {
@@ -198,35 +205,35 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                             setIsJoining(false)
                         }
                         haptics.error()
-                        const msg = payload.message || 'Could not connect to this invite. Please try again.'
+                        const msg = payload.message || i18nRef.current.t('backend.joinError')
                         if (notifyRef.current) notifyRef.current(msg, 'error')
-                        else Alert.alert('Connection failed', msg)
+                        else Alert.alert(i18nRef.current.t('backend.joinError.title'), msg)
                     } else if (payload.type === 'membership-roster') {
                         dispatch(devicesActions.rosterReceived(payload.roster ?? null))
                     } else if (payload.type === 'owner-recovery-code') {
                         if (payload.code) {
                             setOwnerRecoveryCode(payload.code)
                         } else if (notifyRef.current) {
-                            notifyRef.current('Only the owner device can reveal a recovery code.', 'error')
+                            notifyRef.current(i18nRef.current.t('backend.ownerRecovery.onlyOwner'), 'error')
                         }
                     } else if (payload.type === 'owner-recovered') {
-                        if (notifyRef.current) notifyRef.current('Ownership restored on this device.', 'success')
+                        if (notifyRef.current) notifyRef.current(i18nRef.current.t('backend.ownerRecovery.restored'), 'success')
                     } else if (payload.type === 'owner-recovery-failed') {
                         const msg = payload.reason === 'no-owner-on-base'
-                            ? 'This list has no recorded owner to recover.'
-                            : 'That recovery code is not valid for this list.'
+                            ? i18nRef.current.t('backend.ownerRecovery.noOwner')
+                            : i18nRef.current.t('backend.ownerRecovery.invalid')
                         if (notifyRef.current) notifyRef.current(msg, 'error')
                     } else if (payload.type === 'member-removed') {
                         if (notifyRef.current) {
                             notifyRef.current(payload.snapshot === false
-                                ? 'Member removed — re-keyed, but new devices may need a manual sync.'
-                                : 'Member removed and access re-keyed.', payload.snapshot === false ? 'info' : 'success')
+                                ? i18nRef.current.t('backend.memberRemoved.partial')
+                                : i18nRef.current.t('backend.memberRemoved.success'), payload.snapshot === false ? 'info' : 'success')
                         }
                     } else if (payload.type === 'member-removal-failed') {
-                        if (notifyRef.current) notifyRef.current('Could not remove that member.', 'error')
+                        if (notifyRef.current) notifyRef.current(i18nRef.current.t('backend.memberRemoval.failed'), 'error')
                     } else if (payload.type === 'member-removal-incomplete') {
                         if (notifyRef.current) {
-                            notifyRef.current('Removed member lost content access, but may still be able to edit. Review needed.', 'error')
+                            notifyRef.current(i18nRef.current.t('backend.memberRemoval.incomplete'), 'error')
                         }
                     } else {
                         console.log('RPC_MESSAGE payload (unhandled type):', payload)
@@ -287,7 +294,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                     workletStarted = false
                     dispatch(syncActions.workletReadySet(false))
                     if (notifyRef.current) {
-                        notifyRef.current('Could not start the Listam backend.', 'error')
+                        notifyRef.current(i18nRef.current.t('backend.startFailed'), 'error')
                     }
                 })
         } else if (workletSingleton || g.worklet) {

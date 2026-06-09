@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme, type Theme } from '../theme'
+import { useI18n } from '../i18n'
 
 type HintProps = { icon: keyof typeof Ionicons.glyphMap; text: string }
 
@@ -18,6 +19,7 @@ function Hint({ icon, text }: HintProps) {
 
 export function EmptyState({ onRequestAdd }: { onRequestAdd?: () => void }) {
     const t = useTheme()
+    const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
 
     return (
@@ -25,8 +27,8 @@ export function EmptyState({ onRequestAdd }: { onRequestAdd?: () => void }) {
             <View style={styles.iconCircle}>
                 <Ionicons name="basket-outline" size={44} color={t.colors.textTertiary} />
             </View>
-            <Text style={styles.title}>Your list is empty</Text>
-            <Text style={styles.subtitle}>Add your first item to get started.</Text>
+            <Text style={styles.title}>{i18n.t('main.empty.title')}</Text>
+            <Text style={styles.subtitle}>{i18n.t('main.empty.subtitle')}</Text>
 
             {onRequestAdd && (
                 <TouchableOpacity
@@ -36,14 +38,14 @@ export function EmptyState({ onRequestAdd }: { onRequestAdd?: () => void }) {
                     accessibilityRole="button"
                 >
                     <Ionicons name="add" size={20} color={t.colors.onPrimary} />
-                    <Text style={styles.buttonText}>Add item</Text>
+                    <Text style={styles.buttonText}>{i18n.t('main.empty.addItem')}</Text>
                 </TouchableOpacity>
             )}
 
             <View style={styles.hints}>
-                <Hint icon="hand-left-outline" text="Tap an item to mark it done" />
-                <Hint icon="create-outline" text="Long-press to edit" />
-                <Hint icon="arrow-forward-outline" text="Swipe right to delete" />
+                <Hint icon="hand-left-outline" text={i18n.t('main.empty.hintToggle')} />
+                <Hint icon="create-outline" text={i18n.t('main.empty.hintEdit')} />
+                <Hint icon="arrow-forward-outline" text={i18n.t('main.empty.hintDelete')} />
             </View>
         </View>
     )

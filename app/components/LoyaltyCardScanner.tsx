@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme, type Theme } from '../theme'
+import { useI18n } from '../i18n'
 
 export type LoyaltyCard = {
     id: string
@@ -30,6 +31,7 @@ type LoyaltyCardScannerProps = {
 
 export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyCardScannerProps) {
     const t = useTheme()
+    const i18n = useI18n()
     const insets = useSafeAreaInsets()
     const styles = useMemo(() => makeStyles(t), [t])
     const [permission, requestPermission] = useCameraPermissions()
@@ -73,12 +75,12 @@ export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyC
             <Modal visible={visible} animationType="slide" onRequestClose={handlePermissionContinue}>
                 <View style={styles.permissionContainer}>
                     <Ionicons name="camera-outline" size={64} color={t.colors.textTertiary} />
-                    <Text style={styles.permissionTitle}>Camera Permission Needed</Text>
+                    <Text style={styles.permissionTitle}>{i18n.t('loyalty.scanner.permission.title')}</Text>
                     <Text style={styles.permissionText}>
-                        We need camera access to scan loyalty card barcodes.
+                        {i18n.t('loyalty.scanner.permission.message')}
                     </Text>
                     <TouchableOpacity style={styles.permissionButton} onPress={handlePermissionContinue} accessibilityRole="button">
-                        <Text style={styles.permissionButtonText}>Continue</Text>
+                        <Text style={styles.permissionButtonText}>{i18n.t('common.continue')}</Text>
                     </TouchableOpacity>
                 </View>
             </Modal>
@@ -121,7 +123,7 @@ export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyC
 
                 {!scannedData && (
                     <View style={styles.hintContainer}>
-                        <Text style={styles.hintText}>Point camera at a barcode or QR code</Text>
+                        <Text style={styles.hintText}>{i18n.t('loyalty.scanner.hint')}</Text>
                     </View>
                 )}
 
@@ -131,11 +133,11 @@ export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyC
                         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                     >
                         <View style={styles.nameCard}>
-                            <Text style={styles.nameTitle}>Card Scanned!</Text>
-                            <Text style={styles.nameSubtitle}>Enter a name for this card</Text>
+                            <Text style={styles.nameTitle}>{i18n.t('loyalty.scanner.scanned.title')}</Text>
+                            <Text style={styles.nameSubtitle}>{i18n.t('loyalty.scanner.scanned.subtitle')}</Text>
                             <TextInput
                                 style={styles.nameInput}
-                                placeholder="e.g. Migros, Coop..."
+                                placeholder={i18n.t('loyalty.scanner.namePlaceholder')}
                                 placeholderTextColor={t.colors.placeholder}
                                 value={storeName}
                                 onChangeText={setStoreName}
@@ -149,7 +151,7 @@ export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyC
                                     onPress={() => setScannedData(null)}
                                     accessibilityRole="button"
                                 >
-                                    <Text style={styles.nameCancelText}>Rescan</Text>
+                                    <Text style={styles.nameCancelText}>{i18n.t('common.rescan')}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                     style={[styles.nameSave, !storeName.trim() && { opacity: 0.4 }]}
@@ -157,7 +159,7 @@ export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyC
                                     disabled={!storeName.trim()}
                                     accessibilityRole="button"
                                 >
-                                    <Text style={styles.nameSaveText}>Save</Text>
+                                    <Text style={styles.nameSaveText}>{i18n.t('common.save')}</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>

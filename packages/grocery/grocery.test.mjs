@@ -24,4 +24,5 @@ test('grocery grouping detects dominant language and sorts active items first', 
     assert.equal(detectDominantLanguage(['mela', 'latte', 'pane']), 'it')
     assert.deepEqual(sections.map((section) => section.canonicalKey), ['Fruits', 'Bread & Bakery', 'Dairy'])
     assert.equal(sections[0].category, 'Frutta')
+    assert.equal(groupByCategory([{ text: 'mela', isDone: false }], 'es')[0].category, 'Frutas')
 })

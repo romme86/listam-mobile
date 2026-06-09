@@ -21,6 +21,33 @@ type JoinConfirmationOptions = {
     isJoining: boolean
     sourceLabel?: string
     trusted?: boolean
+    copy?: Partial<JoinConfirmationCopy>
+}
+
+export type JoinConfirmationCopy = {
+    invalidNotification: string
+    busyNotification: string
+    promptOpenNotification: string
+    title: string
+    sourceLink: (sourceLabel: string) => string
+    sourceManual: string
+    message: (sourceText: string, trustWarning: string) => string
+    untrustedWarning: string
+    sourceLabel: (sourceLabel: string) => string
+}
+
+const DEFAULT_JOIN_CONFIRMATION_COPY: JoinConfirmationCopy = {
+    invalidNotification: 'Enter a valid invite key or link',
+    busyNotification: 'Already joining an invite',
+    promptOpenNotification: 'Finish the current invite prompt first',
+    title: 'Join this Listam invite?',
+    sourceLink: (sourceLabel) => `This link from ${sourceLabel} contains a Listam invite.`,
+    sourceManual: 'This invite code will start a Listam join.',
+    message: (sourceText, trustWarning) => (
+        `${sourceText}\n\nJoining switches this device to the invited list and gives up ownership of your current list on this device. You will not be able to switch back to it here. Invites can be revoked before use, but removing a device after it joins requires a future re-key flow.${trustWarning}`
+    ),
+    untrustedWarning: '\n\nWarning: This link is not from listam.ch. Only continue if you trust whoever sent it.',
+    sourceLabel: (sourceLabel) => sourceLabel,
 }
 
 // Hosts (and the custom scheme) that Listam itself generates invite links for.
@@ -84,13 +111,14 @@ export function createJoinConfirmationRequest(
     rawInvite: string,
     options: JoinConfirmationOptions
 ): JoinConfirmationRequest {
+    const copy = createJoinConfirmationCopy(options.copy)
     const invite = extractInviteFromInput(rawInvite)
     if (!invite) {
         return {
             status: 'invalid',
             invite: '',
             pendingInvite: options.pendingInvite,
-            notification: 'Enter a valid invite key or link',
+            notification: copy.invalidNotification,
         }
     }
 
@@ -99,7 +127,7 @@ export function createJoinConfirmationRequest(
             status: 'busy',
             invite,
             pendingInvite: options.pendingInvite,
-            notification: 'Already joining an invite',
+            notification: copy.busyNotification,
         }
     }
 
@@ -118,24 +146,25 @@ export function createJoinConfirmationRequest(
             status: 'confirmation-open',
             invite,
             pendingInvite: options.pendingInvite,
-            notification: 'Finish the current invite prompt first',
+            notification: copy.promptOpenNotification,
         }
     }
 
+    const sourceLabel = copy.sourceLabel(options.sourceLabel || 'an external source')
     const sourceText = options.source === 'link'
-        ? `This link from ${options.sourceLabel || 'an external source'} contains a Listam invite.`
-        : 'This invite code will start a Listam join.'
+        ? copy.sourceLink(sourceLabel)
+        : copy.sourceManual
 
     const trustWarning = options.source === 'link' && options.trusted === false
-        ? '\n\n⚠️ This link is not from listam.ch — only continue if you trust whoever sent it.'
+        ? copy.untrustedWarning
         : ''
 
     return {
         status: 'needs-confirmation',
         invite,
         pendingInvite: invite,
-        title: 'Join this Listam invite?',
-        message: `${sourceText}\n\nJoining switches this device to the invited list and gives up ownership of your current list on this device — you will not be able to switch back to it here. Invites can be revoked before use, but removing a device after it joins requires a future re-key flow.${trustWarning}`,
+        title: copy.title,
+        message: copy.message(sourceText, trustWarning),
     }
 }
 
@@ -143,7 +172,7 @@ export function createJoinConfirmationRequest(
 // the link is not a Listam invite link, so callers can ignore it silently.
 export function planIncomingLinkJoin(
     rawUrl: string,
-    options: { pendingInvite: string; isJoining: boolean }
+    options: { pendingInvite: string; isJoining: boolean; copy?: Partial<JoinConfirmationCopy> }
 ): JoinConfirmationRequest | null {
     const parsed = parseInviteLink(rawUrl)
     if (!parsed) return null
@@ -154,6 +183,7 @@ export function planIncomingLinkJoin(
         isJoining: options.isJoining,
         sourceLabel: parsed.sourceLabel,
         trusted: parsed.trusted,
+        copy: options.copy,
     })
 }
 
@@ -169,6 +199,13 @@ export function resolveJoinConfirmation(
     return {
         pendingInvite: '',
         confirmedInvite: confirmed ? invite : '',
+    }
+}
+
+function createJoinConfirmationCopy(copy?: Partial<JoinConfirmationCopy>): JoinConfirmationCopy {
+    return {
+        ...DEFAULT_JOIN_CONFIRMATION_COPY,
+        ...copy,
     }
 }
 

@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 import { View, Text, Modal, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native'
 import { makeDialogStyles } from './_styles'
 import { useTheme } from '../theme'
+import { useI18n } from '../i18n'
 import type { MembershipRoster } from '../store/devicesSlice'
 
 type MembersDialogProps = {
@@ -35,6 +36,7 @@ export function MembersDialog({
     onClose,
 }: MembersDialogProps) {
     const t = useTheme()
+    const i18n = useI18n()
     const d = useMemo(() => makeDialogStyles(t), [t])
 
     const writers = roster?.writers ?? []
@@ -43,11 +45,11 @@ export function MembersDialog({
 
     const confirmRemove = (writerKey: string) => {
         Alert.alert(
-            'Remove this member?',
-            'Their device will lose access to new changes (the list is re-keyed). This cannot be undone, and they keep any copy they already have.',
+            i18n.t('members.confirmRemove.title'),
+            i18n.t('members.confirmRemove.message'),
             [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Remove', style: 'destructive', onPress: () => onRemoveMember(writerKey) },
+                { text: i18n.t('common.cancel'), style: 'cancel' },
+                { text: i18n.t('common.remove'), style: 'destructive', onPress: () => onRemoveMember(writerKey) },
             ],
         )
     }
@@ -56,11 +58,11 @@ export function MembersDialog({
         <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
             <View style={d.overlay}>
                 <View style={d.dialog}>
-                    <Text style={d.title}>Members</Text>
+                    <Text style={d.title}>{i18n.t('members.title')}</Text>
                     <Text style={d.subtitle}>
                         {hasOwner
-                            ? `Everyone invited to this list${roster ? ` · epoch ${roster.currentEpoch}` : ''}`
-                            : 'No shared members yet'}
+                            ? i18n.t('members.subtitle.shared', { epoch: roster?.currentEpoch ?? 0 })
+                            : i18n.t('members.subtitle.none')}
                     </Text>
 
                     <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
@@ -80,9 +82,9 @@ export function MembersDialog({
                                         {shortKey(m.writerKey)}
                                     </Text>
                                     <Text style={{ color: t.colors.placeholder, fontSize: 12, marginTop: 2 }}>
-                                        {[m.isOwner ? 'Owner' : null, m.isSelf ? 'This device' : null]
+                                        {[m.isOwner ? i18n.t('members.role.owner') : null, m.isSelf ? i18n.t('members.role.self') : null]
                                             .filter(Boolean)
-                                            .join(' · ') || 'Member'}
+                                            .join(' - ') || i18n.t('members.role.member')}
                                     </Text>
                                 </View>
                                 {canAdminister && !m.isOwner && !m.isSelf ? (
@@ -91,7 +93,9 @@ export function MembersDialog({
                                         accessibilityRole="button"
                                         style={{ paddingHorizontal: 12, paddingVertical: 6 }}
                                     >
-                                        <Text style={{ color: t.colors.danger, fontWeight: '600' }}>Remove</Text>
+                                        <Text style={{ color: t.colors.danger, fontWeight: '600' }}>
+                                            {i18n.t('common.remove')}
+                                        </Text>
                                     </TouchableOpacity>
                                 ) : null}
                             </View>
@@ -103,7 +107,7 @@ export function MembersDialog({
                         recoveryCode ? (
                             <View style={{ marginTop: 14 }}>
                                 <Text style={d.subtitle}>
-                                    Save this recovery code offline. Anyone with it can administer this list — treat it like a password.
+                                    {i18n.t('members.recovery.saveOffline')}
                                 </Text>
                                 <Text
                                     selectable
@@ -125,7 +129,7 @@ export function MembersDialog({
                                     onPress={onDismissRecoveryCode}
                                     accessibilityRole="button"
                                 >
-                                    <Text style={d.submitButtonText}>I’ve saved it</Text>
+                                    <Text style={d.submitButtonText}>{i18n.t('members.recovery.saved')}</Text>
                                 </TouchableOpacity>
                             </View>
                         ) : (
@@ -134,17 +138,17 @@ export function MembersDialog({
                                 onPress={onRevealRecoveryCode}
                                 accessibilityRole="button"
                             >
-                                <Text style={d.cancelButtonText}>Show owner recovery code</Text>
+                                <Text style={d.cancelButtonText}>{i18n.t('members.recovery.show')}</Text>
                             </TouchableOpacity>
                         )
                     ) : hasOwner ? (
                         <View style={{ marginTop: 14 }}>
-                            <Text style={d.subtitle}>Lost owner access on this device? Enter your recovery code to restore it.</Text>
+                            <Text style={d.subtitle}>{i18n.t('members.recovery.lostAccess')}</Text>
                             <TextInput
                                 style={d.input}
                                 value={recoverCodeInput}
                                 onChangeText={setRecoverCodeInput}
-                                placeholder="Paste recovery code…"
+                                placeholder={i18n.t('members.recovery.placeholder')}
                                 placeholderTextColor={t.colors.placeholder}
                                 autoCapitalize="none"
                                 autoCorrect={false}
@@ -155,7 +159,7 @@ export function MembersDialog({
                                 onPress={onRecoverOwnership}
                                 accessibilityRole="button"
                             >
-                                <Text style={d.submitButtonText}>Recover ownership</Text>
+                                <Text style={d.submitButtonText}>{i18n.t('members.recovery.action')}</Text>
                             </TouchableOpacity>
                         </View>
                     ) : null}
@@ -166,7 +170,7 @@ export function MembersDialog({
                             onPress={onClose}
                             accessibilityRole="button"
                         >
-                            <Text style={d.cancelButtonText}>Close</Text>
+                            <Text style={d.cancelButtonText}>{i18n.t('common.close')}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>

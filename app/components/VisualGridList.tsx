@@ -15,6 +15,7 @@ import { GridCard } from './GridCard'
 import { EmptyState } from './EmptyState'
 import type { ItemIconVariant } from './itemIconMap'
 import { useTheme, type Theme } from '../theme'
+import { useI18n } from '../i18n'
 import { identityKey } from '../listProjection'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
@@ -51,6 +52,7 @@ export function VisualGridList({
     reduceMotion = false,
 }: Props) {
     const t = useTheme()
+    const i18n = useI18n()
     const insets = useSafeAreaInsets()
     const styles = useMemo(() => makeStyles(t), [t])
     const numColumns = getNumColumns(gridIconSize)
@@ -60,13 +62,13 @@ export function VisualGridList({
     )
 
     const sections = useMemo(() => {
-        if (categoriesEnabled) return groupByCategory(data)
+        if (categoriesEnabled) return groupByCategory(data, i18n.groceryLocale)
         return [{
             canonicalKey: '',
             category: '',
             items: data.map((entry, i) => ({ entry, originalIndex: i })),
         }]
-    }, [data, categoriesEnabled])
+    }, [data, categoriesEnabled, i18n.groceryLocale])
 
     const renderCard = (indexed: IndexedEntry, cardKey: number) => (
         <GridCard

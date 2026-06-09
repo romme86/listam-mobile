@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme, type Theme } from '../theme'
+import { useI18n } from '../i18n'
 
 type Props = {
     value: string
@@ -12,6 +13,7 @@ type Props = {
 
 export function AddItemBar({ value, onChangeText, onSubmit, onClose }: Props) {
     const t = useTheme()
+    const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
 
     return (
@@ -23,7 +25,7 @@ export function AddItemBar({ value, onChangeText, onSubmit, onClose }: Props) {
                 onChangeText={onChangeText}
                 onSubmitEditing={onSubmit}
                 blurOnSubmit={false}
-                placeholder="Add item…"
+                placeholder={i18n.t('main.addItem.placeholder')}
                 placeholderTextColor={t.colors.placeholder}
                 returnKeyType="done"
                 autoFocus
