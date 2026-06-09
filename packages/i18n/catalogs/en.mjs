@@ -133,6 +133,8 @@ export const EN_MESSAGES = {
     'loyalty.viewer.delete.message': 'Remove "{name}" loyalty card?',
     'loyalty.notification.saved': 'Saved {name} card',
     'loyalty.notification.loadFailed': 'Could not load that loyalty card',
+    'loyalty.notification.saveFailed': 'Could not save that loyalty card',
+    'loyalty.notification.deleteFailed': 'Could not delete that loyalty card',
 
     'paywall.title': 'Your trial has ended',
     'paywall.subtitle': 'Thanks for trying Listam! Subscribe to continue using the app and support development.',

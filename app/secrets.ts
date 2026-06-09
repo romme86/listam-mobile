@@ -7,9 +7,15 @@ import {
 } from 'expo-file-system/legacy'
 import {
     LEGACY_SECRET_FILES,
+    deleteLoyaltyCardPayload as deleteSharedLoyaltyCardPayload,
     prepareBackendSecrets,
+    prepareLoyaltyCardPayloads as prepareSharedLoyaltyCardPayloads,
+    persistLoyaltyCardPayload as persistSharedLoyaltyCardPayload,
     persistBackendSecretRequest,
+    readLoyaltyCardPayload as readSharedLoyaltyCardPayload,
     type LegacySecretFiles,
+    type LoyaltyCardHandle,
+    type LoyaltyCardPayload,
     type MemorySecretStore,
     type SecretName,
     type SecureSecretStore,
@@ -60,6 +66,18 @@ const metadataStore = {
     },
 }
 
+const asyncStorageStore = {
+    getItem(key: string) {
+        return AsyncStorage.getItem(key)
+    },
+    setItem(key: string, value: string) {
+        return AsyncStorage.setItem(key, value)
+    },
+    removeItem(key: string) {
+        return AsyncStorage.removeItem(key)
+    },
+}
+
 export function createLegacySecretFileAdapter(baseDirUri: string): LegacySecretFiles {
     return {
         async readFile(filename) {
@@ -95,6 +113,40 @@ export function persistBackendSecretFromPayload(rawPayload: string) {
     })
 }
 
+export function prepareLoyaltyCards() {
+    return prepareSharedLoyaltyCardPayloads({
+        secureStore,
+        handleStore: asyncStorageStore,
+        legacyStore: asyncStorageStore,
+        metadataStore,
+    })
+}
+
+export function persistLoyaltyCard(card: LoyaltyCardPayload) {
+    return persistSharedLoyaltyCardPayload(card, {
+        secureStore,
+        handleStore: asyncStorageStore,
+        legacyStore: asyncStorageStore,
+        metadataStore,
+    })
+}
+
+export function readLoyaltyCard(card: LoyaltyCardHandle | string) {
+    return readSharedLoyaltyCardPayload(card, {
+        secureStore,
+        legacyStore: asyncStorageStore,
+    })
+}
+
+export function deleteLoyaltyCard(card: LoyaltyCardHandle | string) {
+    return deleteSharedLoyaltyCardPayload(card, {
+        secureStore,
+        handleStore: asyncStorageStore,
+        legacyStore: asyncStorageStore,
+        metadataStore,
+    })
+}
+
 function legacyFileUri(baseDirUri: string, filename: string): string {
     if (!baseDirUri) return ''
     const root = baseDirUri.endsWith('/') ? baseDirUri : `${baseDirUri}/`
@@ -102,3 +154,4 @@ function legacyFileUri(baseDirUri: string, filename: string): string {
 }
 
 export { LEGACY_SECRET_FILES }
+export type { LoyaltyCardHandle, LoyaltyCardPayload }

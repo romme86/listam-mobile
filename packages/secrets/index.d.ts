@@ -1,6 +1,10 @@
 export const SECRET_PAYLOAD_VERSION: 1
 export const SECRET_STORE_KEY_PREFIX: 'listam.secret.v1.'
 export const SECRET_METADATA_KEY: string
+export const LEGACY_LOYALTY_CARDS_KEY: '@lista_loyalty_cards'
+export const LOYALTY_CARD_HANDLES_KEY: '@lista_loyalty_card_handles'
+export const LOYALTY_CARD_PAYLOAD_KEY_PREFIX: string
+export const LOYALTY_CARD_METADATA_KEY: string
 export const SECURE_SECRET_FILES: {
     readonly autobaseKey: 'lista-autobase-key.txt'
     readonly encryptionKey: 'lista-encryption-key.txt'
@@ -61,6 +65,37 @@ export type SecretStorageAdapters = {
     metadataStore?: MetadataStore
     memoryStore?: MemorySecretStore
 }
+export type LoyaltyCardPayloadMode = 'secure-store' | 'legacy-recovery' | 'unavailable'
+export type KeyValueStore = {
+    getItem: (key: string) => Promise<string | null>
+    setItem: (key: string, value: string) => Promise<void>
+    removeItem?: (key: string) => Promise<void>
+}
+export type LoyaltyCardPayload = {
+    id: string
+    name: string
+    type: string
+    data: string
+}
+export type LoyaltyCardHandle = {
+    id: string
+    name: string
+    type: string
+    payloadRef: string
+}
+export type LoyaltyCardStorageAdapters = {
+    secureStore: SecureSecretStore
+    handleStore?: KeyValueStore
+    legacyStore?: KeyValueStore
+    metadataStore?: MetadataStore
+}
+export type PreparedLoyaltyCardPayloads = {
+    handles: LoyaltyCardHandle[]
+    mode: LoyaltyCardPayloadMode
+    secureStorageAvailable: boolean
+    migratedCount: number
+    warnings: string[]
+}
 export type BackendSecretPersistRequest = {
     version?: number
     op?: 'set' | 'delete'
@@ -81,6 +116,14 @@ export type DeleteSecretPayload = {
 }
 
 export function secretStoreKey(name: SecretName): string
+export function loyaltyCardPayloadRef(id: unknown): string
+export function loyaltyCardPayloadStoreKey(payloadRef: unknown): string | null
+export function normalizeLoyaltyCardPayload(raw: unknown): LoyaltyCardPayload | null
+export function normalizeLoyaltyCardHandle(raw: unknown): LoyaltyCardHandle | null
+export function toLoyaltyCardHandle(card: unknown): LoyaltyCardHandle | null
+export function parseLoyaltyCardPayloadList(raw: unknown): LoyaltyCardPayload[]
+export function parseLoyaltyCardHandleList(raw: unknown): LoyaltyCardHandle[]
+export function serializeLoyaltyCardHandles(handles: unknown[]): string
 export function normalizeSecretValue(name: string, raw: unknown): string | null
 export function parseSecretName(raw: unknown): SecretName | null
 export function secretFingerprint(value: string): string
@@ -92,3 +135,7 @@ export function createDeleteSecretPayload(name: SecretName): DeleteSecretPayload
 export function parseSecretAck(ack: unknown): boolean
 export function prepareBackendSecrets(adapters: SecretStorageAdapters): Promise<PreparedBackendSecrets>
 export function persistBackendSecretRequest(rawRequest: string | BackendSecretPersistRequest, adapters: SecretStorageAdapters): Promise<{ mode: SecretMode; warning?: string }>
+export function prepareLoyaltyCardPayloads(adapters: LoyaltyCardStorageAdapters): Promise<PreparedLoyaltyCardPayloads>
+export function persistLoyaltyCardPayload(card: unknown, adapters: LoyaltyCardStorageAdapters): Promise<{ handle: LoyaltyCardHandle; mode: 'secure-store'; warnings: string[] }>
+export function readLoyaltyCardPayload(handleOrRef: unknown, adapters: LoyaltyCardStorageAdapters): Promise<LoyaltyCardPayload | null>
+export function deleteLoyaltyCardPayload(handleOrId: unknown, adapters: LoyaltyCardStorageAdapters): Promise<{ mode: LoyaltyCardPayloadMode; warnings: string[] }>

@@ -37,7 +37,6 @@ import {
 import {
     loyaltyCardsActions,
     selectLoyaltyCardHandles,
-    toLoyaltyCardHandle,
     type LoyaltyCardHandle,
 } from './store/loyaltyCardsSlice'
 import { useSubscription } from './hooks/useSubscription'
@@ -58,7 +57,14 @@ import { SummaryBar } from './components/SummaryBar'
 import { SnackbarProvider, useSnackbar } from './components/Snackbar'
 import { haptics } from './feedback'
 import { I18nProvider, useI18n, type LocaleChoice } from './i18n'
+import { appLogger } from './logger'
 import { useTheme } from './theme'
+import {
+    deleteLoyaltyCard as deleteStoredLoyaltyCard,
+    persistLoyaltyCard as persistStoredLoyaltyCard,
+    prepareLoyaltyCards,
+    readLoyaltyCard as readStoredLoyaltyCard,
+} from './secrets'
 import {
     createJoinConfirmationRequest,
     extractInviteFromInput,
@@ -75,46 +81,11 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 const PREF_GRID_VIEW = '@lista_grid_view'
 const PREF_CATEGORIES = '@lista_categories'
-const PREF_LOYALTY_CARDS = '@lista_loyalty_cards'
 const PREF_GRID_ICON_SIZE = '@lista_grid_icon_size'
 const PREF_LIST_TEXT_SIZE = '@lista_list_text_size'
 const PREF_CATEGORY_HEADERS = '@lista_category_headers'
 const PREF_ITEM_ICON_VARIANT = '@lista_item_icon_variant'
 const PREF_LOCALE_CHOICE = '@lista_locale_choice'
-
-function parseStoredLoyaltyCards(raw: string | null): LoyaltyCard[] {
-    if (!raw) return []
-    try {
-        const parsed = JSON.parse(raw)
-        if (!Array.isArray(parsed)) return []
-        return parsed
-            .filter((card): card is LoyaltyCard => (
-                card &&
-                typeof card.id === 'string' &&
-                typeof card.name === 'string' &&
-                typeof card.data === 'string'
-            ))
-            .map((card) => ({
-                id: card.id,
-                name: card.name,
-                data: card.data,
-                type: typeof card.type === 'string' ? card.type : 'unknown',
-            }))
-    } catch {
-        return []
-    }
-}
-
-function indexLoyaltyCardPayloads(cards: LoyaltyCard[]): Record<string, LoyaltyCard> {
-    return cards.reduce<Record<string, LoyaltyCard>>((acc, card) => {
-        acc[card.id] = card
-        return acc
-    }, {})
-}
-
-function serializeLoyaltyCardPayloads(cardsById: Record<string, LoyaltyCard>): string {
-    return JSON.stringify(Object.values(cardsById))
-}
 
 function AppInner() {
     const t = useTheme()
@@ -167,7 +138,6 @@ function AppInner() {
     const [isAdding, setIsAdding] = useState(false)
     const [addText, setAddText] = useState('')
 
-    const loyaltyCardPayloadsRef = useRef<Record<string, LoyaltyCard>>({})
     const pendingConfirmedInviteRef = useRef('')
     const pendingJoinConfirmationInviteRef = useRef('')
     const initialDeepLinkHandledRef = useRef(false)
@@ -270,13 +240,12 @@ function AppInner() {
         AsyncStorage.multiGet([
             PREF_GRID_VIEW,
             PREF_CATEGORIES,
-            PREF_LOYALTY_CARDS,
             PREF_GRID_ICON_SIZE,
             PREF_LIST_TEXT_SIZE,
             PREF_CATEGORY_HEADERS,
             PREF_ITEM_ICON_VARIANT,
             PREF_LOCALE_CHOICE,
-        ]).then(([[, grid], [, cats], [, cards], [, gridSize], [, textSize], [, categoryHeaders], [, iconVariant], [, localeChoice]]) => {
+        ]).then(([[, grid], [, cats], [, gridSize], [, textSize], [, categoryHeaders], [, iconVariant], [, localeChoice]]) => {
             dispatch(preferencesActions.preferencesHydrated({
                 ...(grid !== null ? { isGridView: grid === 'true' } : {}),
                 ...(cats !== null ? { categoriesEnabled: cats === 'true' } : {}),
@@ -286,11 +255,17 @@ function AppInner() {
                 ...(isItemIconVariant(iconVariant) ? { itemIconVariant: iconVariant } : {}),
                 ...(isLocaleChoice(localeChoice) ? { localeChoice } : {}),
             }))
-
-            const storedCards = parseStoredLoyaltyCards(cards)
-            loyaltyCardPayloadsRef.current = indexLoyaltyCardPayloads(storedCards)
-            dispatch(loyaltyCardsActions.loyaltyCardsHydrated(storedCards.map(toLoyaltyCardHandle)))
         })
+
+        void prepareLoyaltyCards()
+            .then(({ handles, warnings }) => {
+                if (warnings.length > 0) appLogger.warn('Loyalty-card storage warnings', { warnings })
+                dispatch(loyaltyCardsActions.loyaltyCardsHydrated(handles))
+            })
+            .catch((error) => {
+                appLogger.error('Failed to hydrate loyalty-card handles', error)
+                dispatch(loyaltyCardsActions.loyaltyCardsHydrated([]))
+            })
     }, [dispatch])
 
     const handleToggleView = useCallback(() => {
@@ -332,38 +307,41 @@ function AppInner() {
     }, [categoryHeadersVisible, dispatch])
 
     const handleCardScanned = useCallback((card: LoyaltyCard) => {
-        const nextPayloads = { ...loyaltyCardPayloadsRef.current, [card.id]: card }
-        loyaltyCardPayloadsRef.current = nextPayloads
-        dispatch(loyaltyCardsActions.loyaltyCardAdded(toLoyaltyCardHandle(card)))
-        AsyncStorage.setItem(PREF_LOYALTY_CARDS, serializeLoyaltyCardPayloads(nextPayloads))
+        void persistStoredLoyaltyCard(card)
+            .then(({ handle, warnings }) => {
+                if (warnings.length > 0) appLogger.warn('Loyalty-card save warnings', { warnings })
+                dispatch(loyaltyCardsActions.loyaltyCardAdded(handle))
+                snackbar.show(i18n.t('loyalty.notification.saved', { name: card.name }), 'success')
+            })
+            .catch((error) => {
+                appLogger.error('Failed to save loyalty card', error)
+                snackbar.show(i18n.t('loyalty.notification.saveFailed'), 'error')
+            })
         setScannerVisible(false)
-        snackbar.show(i18n.t('loyalty.notification.saved', { name: card.name }), 'success')
     }, [dispatch, i18n, snackbar])
 
     const handleDeleteCard = useCallback((id: string) => {
-        const nextPayloads = { ...loyaltyCardPayloadsRef.current }
-        delete nextPayloads[id]
-        loyaltyCardPayloadsRef.current = nextPayloads
-        dispatch(loyaltyCardsActions.loyaltyCardRemoved(id))
-        AsyncStorage.setItem(PREF_LOYALTY_CARDS, serializeLoyaltyCardPayloads(nextPayloads))
-    }, [dispatch])
+        void deleteStoredLoyaltyCard(id)
+            .then(({ warnings }) => {
+                if (warnings.length > 0) appLogger.warn('Loyalty-card delete warnings', { warnings })
+                dispatch(loyaltyCardsActions.loyaltyCardRemoved(id))
+            })
+            .catch((error) => {
+                appLogger.error('Failed to delete loyalty card', error)
+                snackbar.show(i18n.t('loyalty.notification.deleteFailed'), 'error')
+            })
+    }, [dispatch, i18n, snackbar])
 
     const handleSelectCard = useCallback((card: LoyaltyCardHandle) => {
-        const payload = loyaltyCardPayloadsRef.current[card.payloadRef] ?? loyaltyCardPayloadsRef.current[card.id]
-        if (payload) {
-            setSelectedCard(payload)
-            return
-        }
-
-        AsyncStorage.getItem(PREF_LOYALTY_CARDS)
-            .then((raw) => {
-                const storedCards = parseStoredLoyaltyCards(raw)
-                loyaltyCardPayloadsRef.current = indexLoyaltyCardPayloads(storedCards)
-                const reloaded = loyaltyCardPayloadsRef.current[card.payloadRef] ?? loyaltyCardPayloadsRef.current[card.id]
-                if (reloaded) setSelectedCard(reloaded)
+        void readStoredLoyaltyCard(card)
+            .then((payload) => {
+                if (payload) setSelectedCard(payload)
                 else snackbar.show(i18n.t('loyalty.notification.loadFailed'), 'error')
             })
-            .catch(() => snackbar.show(i18n.t('loyalty.notification.loadFailed'), 'error'))
+            .catch((error) => {
+                appLogger.error('Failed to load loyalty card', error)
+                snackbar.show(i18n.t('loyalty.notification.loadFailed'), 'error')
+            })
     }, [i18n, snackbar])
 
     useEffect(() => {

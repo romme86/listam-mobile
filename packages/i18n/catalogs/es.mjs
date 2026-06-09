@@ -133,6 +133,8 @@ export const ES_MESSAGES = {
     'loyalty.viewer.delete.message': 'Quitar la tarjeta de fidelidad "{name}"?',
     'loyalty.notification.saved': 'Tarjeta {name} guardada',
     'loyalty.notification.loadFailed': 'No se pudo cargar esa tarjeta de fidelidad',
+    'loyalty.notification.saveFailed': 'No se pudo guardar esa tarjeta de fidelidad',
+    'loyalty.notification.deleteFailed': 'No se pudo eliminar esa tarjeta de fidelidad',
 
     'paywall.title': 'Tu prueba ha terminado',
     'paywall.subtitle': 'Gracias por probar Listam. Suscribete para seguir usando la app y apoyar el desarrollo.',

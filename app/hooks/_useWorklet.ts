@@ -12,6 +12,7 @@ import {
     prepareBackendSecretPayload,
     persistBackendSecretFromPayload,
 } from '../secrets'
+import { appLogger } from '../logger'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { listsActions, selectSelectedListItems } from '../store/listsSlice'
 import { selectSyncState, syncActions, type JoinPhase } from '../store/syncSlice'
@@ -105,7 +106,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
 
     const sendRPC = useCallback((command: number, payload?: string) => {
         if (!rpcRef.current) {
-            console.warn('RPC not ready, ignoring command', command)
+            appLogger.warn('RPC not ready, ignoring command', { command })
             return
         }
         const req = rpcRef.current.request(command)
@@ -115,7 +116,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
     }, [])
 
     const startWorklet = useCallback(async () => {
-        console.log('Starting worklet (singleton)')
+        appLogger.info('Starting worklet singleton')
         const baseDir =
             FileSystemExpo.Paths.document.uri ??
             FileSystemExpo.Paths.cache.uri ??
@@ -236,12 +237,12 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                             notifyRef.current(i18nRef.current.t('backend.memberRemoval.incomplete'), 'error')
                         }
                     } else {
-                        console.log('RPC_MESSAGE payload (unhandled type):', payload)
+                        appLogger.info('Unhandled backend message payload', payload)
                     }
                     return
                 }
                 case 'message-empty':
-                    console.log('RPC_MESSAGE without data')
+                    appLogger.info('Backend RPC message without data')
                     return
                 case 'reset':
                     dispatch(listsActions.selectedListCleared())
@@ -268,10 +269,10 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                     }
                     return
                 case 'invalid-json':
-                    console.warn('Invalid backend RPC payload', event)
+                    appLogger.warn('Invalid backend RPC payload', event)
                     return
                 case 'unknown':
-                    console.log('Unknown backend RPC event', event)
+                    appLogger.info('Unknown backend RPC event', event)
                     return
             }
         })
