@@ -1,20 +1,20 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { performMemberRemovalRekey } from './rekey.mjs'
+import { performMemberRemovalRekey } from '@listam/backend/lib/rekey.mjs'
 import {
     createAddWriterMembershipRecord,
     createOwnerAuthorityKeyPair,
     createOwnerBootstrapRecord,
     reduceMembershipLog,
     reduceMembershipOperation,
-} from './membership.mjs'
+} from '@listam/backend/lib/membership.mjs'
 import {
     createEpochEncryptionKeyPair,
     epochKeyHashHex,
     epochPublicKeyHex,
     generateEpochKey,
-} from './key-epochs.mjs'
-import { createListOperation } from './list-reducer.mjs'
+} from '@listam/backend/lib/key-epochs.mjs'
+import { createListOperation } from '@listam/domain/list-reducer'
 
 const baseKey = Buffer.from('ab'.repeat(32), 'hex')
 const ownerWriterKey = Buffer.from('11'.repeat(32), 'hex')

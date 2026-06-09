@@ -6,6 +6,7 @@
   "exports": {
     ".": "./index.mjs",
     "./backend": "./backend.mjs",
+    "./lib/*.mjs": "./lib/*.mjs",
     "./platform/bare-kit": "./platform/bare-kit.mjs",
     "./platform/node": "./platform/node.mjs"
   },

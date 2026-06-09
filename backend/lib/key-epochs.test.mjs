@@ -9,7 +9,7 @@ import {
     epochKeyHashHex,
     epochPublicKeyHex,
     generateEpochKey,
-} from './key-epochs.mjs'
+} from '@listam/backend/lib/key-epochs.mjs'
 
 const writerA = Buffer.from('a'.repeat(64), 'hex')
 const writerB = Buffer.from('b'.repeat(64), 'hex')

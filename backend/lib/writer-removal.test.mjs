@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { removeWriterAtConsensus } from './writer-removal.mjs'
+import { removeWriterAtConsensus } from '@listam/backend/lib/writer-removal.mjs'
 
 const writerKey = Buffer.from('ab'.repeat(32), 'hex')
 
