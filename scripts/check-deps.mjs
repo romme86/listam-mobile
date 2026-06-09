@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 import { builtinModules } from 'node:module'
 
 const root = join(fileURLToPath(import.meta.url), '..', '..')
-const SCAN_DIRS = ['app', 'backend', 'scripts']
+const SCAN_DIRS = ['app', 'backend', 'packages', 'scripts']
 const CODE_EXT = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'])
 const SKIP_DIRS = new Set(['node_modules', '__pycache__', 'assets'])
 

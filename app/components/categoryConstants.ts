@@ -1,27 +1,4 @@
-export const CATEGORY_ORDER: string[] = [
-    'Fruits',
-    'Vegetables',
-    'Bread & Bakery',
-    'Deli',
-    'Meat',
-    'Fish & Seafood',
-    'Dairy',
-    'Canned Goods',
-    'Pasta/Rice/Cereal',
-    'Condiments & Spices',
-    'Baking',
-    'Snacks',
-    'Beverages',
-    'Frozen Foods',
-    'Ready Meals',
-    'International Foods',
-    'Health & Organic',
-    'Personal Care',
-    'Household & Cleaning',
-    'Baby Items',
-    'Pet Care',
-    'Others',
-]
+export { CATEGORY_ORDER } from '@listam/grocery'
 
 export const CATEGORY_ICONS: Record<string, string> = {
     'Fruits': 'nutrition-outline',

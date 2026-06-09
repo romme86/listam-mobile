@@ -1,13 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createListOperation, createListViewEntry, reduceListViewEntries } from './list-reducer.mjs'
+import { createListOperation, createListViewEntry, reduceListViewEntries } from '@listam/domain/list-reducer'
 import {
     identityKey,
     deleteListEntry,
     normalizeListEntries,
     updateListEntry,
     upsertListEntry,
-} from '../../list-identity.mjs'
+} from '@listam/domain/identity'
 
 // Phase 5 acceptance: "the backend materialized view and the UI projection agree
 // on duplicate names." The backend reduces the persisted view log; the UI folds

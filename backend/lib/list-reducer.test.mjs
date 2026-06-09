@@ -8,7 +8,7 @@ import {
     legacyItemId,
     reduceListOperations,
     reduceListViewEntries,
-} from './list-reducer.mjs'
+} from '@listam/domain/list-reducer'
 
 function item(fields) {
     return {

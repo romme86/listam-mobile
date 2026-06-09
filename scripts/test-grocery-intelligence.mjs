@@ -3,13 +3,13 @@
 import assert from 'node:assert/strict'
 import childProcess from 'node:child_process'
 import fs from 'node:fs'
-import { createRequire } from 'node:module'
+import Module, { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { getCategoryForItem } from '@listam/grocery'
 
 const require = createRequire(import.meta.url)
-const Module = require('node:module')
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'listam-grocery-test-'))
@@ -19,31 +19,32 @@ const tmpSourceRoot = path.join(tmpRoot, 'src')
 const tmpComponentRoot = path.join(tmpSourceRoot, 'app/components')
 
 fs.mkdirSync(tmpComponentRoot, { recursive: true })
+fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(tmpRoot, 'node_modules'), 'dir')
 
 fs.writeFileSync(shimPath, [
     "declare function require(id: string): any",
     "declare module 'react-native' { export type ImageSourcePropType = any }",
+    "declare module '@listam/grocery' {",
+    "  export function containsLookupTerm(text: string, term: string): boolean",
+    "  export function getFirstAsciiLetter(text: unknown): string",
+    "  export function getCategoryForItem(text: unknown): string",
+    "  export function normalizeGroceryText(text: unknown): string",
+    "  export function toRawLookupText(text: unknown): string",
+    "  export const TRANSLATED_ITEM_TO_EN: Record<string, string>",
+    "}",
     '',
 ].join('\n'))
 
-copyComponentSource('groceryText.ts')
-copyComponentSource('categoryTranslations.ts')
-copyComponentSource('itemTranslations.ts')
-copyComponentSource('categoryLookup.ts')
 copyComponentSource('itemIconMap.ts', sanitizeItemIconMapForTsc)
 
 const sources = [
     shimPath,
-    path.join(tmpComponentRoot, 'groceryText.ts'),
-    path.join(tmpComponentRoot, 'categoryTranslations.ts'),
-    path.join(tmpComponentRoot, 'itemTranslations.ts'),
-    path.join(tmpComponentRoot, 'categoryLookup.ts'),
     path.join(tmpComponentRoot, 'itemIconMap.ts'),
 ]
 
 const compile = childProcess.spawnSync('tsc', [
     '--target', 'ES2020',
-    '--module', 'commonjs',
+    '--module', 'ES2022',
     '--moduleResolution', 'node',
     '--esModuleInterop',
     '--skipLibCheck',
@@ -62,13 +63,11 @@ if (compile.status !== 0) {
     process.exit(compile.status ?? 1)
 }
 
-const categoryModulePath = findCompiledFile(outDir, 'categoryLookup.js')
 const iconModulePath = findCompiledFile(outDir, 'itemIconMap.js')
 installImageRequireHook()
+installRequireForEsm(iconModulePath)
 
-const compiledRequire = createRequire(iconModulePath)
-const { getCategoryForItem } = compiledRequire(categoryModulePath)
-const { resolveIconKeyForItem } = compiledRequire(iconModulePath)
+const { resolveIconKeyForItem } = await import(pathToFileURL(iconModulePath).href)
 
 const categoryCases = [
     ['canned tuna', 'Canned Goods'],
@@ -158,6 +157,18 @@ function sanitizeItemIconMapForTsc(source) {
     const after = source.slice(end + '\n}'.length)
 
     return `${before}const MANUAL_TRANSLATIONS: Record<string, string> = Object.fromEntries([${body}\n])${after}`
+}
+
+function installRequireForEsm(modulePath) {
+    const source = fs.readFileSync(modulePath, 'utf8')
+    const lines = source.split('\n')
+    let insertIndex = 0
+    while (insertIndex < lines.length && lines[insertIndex].startsWith('import ')) {
+        insertIndex++
+    }
+    lines.unshift("import { createRequire } from 'node:module'")
+    lines.splice(insertIndex + 1, 0, 'const require = createRequire(import.meta.url)')
+    fs.writeFileSync(modulePath, lines.join('\n'))
 }
 
 function installImageRequireHook() {
