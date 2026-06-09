@@ -2,6 +2,7 @@ const LEVEL_PREFIX = /^\[(INFO|WARNING|WARN|ERROR|FATAL|AUDIT|DEBUG|TRACE)\]\s*/
 const HEX_KEY = /\b[0-9a-f]{64,}\b/gi
 const Z32_BLOB = /\b[ybndrfg8ejkmcpqxot1uwisza345h769]{52,}\b/gi
 const INVITE_PARAM = /([?&]invite=)[^&\s]+/gi
+const CARD_PAYLOAD_ASSIGNMENT = /\b((?:barcode|barcodeData|qrData|cardData|loyaltyCardData|loyaltyCardPayload|rawScan|scanData)\s*[:=]\s*)[^\s,;}\]]+/gi
 const SENSITIVE_KEYS = new Set([
     'key',
     'baseKey',
@@ -36,6 +37,14 @@ const SENSITIVE_KEYS = new Set([
     'data',
     'value',
     'payload',
+    'barcode',
+    'barcodeData',
+    'qrData',
+    'cardData',
+    'loyaltyCardData',
+    'loyaltyCardPayload',
+    'rawScan',
+    'scanData',
     'authorization',
     'authHeader',
     'token'
@@ -90,8 +99,17 @@ export function redactForLog(value, depth = 0, seen = new WeakSet()) {
 export function redactString(value) {
     return String(value)
         .replace(INVITE_PARAM, '$1[redacted]')
+        .replace(CARD_PAYLOAD_ASSIGNMENT, '$1[redacted-card]')
         .replace(HEX_KEY, '[redacted-hex]')
         .replace(Z32_BLOB, '[redacted-invite]')
+}
+
+export function redactForExport(value) {
+    return redactForLog(value)
+}
+
+export function redactDiagnosticBundle(value) {
+    return redactForLog(value)
 }
 
 export function parseLogArgs(args, options = {}) {

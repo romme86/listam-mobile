@@ -15,6 +15,8 @@ export type Logger = {
 
 export function redactForLog(value: unknown, depth?: number, seen?: WeakSet<object>): unknown
 export function redactString(value: unknown): string
+export function redactForExport(value: unknown): unknown
+export function redactDiagnosticBundle(value: unknown): unknown
 export function parseLogArgs(args: unknown[], options?: { app?: string }): LogRow
 export function formatLogLine(args: unknown[], options?: { app?: string }): string
 export function createLogger(options?: { app?: string; write?: (line: string) => void }): Logger

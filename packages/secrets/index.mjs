@@ -2,6 +2,10 @@ export const SECRET_PAYLOAD_VERSION = 1
 
 export const SECRET_STORE_KEY_PREFIX = 'listam.secret.v1.'
 export const SECRET_METADATA_KEY = `${SECRET_STORE_KEY_PREFIX}metadata`
+export const LEGACY_LOYALTY_CARDS_KEY = '@lista_loyalty_cards'
+export const LOYALTY_CARD_HANDLES_KEY = '@lista_loyalty_card_handles'
+export const LOYALTY_CARD_PAYLOAD_KEY_PREFIX = `${SECRET_STORE_KEY_PREFIX}loyalty-card.`
+export const LOYALTY_CARD_METADATA_KEY = `${SECRET_STORE_KEY_PREFIX}loyalty-card-metadata`
 
 export const SECURE_SECRET_FILES = {
     autobaseKey: 'lista-autobase-key.txt',
@@ -40,9 +44,90 @@ export const HEX_SECRET_BYTES = Object.freeze({
 
 const CLEANUP_FILES = Object.values(LEGACY_CLEANUP_FILES)
 const HEX = /^[0-9a-f]+$/i
+const SAFE_STORAGE_SEGMENT = /[^A-Za-z0-9._-]/g
 
 export function secretStoreKey(name) {
     return `${SECRET_STORE_KEY_PREFIX}${name}`
+}
+
+export function loyaltyCardPayloadRef(id) {
+    const segment = normalizeStorageSegment(id)
+    return segment ? `card.${segment}` : ''
+}
+
+export function loyaltyCardPayloadStoreKey(payloadRef) {
+    const ref = normalizeLoyaltyCardPayloadRef(payloadRef)
+    return ref ? `${LOYALTY_CARD_PAYLOAD_KEY_PREFIX}${ref}` : null
+}
+
+export function normalizeLoyaltyCardPayload(raw) {
+    const value = parseJsonIfString(raw)
+    if (!value || typeof value !== 'object') return null
+
+    const id = normalizeNonEmptyString(value.id)
+    const name = normalizeNonEmptyString(value.name)
+    const data = normalizeNonEmptyString(value.data ?? value.payload)
+    if (!id || !name || !data) return null
+
+    return {
+        id,
+        name,
+        type: normalizeNonEmptyString(value.type) || 'unknown',
+        data,
+    }
+}
+
+export function normalizeLoyaltyCardHandle(raw) {
+    const value = parseJsonIfString(raw)
+    if (!value || typeof value !== 'object') return null
+
+    const id = normalizeNonEmptyString(value.id)
+    const name = normalizeNonEmptyString(value.name)
+    if (!id || !name) return null
+
+    return {
+        id,
+        name,
+        type: normalizeNonEmptyString(value.type) || 'unknown',
+        payloadRef: normalizeLoyaltyCardPayloadRef(value.payloadRef) || loyaltyCardPayloadRef(id),
+    }
+}
+
+export function toLoyaltyCardHandle(card) {
+    const payload = normalizeLoyaltyCardPayload(card)
+    if (payload) {
+        return {
+            id: payload.id,
+            name: payload.name,
+            type: payload.type,
+            payloadRef: loyaltyCardPayloadRef(payload.id),
+        }
+    }
+
+    return normalizeLoyaltyCardHandle(card)
+}
+
+export function parseLoyaltyCardPayloadList(raw) {
+    const parsed = parseJsonIfString(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+        .map(normalizeLoyaltyCardPayload)
+        .filter(Boolean)
+}
+
+export function parseLoyaltyCardHandleList(raw) {
+    const parsed = parseJsonIfString(raw)
+    if (!Array.isArray(parsed)) return []
+    return dedupeLoyaltyCardHandles(parsed.map(normalizeLoyaltyCardHandle).filter(Boolean))
+}
+
+export function serializeLoyaltyCardHandles(handles) {
+    return JSON.stringify(dedupeLoyaltyCardHandles(handles).map((handle) => ({
+        id: handle.id,
+        name: handle.name,
+        type: handle.type,
+        payloadRef: handle.payloadRef,
+    })))
 }
 
 export function normalizeSecretValue(name, raw) {
@@ -233,6 +318,173 @@ export async function persistBackendSecretRequest(rawRequest, adapters) {
     }
 }
 
+export async function prepareLoyaltyCardPayloads(adapters) {
+    const warnings = []
+    const secureStorageAvailable = await isSecureStoreAvailable(adapters.secureStore, warnings)
+    const storedHandles = adapters.handleStore
+        ? await readStoredLoyaltyCardHandles(adapters.handleStore, warnings)
+        : []
+    const legacyPayloads = adapters.legacyStore
+        ? await readLegacyLoyaltyCardPayloads(adapters.legacyStore, warnings)
+        : []
+
+    let handles = dedupeLoyaltyCardHandles(storedHandles)
+    let migratedCount = 0
+    let migrationComplete = true
+
+    if (secureStorageAvailable) {
+        for (const payload of legacyPayloads) {
+            const handle = toLoyaltyCardHandle(payload)
+            try {
+                await writeAndConfirmLoyaltyCardPayload(adapters.secureStore, handle, payload)
+                handles = upsertLoyaltyCardHandle(handles, handle)
+                migratedCount += 1
+            } catch {
+                migrationComplete = false
+                warnings.push(`Loyalty-card payload migration failed for ${payload.id}.`)
+            }
+        }
+
+        if (adapters.handleStore) {
+            await writeStoredLoyaltyCardHandles(adapters.handleStore, handles, warnings)
+        }
+        if (legacyPayloads.length > 0 && migrationComplete && adapters.legacyStore?.removeItem) {
+            try {
+                await adapters.legacyStore.removeItem(LEGACY_LOYALTY_CARDS_KEY)
+            } catch {
+                warnings.push('Legacy loyalty-card payload cleanup failed.')
+            }
+        }
+        await writeLoyaltyCardMetadata(adapters.metadataStore, 'secure-store', handles, migratedCount, warnings)
+        return {
+            handles,
+            mode: 'secure-store',
+            secureStorageAvailable,
+            migratedCount,
+            warnings,
+        }
+    }
+
+    if (legacyPayloads.length > 0) {
+        handles = dedupeLoyaltyCardHandles([
+            ...handles,
+            ...legacyPayloads.map(toLoyaltyCardHandle),
+        ])
+        warnings.push('Secure storage is unavailable; legacy loyalty-card payloads remain pending migration.')
+    }
+
+    const mode = legacyPayloads.length > 0 ? 'legacy-recovery' : 'unavailable'
+    await writeLoyaltyCardMetadata(adapters.metadataStore, mode, handles, migratedCount, warnings)
+    return {
+        handles,
+        mode,
+        secureStorageAvailable,
+        migratedCount,
+        warnings,
+    }
+}
+
+export async function persistLoyaltyCardPayload(card, adapters) {
+    const payload = normalizeLoyaltyCardPayload(card)
+    if (!payload) throw new Error('Invalid loyalty-card payload')
+
+    const warnings = []
+    const secureStorageAvailable = await isSecureStoreAvailable(adapters.secureStore, warnings)
+    if (!secureStorageAvailable) {
+        throw new Error('Secure storage is unavailable for loyalty-card payloads')
+    }
+
+    const handle = toLoyaltyCardHandle(payload)
+    await writeAndConfirmLoyaltyCardPayload(adapters.secureStore, handle, payload)
+
+    let handles = [handle]
+    if (adapters.handleStore) {
+        handles = upsertLoyaltyCardHandle(
+            await readStoredLoyaltyCardHandles(adapters.handleStore, warnings),
+            handle,
+        )
+        await writeStoredLoyaltyCardHandles(
+            adapters.handleStore,
+            handles,
+            warnings,
+        )
+    }
+    if (adapters.legacyStore) {
+        await removeLegacyLoyaltyCardPayload(adapters.legacyStore, handle.id, warnings)
+    }
+    await writeLoyaltyCardMetadata(adapters.metadataStore, 'secure-store', handles, 0, warnings)
+
+    return { handle, mode: 'secure-store', warnings }
+}
+
+export async function readLoyaltyCardPayload(handleOrRef, adapters) {
+    const warnings = []
+    const handle = normalizeLoyaltyCardHandle(handleOrRef)
+    const ref = handle?.payloadRef || normalizeLoyaltyCardPayloadRef(handleOrRef?.payloadRef || handleOrRef)
+    const id = handle?.id || normalizeNonEmptyString(handleOrRef?.id)
+    const secureStorageAvailable = await isSecureStoreAvailable(adapters.secureStore, warnings)
+
+    if (secureStorageAvailable && ref) {
+        try {
+            const key = loyaltyCardPayloadStoreKey(ref)
+            const payload = normalizeLoyaltyCardPayload(key ? await adapters.secureStore.getItem(key) : null)
+            if (payload) return payload
+        } catch {
+            warnings.push('Loyalty-card payload secure read failed.')
+        }
+    }
+
+    if (adapters.legacyStore && id) {
+        const legacyPayloads = await readLegacyLoyaltyCardPayloads(adapters.legacyStore, warnings)
+        return legacyPayloads.find((payload) => payload.id === id) ?? null
+    }
+
+    return null
+}
+
+export async function deleteLoyaltyCardPayload(handleOrId, adapters) {
+    const warnings = []
+    const handle = normalizeLoyaltyCardHandle(handleOrId)
+    const id = handle?.id || normalizeNonEmptyString(handleOrId)
+    const ref = handle?.payloadRef || (id ? loyaltyCardPayloadRef(id) : normalizeLoyaltyCardPayloadRef(handleOrId?.payloadRef))
+    const secureStorageAvailable = await isSecureStoreAvailable(adapters.secureStore, warnings)
+
+    if (secureStorageAvailable && ref) {
+        const key = loyaltyCardPayloadStoreKey(ref)
+        try {
+            if (key) await adapters.secureStore.deleteItem?.(key)
+        } catch {
+            warnings.push('Loyalty-card payload secure deletion failed.')
+        }
+    }
+
+    let remainingHandles = []
+    if (adapters.handleStore) {
+        const handles = await readStoredLoyaltyCardHandles(adapters.handleStore, warnings)
+        remainingHandles = handles.filter((entry) => entry.id !== id && entry.payloadRef !== ref)
+        await writeStoredLoyaltyCardHandles(
+            adapters.handleStore,
+            remainingHandles,
+            warnings,
+        )
+    }
+    if (adapters.legacyStore && id) {
+        await removeLegacyLoyaltyCardPayload(adapters.legacyStore, id, warnings)
+    }
+    await writeLoyaltyCardMetadata(
+        adapters.metadataStore,
+        secureStorageAvailable ? 'secure-store' : 'legacy-recovery',
+        remainingHandles,
+        0,
+        warnings,
+    )
+
+    return {
+        mode: secureStorageAvailable ? 'secure-store' : 'legacy-recovery',
+        warnings,
+    }
+}
+
 function parsePersistRequest(rawRequest) {
     if (typeof rawRequest !== 'string') return rawRequest
     return JSON.parse(rawRequest)
@@ -363,11 +615,157 @@ async function writeSecretMetadata(metadataStore, mode, secrets, warnings) {
     }
 }
 
+async function readStoredLoyaltyCardHandles(handleStore, warnings) {
+    try {
+        return parseLoyaltyCardHandleList(await handleStore.getItem(LOYALTY_CARD_HANDLES_KEY))
+    } catch {
+        warnings.push('Loyalty-card handle index read failed.')
+        return []
+    }
+}
+
+async function writeStoredLoyaltyCardHandles(handleStore, handles, warnings) {
+    try {
+        await handleStore.setItem(LOYALTY_CARD_HANDLES_KEY, serializeLoyaltyCardHandles(handles))
+    } catch {
+        warnings.push('Loyalty-card handle index write failed.')
+    }
+}
+
+async function readLegacyLoyaltyCardPayloads(legacyStore, warnings) {
+    try {
+        return parseLoyaltyCardPayloadList(await legacyStore.getItem(LEGACY_LOYALTY_CARDS_KEY))
+    } catch {
+        warnings.push('Legacy loyalty-card payload read failed.')
+        return []
+    }
+}
+
+async function removeLegacyLoyaltyCardPayload(legacyStore, id, warnings) {
+    if (!legacyStore || !id) return
+
+    const payloads = await readLegacyLoyaltyCardPayloads(legacyStore, warnings)
+    if (payloads.length === 0) return
+
+    const remaining = payloads.filter((payload) => payload.id !== id)
+    try {
+        if (remaining.length === 0 && legacyStore.removeItem) {
+            await legacyStore.removeItem(LEGACY_LOYALTY_CARDS_KEY)
+        } else {
+            await legacyStore.setItem(LEGACY_LOYALTY_CARDS_KEY, JSON.stringify(remaining))
+        }
+    } catch {
+        warnings.push('Legacy loyalty-card payload cleanup failed.')
+    }
+}
+
+async function writeAndConfirmLoyaltyCardPayload(secureStore, handle, payload) {
+    const key = loyaltyCardPayloadStoreKey(handle.payloadRef)
+    if (!key) throw new Error('Invalid loyalty-card payload ref')
+
+    const encoded = JSON.stringify({
+        version: SECRET_PAYLOAD_VERSION,
+        id: payload.id,
+        name: payload.name,
+        type: payload.type,
+        data: payload.data,
+    })
+    await secureStore.setItem(key, encoded)
+    const confirmed = normalizeLoyaltyCardPayload(await secureStore.getItem(key))
+    if (
+        !confirmed ||
+        confirmed.id !== payload.id ||
+        confirmed.name !== payload.name ||
+        confirmed.type !== payload.type ||
+        confirmed.data !== payload.data
+    ) {
+        throw new Error('Loyalty-card secure storage confirmation failed')
+    }
+}
+
+async function writeLoyaltyCardMetadata(metadataStore, mode, handles, migratedCount, warnings) {
+    if (!metadataStore) return
+
+    try {
+        await metadataStore.setItem(LOYALTY_CARD_METADATA_KEY, JSON.stringify({
+            version: SECRET_PAYLOAD_VERSION,
+            mode,
+            updatedAt: new Date().toISOString(),
+            cardCount: dedupeLoyaltyCardHandles(handles).length,
+            migratedCount,
+            warnings,
+        }))
+    } catch {
+        // Diagnostic metadata must never block payload migration.
+    }
+}
+
 function pickBackendSecrets(secrets) {
     const out = {}
     for (const name of BACKEND_SECRET_NAMES) {
         const value = secrets[name]
         if (value) out[name] = value
+    }
+    return out
+}
+
+function normalizeLoyaltyCardPayloadRef(value) {
+    const text = normalizeNonEmptyString(value)
+    if (!text) return ''
+    if (text.startsWith('card.')) {
+        const segment = normalizeStorageSegment(text.slice(5))
+        return segment ? `card.${segment}` : ''
+    }
+    return loyaltyCardPayloadRef(text)
+}
+
+function normalizeStorageSegment(value) {
+    const text = normalizeNonEmptyString(value)
+    if (!text) return ''
+    return text.replace(SAFE_STORAGE_SEGMENT, '_').slice(0, 160)
+}
+
+function normalizeNonEmptyString(value) {
+    if (typeof value !== 'string' && typeof value !== 'number') return ''
+    const text = String(value).trim()
+    return text || ''
+}
+
+function parseJsonIfString(value) {
+    if (typeof value !== 'string') return value
+    try {
+        return JSON.parse(value)
+    } catch {
+        return null
+    }
+}
+
+function upsertLoyaltyCardHandle(handles, handle) {
+    const normalized = normalizeLoyaltyCardHandle(handle)
+    if (!normalized) return dedupeLoyaltyCardHandles(handles)
+
+    const out = []
+    let replaced = false
+    for (const entry of dedupeLoyaltyCardHandles(handles)) {
+        if (entry.id === normalized.id) {
+            out.push(normalized)
+            replaced = true
+        } else {
+            out.push(entry)
+        }
+    }
+    if (!replaced) out.push(normalized)
+    return out
+}
+
+function dedupeLoyaltyCardHandles(handles) {
+    const out = []
+    const seen = new Set()
+    for (const handle of handles) {
+        const normalized = normalizeLoyaltyCardHandle(handle)
+        if (!normalized || seen.has(normalized.id)) continue
+        seen.add(normalized.id)
+        out.push(normalized)
     }
     return out
 }

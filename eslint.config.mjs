@@ -1,9 +1,7 @@
 import tseslint from 'typescript-eslint'
 
-// Phase 0 lint baseline. Intentionally narrow: the only enforced rule is
-// `no-console` for production code (finding M5 — raw console calls have leaked
-// key/invite material). Full lint coverage and routing through @listam/logging
-// is Phase 9; this config establishes the gate without churning the prototype.
+// Security lint baseline. Raw console calls are banned in production app/backend
+// code so key, invite, and loyalty-card material routes through @listam/logging.
 export default [
     {
         ignores: [
@@ -31,9 +29,10 @@ export default [
     {
         files: [
             'app/**/*.{ts,tsx,js,jsx,mjs,cjs}',
-            'backend/**/*.{ts,tsx,js,jsx,mjs,cjs}'
+            'backend/**/*.{ts,tsx,js,jsx,mjs,cjs}',
+            'packages/**/*.{ts,tsx,js,jsx,mjs,cjs}'
         ],
-        ignores: ['**/*.test.{ts,tsx,js,mjs,cjs}', 'backend/lib/logger.mjs'],
+        ignores: ['**/*.test.{ts,tsx,js,mjs,cjs}', 'packages/logging/index.mjs'],
         languageOptions: {
             parser: tseslint.parser,
             ecmaVersion: 'latest',
@@ -43,21 +42,9 @@ export default [
             'no-console': 'error'
         }
     },
-    // App legacy files that still use console. Downgraded to a warning as a
-    // ratchet; backend code is stricter and must use backend/lib/logger.mjs.
+    // The shared logger is the only production console boundary.
     {
-        files: [
-            'app/index.tsx',
-            'app/hooks/_useWorklet.ts',
-            'app/hooks/useSubscription.ts'
-        ],
-        rules: {
-            'no-console': 'warn'
-        }
-    },
-    // The backend logger is the only production backend console boundary.
-    {
-        files: ['backend/lib/logger.mjs'],
+        files: ['packages/logging/index.mjs'],
         rules: {
             'no-console': 'off'
         }

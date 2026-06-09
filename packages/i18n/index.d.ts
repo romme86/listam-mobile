@@ -147,6 +147,8 @@ export type MessageKey =
     | 'loyalty.viewer.delete.message'
     | 'loyalty.notification.saved'
     | 'loyalty.notification.loadFailed'
+    | 'loyalty.notification.saveFailed'
+    | 'loyalty.notification.deleteFailed'
     | 'paywall.title'
     | 'paywall.subtitle'
     | 'paywall.period'

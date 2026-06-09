@@ -16,6 +16,7 @@ import {
     type EventSubscription,
 } from 'react-native-iap'
 import { useI18n } from '../i18n'
+import { appLogger } from '../logger'
 
 const TRIAL_START_KEY = '@lista_trial_start'
 const TRIAL_DURATION_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
@@ -71,7 +72,7 @@ export function useSubscription() {
                 )
 
                 purchaseErrorSubscription = purchaseErrorListener((error: PurchaseError) => {
-                    console.warn('Purchase error:', error)
+                    appLogger.warn('Purchase error', error)
                     setState((prev) => ({
                         ...prev,
                         error: error.message,
@@ -82,7 +83,7 @@ export function useSubscription() {
                 // Check trial and subscription status
                 await checkStatus()
             } catch (err) {
-                console.warn('IAP init error:', err)
+                appLogger.warn('IAP init error', err)
                 // Still check trial status even if IAP fails
                 await checkTrialStatus()
             }
@@ -122,7 +123,7 @@ export function useSubscription() {
 
             return isTrialActive
         } catch (err) {
-            console.warn('Trial check error:', err)
+            appLogger.warn('Trial check error', err)
             setState((prev) => ({ ...prev, isLoading: false }))
             return true // Default to trial active on error
         }
@@ -157,7 +158,7 @@ export function useSubscription() {
             // Check trial status
             await checkTrialStatus()
         } catch (err) {
-            console.warn('Status check error:', err)
+            appLogger.warn('Status check error', err)
             await checkTrialStatus()
         }
     }
