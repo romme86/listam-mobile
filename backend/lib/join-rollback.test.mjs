@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
     createJoinRollbackSnapshot,
     restoreJoinRollbackSnapshot,
-} from './join-rollback.mjs'
+} from '@listam/backend/lib/join-rollback.mjs'
 
 test('join rollback snapshots clone list and key material', () => {
     const list = [{ text: 'Milk', isDone: false, timeOfCompletion: 0 }]

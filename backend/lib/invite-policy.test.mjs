@@ -8,7 +8,7 @@ import {
     isInviteUsable,
     reserveInviteUse,
     withInvitePolicy,
-} from './invite-policy.mjs'
+} from '@listam/backend/lib/invite-policy.mjs'
 
 test('new invites are single-use and short-lived', () => {
     const now = 1000

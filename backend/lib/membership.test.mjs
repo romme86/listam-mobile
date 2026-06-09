@@ -12,14 +12,14 @@ import {
     ownerAuthorityPublicKeyHex,
     reduceMembershipLog,
     reduceMembershipOperation,
-} from './membership.mjs'
+} from '@listam/backend/lib/membership.mjs'
 import {
     createEpochEncryptionKeyPair,
     createEpochGrants,
     epochKeyHashHex,
     epochPublicKeyHex,
     generateEpochKey,
-} from './key-epochs.mjs'
+} from '@listam/backend/lib/key-epochs.mjs'
 
 const baseKey = Buffer.from('a'.repeat(64), 'hex')
 const ownerWriterKey = Buffer.from('b'.repeat(64), 'hex')

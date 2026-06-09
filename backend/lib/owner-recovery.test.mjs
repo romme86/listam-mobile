@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createOwnerAuthorityKeyPair, ownerAuthorityPublicKeyHex } from './membership.mjs'
+import { createOwnerAuthorityKeyPair, ownerAuthorityPublicKeyHex } from '@listam/backend/lib/membership.mjs'
 import {
     deriveOwnerAuthorityFromSeed,
     formatOwnerRecoveryCode,
@@ -8,7 +8,7 @@ import {
     ownerRecoverySeedFromKeyPair,
     parseOwnerRecoveryCode,
     recoverOwnerAuthorityFromCode,
-} from './owner-recovery.mjs'
+} from '@listam/backend/lib/owner-recovery.mjs'
 
 test('a recovery code round-trips back to the exact owner authority keypair', () => {
     const owner = createOwnerAuthorityKeyPair()
