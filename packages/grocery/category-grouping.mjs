@@ -8,10 +8,10 @@ export function getDisplayCategoryName(canonicalKey, lang) {
         ?? canonicalKey
 }
 
-export function groupByCategory(data) {
+export function groupByCategory(data, preferredLang) {
     if (!data || data.length === 0) return []
 
-    const lang = detectDominantLanguage(data.map(e => e?.text ?? ''))
+    const lang = preferredLang || detectDominantLanguage(data.map(e => e?.text ?? ''))
     const categoryMap = new Map()
 
     for (let i = 0; i < data.length; i++) {

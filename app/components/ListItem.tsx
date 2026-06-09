@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { haptics } from '../feedback'
 import { useTheme, type Theme } from '../theme'
+import { useI18n } from '../i18n'
 import type { ListEntry } from './_types'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
@@ -44,6 +45,7 @@ export function ListItem({
     reduceMotion = false,
 }: ListItemProps) {
     const t = useTheme()
+    const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
     const panX = useRef(new Animated.Value(0)).current
     const isDeleting = useRef(false)
@@ -181,7 +183,7 @@ export function ListItem({
                     onChangeText={setDraft}
                     onSubmitEditing={submitEdit}
                     onBlur={submitEdit}
-                    placeholder="Edit item..."
+                    placeholder={i18n.t('main.item.editPlaceholder')}
                     placeholderTextColor={t.colors.placeholder}
                     returnKeyType="done"
                     autoFocus
@@ -194,7 +196,7 @@ export function ListItem({
         <View style={styles.itemWrapper}>
             <Animated.View style={[styles.deleteBg, { opacity: deleteOpacity }]}>
                 <Ionicons name="trash-outline" size={22} color={t.colors.onDanger} />
-                <Text style={styles.deleteLabel}>Delete</Text>
+                <Text style={styles.deleteLabel}>{i18n.t('main.item.delete')}</Text>
             </Animated.View>
             <Animated.View
                 style={[
@@ -211,7 +213,7 @@ export function ListItem({
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: item.isDone }}
                     accessibilityLabel={item.text}
-                    accessibilityHint="Double tap to toggle done. Long-press to edit."
+                    accessibilityHint={i18n.t('main.item.accessibilityHint')}
                 >
                     <Animated.View style={[styles.item, { opacity }]}>
                         <Animated.Text style={textStyle}>

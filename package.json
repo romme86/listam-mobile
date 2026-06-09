@@ -18,8 +18,9 @@
     "lint": "eslint .",
     "check:deps": "node scripts/check-deps.mjs",
     "check:secrets": "node scripts/check-secrets.mjs",
+    "check:i18n": "node scripts/check-i18n.mjs",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run lint && npm run check:deps && npm run check:secrets && npm run test",
+    "ci": "npm run lint && npm run check:deps && npm run check:secrets && npm run check:i18n && npm run test",
     "bundle:backend:ios": "npx bare-pack --target ios --linked backend/backend.mjs --encoding base64 --out app/app.ios.bundle && node scripts/wrap-bare-bundle.mjs app/app.ios.bundle app/app.ios.bundle.mjs",
     "bundle:backend:android": "npx bare-pack --target android --linked backend/backend.mjs --encoding base64 --out app/assets/backend.android.bundle && node scripts/wrap-bare-bundle.mjs app/assets/backend.android.bundle app/assets/backend.android.bundle.mjs"
   },
@@ -30,6 +31,7 @@
     "@listam/client": "file:packages/client",
     "@listam/domain": "file:packages/domain",
     "@listam/grocery": "file:packages/grocery",
+    "@listam/i18n": "file:packages/i18n",
     "@listam/logging": "file:packages/logging",
     "@listam/protocol": "file:packages/protocol",
     "@listam/secrets": "file:packages/secrets",

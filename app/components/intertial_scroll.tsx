@@ -13,6 +13,7 @@ import { groupByCategory } from './categoryGrouping'
 import { CATEGORY_ICONS } from './categoryConstants'
 import { EmptyState } from './EmptyState'
 import { useTheme, type Theme } from '../theme'
+import { useI18n } from '../i18n'
 import { identityKey } from '../listProjection'
 
 const TOTAL_ITEM_HEIGHT = ITEM_HEIGHT + SPACING
@@ -52,6 +53,7 @@ export default function InertialElasticList({
     reduceMotion = false,
 }: Props) {
     const t = useTheme()
+    const i18n = useI18n()
     const insets = useSafeAreaInsets()
     const styles = useMemo(() => makeStyles(t), [t])
     const scrollY = useRef(new Animated.Value(0)).current
@@ -68,7 +70,7 @@ export default function InertialElasticList({
             }))
         }
 
-        const sections = groupByCategory(data)
+        const sections = groupByCategory(data, i18n.groceryLocale)
         const items: FlatListItem[] = []
         let visualIndex = 0
 
@@ -96,7 +98,7 @@ export default function InertialElasticList({
         }
 
         return items
-    }, [data, categoriesEnabled, categoryHeadersVisible])
+    }, [data, categoriesEnabled, categoryHeadersVisible, i18n.groceryLocale])
 
     const renderItem = useCallback(({ item }: { item: FlatListItem }) => {
         if (item.type === 'header') {

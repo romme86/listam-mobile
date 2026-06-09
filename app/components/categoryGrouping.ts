@@ -18,6 +18,6 @@ export function getDisplayCategoryName(canonicalKey: string, lang: SupportedLang
     return sharedGetDisplayCategoryName(canonicalKey, lang)
 }
 
-export function groupByCategory(data: ListEntry[]): CategorySection[] {
-    return sharedGroupByCategory(data) as CategorySection[]
+export function groupByCategory(data: ListEntry[], preferredLang?: SupportedLang): CategorySection[] {
+    return sharedGroupByCategory(data, preferredLang) as CategorySection[]
 }

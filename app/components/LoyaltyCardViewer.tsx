@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import Svg, { Rect } from 'react-native-svg'
 import { useTheme, type Theme } from '../theme'
+import { useI18n } from '../i18n'
 import type { LoyaltyCard } from './LoyaltyCardScanner'
 
 const QRCode = require('qrcode-terminal/vendor/QRCode')
@@ -253,6 +254,7 @@ type LoyaltyCardViewerProps = {
 
 export function LoyaltyCardViewer({ visible, card, onClose, onDelete }: LoyaltyCardViewerProps) {
     const t = useTheme()
+    const i18n = useI18n()
     const insets = useSafeAreaInsets()
     const styles = useMemo(() => makeStyles(t), [t])
 
@@ -262,12 +264,12 @@ export function LoyaltyCardViewer({ visible, card, onClose, onDelete }: LoyaltyC
 
     const handleDelete = () => {
         Alert.alert(
-            'Delete Card',
-            `Remove "${card.name}" loyalty card?`,
+            i18n.t('loyalty.viewer.delete.title'),
+            i18n.t('loyalty.viewer.delete.message', { name: card.name }),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: i18n.t('common.cancel'), style: 'cancel' },
                 {
-                    text: 'Delete',
+                    text: i18n.t('common.delete'),
                     style: 'destructive',
                     onPress: () => {
                         onDelete(card.id)

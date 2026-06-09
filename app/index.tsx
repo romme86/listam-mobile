@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react'
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import {
     View,
     Share,
@@ -12,6 +12,7 @@ import { Provider } from 'react-redux'
 import * as Linking from 'expo-linking'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { isLocaleChoice } from '@listam/i18n'
 import {
     useWorklet,
     RPC_UPDATE,
@@ -44,7 +45,7 @@ import { useReduceMotion } from './hooks/useReduceMotion'
 import { Header } from './components/Header'
 import { JoinDialog } from './components/JoinDialog'
 import { MembersDialog } from './components/MembersDialog'
-import { JoiningOverlay, P2P_MESSAGES } from './components/JoiningOverlay'
+import { JoiningOverlay, P2P_MESSAGE_KEYS } from './components/JoiningOverlay'
 import { Paywall } from './components/Paywall'
 import { LoyaltyCardScanner } from './components/LoyaltyCardScanner'
 import { LoyaltyCardViewer } from './components/LoyaltyCardViewer'
@@ -56,6 +57,7 @@ import { Fab } from './components/Fab'
 import { SummaryBar } from './components/SummaryBar'
 import { SnackbarProvider, useSnackbar } from './components/Snackbar'
 import { haptics } from './feedback'
+import { I18nProvider, useI18n, type LocaleChoice } from './i18n'
 import { useTheme } from './theme'
 import {
     createJoinConfirmationRequest,
@@ -116,6 +118,7 @@ function serializeLoyaltyCardPayloads(cardsById: Record<string, LoyaltyCard>): s
 
 function AppInner() {
     const t = useTheme()
+    const i18n = useI18n()
     const insets = useSafeAreaInsets()
     const snackbar = useSnackbar()
     const reduceMotion = useReduceMotion()
@@ -127,6 +130,7 @@ function AppInner() {
         gridIconSize,
         listTextSize,
         itemIconVariant,
+        localeChoice,
     } = useAppSelector(selectPreferences)
     const loyaltyCards = useAppSelector(selectLoyaltyCardHandles)
 
@@ -168,6 +172,22 @@ function AppInner() {
     const pendingJoinConfirmationInviteRef = useRef('')
     const initialDeepLinkHandledRef = useRef(false)
 
+    const joinConfirmationCopy = useMemo(() => ({
+        invalidNotification: i18n.t('invite.notification.invalid'),
+        busyNotification: i18n.t('invite.notification.alreadyJoining'),
+        promptOpenNotification: i18n.t('invite.notification.finishPrompt'),
+        title: i18n.t('invite.confirm.title'),
+        sourceLink: (source: string) => i18n.t('invite.confirm.sourceLink', { source }),
+        sourceManual: i18n.t('invite.confirm.sourceManual'),
+        message: (sourceText: string, trustWarning: string) => (
+            i18n.t('invite.confirm.message', { sourceText, trustWarning })
+        ),
+        untrustedWarning: i18n.t('invite.confirm.untrustedWarning'),
+        sourceLabel: (sourceLabel: string) => (
+            sourceLabel === 'the Listam app' ? i18n.t('invite.source.listamApp') : sourceLabel
+        ),
+    }), [i18n])
+
     const animate = useCallback(() => {
         if (!reduceMotion) {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut)
@@ -177,7 +197,7 @@ function AppInner() {
     const beginJoinWithInvite = useCallback((rawInvite: string) => {
         const invite = extractInviteFromInput(rawInvite)
         if (!invite) {
-            snackbar.show('Enter a valid invite key or link', 'error')
+            snackbar.show(i18n.t('invite.notification.invalid'), 'error')
             return false
         }
         if (!isWorkletReady) {
@@ -189,26 +209,26 @@ function AppInner() {
         isJoiningRef.current = true
         sendRPC(RPC_JOIN_KEY, JSON.stringify({ key: invite }))
         return true
-    }, [isJoiningRef, isWorkletReady, sendRPC, setIsJoining, snackbar])
+    }, [i18n, isJoiningRef, isWorkletReady, sendRPC, setIsJoining, snackbar])
 
     const presentJoinConfirmation = useCallback((request: JoinConfirmationRequest) => {
         if (request.status === 'invalid') {
-            snackbar.show(request.notification || 'Enter a valid invite key or link', 'error')
+            snackbar.show(request.notification || i18n.t('invite.notification.invalid'), 'error')
             return false
         }
         if (request.status === 'busy' || request.status === 'confirmation-open') {
-            snackbar.show(request.notification || 'Already joining an invite')
+            snackbar.show(request.notification || i18n.t('invite.notification.alreadyJoining'))
             return false
         }
         if (request.status === 'already-pending') return true
 
         pendingJoinConfirmationInviteRef.current = request.pendingInvite
         Alert.alert(
-            request.title || 'Join this Listam invite?',
+            request.title || i18n.t('invite.confirm.title'),
             request.message || '',
             [
                 {
-                    text: 'Cancel',
+                    text: i18n.t('common.cancel'),
                     style: 'cancel',
                     onPress: () => {
                         const result = resolveJoinConfirmation(
@@ -220,7 +240,7 @@ function AppInner() {
                     },
                 },
                 {
-                    text: 'Join',
+                    text: i18n.t('common.join'),
                     style: 'default',
                     onPress: () => {
                         const result = resolveJoinConfirmation(
@@ -235,15 +255,16 @@ function AppInner() {
             ]
         )
         return true
-    }, [beginJoinWithInvite, snackbar])
+    }, [beginJoinWithInvite, i18n, snackbar])
 
     const requestJoinConfirmation = useCallback((rawInvite: string, source: 'link' | 'manual') => {
         return presentJoinConfirmation(createJoinConfirmationRequest(rawInvite, {
             source,
             pendingInvite: pendingJoinConfirmationInviteRef.current,
             isJoining: isJoiningRef.current,
+            copy: joinConfirmationCopy,
         }))
-    }, [isJoiningRef, presentJoinConfirmation])
+    }, [isJoiningRef, joinConfirmationCopy, presentJoinConfirmation])
 
     useEffect(() => {
         AsyncStorage.multiGet([
@@ -263,7 +284,7 @@ function AppInner() {
                 ...(isSizeOption(textSize) ? { listTextSize: textSize } : {}),
                 ...(categoryHeaders !== null ? { categoryHeadersVisible: categoryHeaders === 'true' } : {}),
                 ...(isItemIconVariant(iconVariant) ? { itemIconVariant: iconVariant } : {}),
-                ...(localeChoice !== null && localeChoice.trim() ? { localeChoice } : {}),
+                ...(isLocaleChoice(localeChoice) ? { localeChoice } : {}),
             }))
 
             const storedCards = parseStoredLoyaltyCards(cards)
@@ -299,6 +320,11 @@ function AppInner() {
         AsyncStorage.setItem(PREF_ITEM_ICON_VARIANT, variant)
     }, [dispatch])
 
+    const handleLocaleChoiceChange = useCallback((choice: LocaleChoice) => {
+        dispatch(preferencesActions.localeChoiceSet(choice))
+        AsyncStorage.setItem(PREF_LOCALE_CHOICE, choice)
+    }, [dispatch])
+
     const handleToggleCategoryHeaders = useCallback(() => {
         const next = !categoryHeadersVisible
         dispatch(preferencesActions.categoryHeadersVisibleSet(next))
@@ -311,8 +337,8 @@ function AppInner() {
         dispatch(loyaltyCardsActions.loyaltyCardAdded(toLoyaltyCardHandle(card)))
         AsyncStorage.setItem(PREF_LOYALTY_CARDS, serializeLoyaltyCardPayloads(nextPayloads))
         setScannerVisible(false)
-        snackbar.show(`Saved ${card.name} card`, 'success')
-    }, [dispatch, snackbar])
+        snackbar.show(i18n.t('loyalty.notification.saved', { name: card.name }), 'success')
+    }, [dispatch, i18n, snackbar])
 
     const handleDeleteCard = useCallback((id: string) => {
         const nextPayloads = { ...loyaltyCardPayloadsRef.current }
@@ -335,10 +361,10 @@ function AppInner() {
                 loyaltyCardPayloadsRef.current = indexLoyaltyCardPayloads(storedCards)
                 const reloaded = loyaltyCardPayloadsRef.current[card.payloadRef] ?? loyaltyCardPayloadsRef.current[card.id]
                 if (reloaded) setSelectedCard(reloaded)
-                else snackbar.show('Could not load that loyalty card', 'error')
+                else snackbar.show(i18n.t('loyalty.notification.loadFailed'), 'error')
             })
-            .catch(() => snackbar.show('Could not load that loyalty card', 'error'))
-    }, [snackbar])
+            .catch(() => snackbar.show(i18n.t('loyalty.notification.loadFailed'), 'error'))
+    }, [i18n, snackbar])
 
     useEffect(() => {
         const handleIncomingUrl = (url: string | null) => {
@@ -346,6 +372,7 @@ function AppInner() {
             const request = planIncomingLinkJoin(url, {
                 pendingInvite: pendingJoinConfirmationInviteRef.current,
                 isJoining: isJoiningRef.current,
+                copy: joinConfirmationCopy,
             })
             if (request) presentJoinConfirmation(request)
         }
@@ -366,7 +393,7 @@ function AppInner() {
         return () => {
             subscription.remove()
         }
-    }, [isJoiningRef, presentJoinConfirmation])
+    }, [isJoiningRef, joinConfirmationCopy, presentJoinConfirmation])
 
     useEffect(() => {
         if (!isWorkletReady) return
@@ -380,7 +407,7 @@ function AppInner() {
     useEffect(() => {
         if (!isJoining) return
         const interval = setInterval(() => {
-            setCurrentP2PMessage((prev) => (prev + 1) % P2P_MESSAGES.length)
+            setCurrentP2PMessage((prev) => (prev + 1) % P2P_MESSAGE_KEYS.length)
         }, 3000)
         return () => clearInterval(interval)
     }, [isJoining])
@@ -427,7 +454,7 @@ function AppInner() {
         const trimmed = newText.trim()
         if (!trimmed || trimmed === old.text) return
         if (dataList.some((item, i) => i !== index && item.text === trimmed)) {
-            snackbar.show('An item with that name already exists', 'error')
+            snackbar.show(i18n.t('main.notification.duplicateEdit'), 'error')
             return
         }
         animate()
@@ -437,7 +464,7 @@ function AppInner() {
         const updatedItem = { ...old, text: trimmed, updatedAt: Date.now() }
         dispatch(listsActions.listItemUpdated(updatedItem))
         sendRPC(RPC_UPDATE, JSON.stringify({ item: updatedItem }))
-    }, [animate, dataList, dispatch, sendRPC, snackbar])
+    }, [animate, dataList, dispatch, i18n, sendRPC, snackbar])
 
     const handleClearCompleted = useCallback(() => {
         const done = dataList.filter((item) => item.isDone)
@@ -457,30 +484,33 @@ function AppInner() {
         const value = addText.trim()
         if (!value) return
         if (dataList.some((item) => item.text === value)) {
-            snackbar.show('That item is already on the list')
+            snackbar.show(i18n.t('main.notification.duplicateAdd'))
             setAddText('')
             return
         }
         handleInsert(0, value)
         haptics.toggleOn()
         setAddText('')
-    }, [addText, dataList, handleInsert, snackbar])
+    }, [addText, dataList, handleInsert, i18n, snackbar])
 
     const handleShare = useCallback(async () => {
         if (!autobaseInviteKey) {
-            snackbar.show(isWorkletReady ? 'Only the owner device can create invites' : 'Invite key not ready yet — try again in a moment')
+            snackbar.show(isWorkletReady ? i18n.t('invite.share.ownerOnly') : i18n.t('invite.share.notReady'))
             return
         }
         try {
             const inviteLink = `https://listam.ch/join?invite=${encodeURIComponent(autobaseInviteKey)}`
             await Share.share({
-                message: `Join my Listam list:\n${inviteLink}\n\nInvite code: ${autobaseInviteKey}\n\nThis invite is single-use, expires in 10 minutes, and can be revoked before use. Removing a joined device requires re-keying.`,
-                title: 'Join my Listam list',
+                message: i18n.t('invite.share.message', {
+                    inviteLink,
+                    inviteKey: autobaseInviteKey,
+                }),
+                title: i18n.t('invite.share.title'),
             })
         } catch {
-            snackbar.show('Could not open the share sheet', 'error')
+            snackbar.show(i18n.t('invite.share.failed'), 'error')
         }
-    }, [autobaseInviteKey, isWorkletReady, snackbar])
+    }, [autobaseInviteKey, i18n, isWorkletReady, snackbar])
 
     const handleJoin = useCallback(() => {
         setJoinDialogVisible(true)
@@ -502,12 +532,12 @@ function AppInner() {
     const handleRecoverOwnership = useCallback(() => {
         const code = recoverCodeInput.trim()
         if (!code) {
-            snackbar.show('Enter your recovery code', 'error')
+            snackbar.show(i18n.t('members.recovery.emptyCode'), 'error')
             return
         }
         sendRPC(RPC_RECOVER_OWNER, JSON.stringify({ code }))
         setRecoverCodeInput('')
-    }, [recoverCodeInput, sendRPC, snackbar])
+    }, [i18n, recoverCodeInput, sendRPC, snackbar])
 
     const handleCloseMembers = useCallback(() => {
         setMembersDialogVisible(false)
@@ -517,14 +547,14 @@ function AppInner() {
 
     const handleJoinSubmit = useCallback(() => {
         if (!joinKeyInput.trim()) {
-            snackbar.show('Enter an invite key', 'error')
+            snackbar.show(i18n.t('invite.notification.emptyManual'), 'error')
             return
         }
         const didRequestJoin = requestJoinConfirmation(joinKeyInput, 'manual')
         if (!didRequestJoin) return
         setJoinDialogVisible(false)
         setJoinKeyInput('')
-    }, [joinKeyInput, requestJoinConfirmation, snackbar])
+    }, [i18n, joinKeyInput, requestJoinConfirmation, snackbar])
 
     const handleJoinCancel = useCallback(() => {
         setJoinDialogVisible(false)
@@ -538,12 +568,12 @@ function AppInner() {
 
     const handleDeleteAll = useCallback(() => {
         Alert.alert(
-            'Delete All Items',
-            'Are you sure you want to delete all items? This cannot be undone.',
+            i18n.t('main.deleteAll.title'),
+            i18n.t('main.deleteAll.message'),
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: i18n.t('common.cancel'), style: 'cancel' },
                 {
-                    text: 'Delete All',
+                    text: i18n.t('main.deleteAll.action'),
                     style: 'destructive',
                     onPress: () => {
                         animate()
@@ -556,7 +586,7 @@ function AppInner() {
                 },
             ]
         )
-    }, [animate, dataList, dispatch, sendRPC])
+    }, [animate, dataList, dispatch, i18n, sendRPC])
 
     const remaining = dataList.reduce((acc, item) => acc + (item.isDone ? 0 : 1), 0)
     const doneCount = dataList.length - remaining
@@ -601,6 +631,8 @@ function AppInner() {
                 onListTextSizeChange={handleListTextSizeChange}
                 itemIconVariant={itemIconVariant}
                 onItemIconVariantChange={handleItemIconVariantChange}
+                localeChoice={localeChoice}
+                onLocaleChoiceChange={handleLocaleChoiceChange}
                 loyaltyCards={loyaltyCards}
                 onScanCard={() => setScannerVisible(true)}
                 onSelectCard={handleSelectCard}
@@ -696,9 +728,11 @@ export default function App() {
     return (
         <Provider store={store}>
             <SafeAreaProvider>
-                <SnackbarProvider>
-                    <AppInner />
-                </SnackbarProvider>
+                <I18nProvider>
+                    <SnackbarProvider>
+                        <AppInner />
+                    </SnackbarProvider>
+                </I18nProvider>
             </SafeAreaProvider>
         </Provider>
     )

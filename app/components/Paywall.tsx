@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme, type Theme } from '../theme'
+import { useI18n } from '../i18n'
 import type { SubscriptionState } from '../hooks/useSubscription'
 
 type PaywallProps = {
@@ -21,6 +22,7 @@ type PaywallProps = {
 
 export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
     const t = useTheme()
+    const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
 
     const price = Platform.select({
@@ -38,23 +40,22 @@ export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
                     <View style={styles.heartCircle}>
                         <Ionicons name="heart" size={32} color={t.colors.accent} />
                     </View>
-                    <Text style={styles.title}>Your trial has ended</Text>
+                    <Text style={styles.title}>{i18n.t('paywall.title')}</Text>
                     <Text style={styles.subtitle}>
-                        Thanks for trying Listam! Subscribe to continue using the app and support
-                        development.
+                        {i18n.t('paywall.subtitle')}
                     </Text>
                 </View>
 
                 <View style={styles.priceContainer}>
                     <Text style={styles.price}>{price}</Text>
-                    <Text style={styles.period}>per year</Text>
+                    <Text style={styles.period}>{i18n.t('paywall.period')}</Text>
                 </View>
 
                 <View style={styles.features}>
-                    <FeatureRow text="Unlimited lists" styles={styles} accent={t.colors.accent} />
-                    <FeatureRow text="P2P sync across devices" styles={styles} accent={t.colors.accent} />
-                    <FeatureRow text="No ads, no tracking" styles={styles} accent={t.colors.accent} />
-                    <FeatureRow text="Support indie development" styles={styles} accent={t.colors.accent} />
+                    <FeatureRow text={i18n.t('paywall.feature.unlimitedLists')} styles={styles} accent={t.colors.accent} />
+                    <FeatureRow text={i18n.t('paywall.feature.p2pSync')} styles={styles} accent={t.colors.accent} />
+                    <FeatureRow text={i18n.t('paywall.feature.noAds')} styles={styles} accent={t.colors.accent} />
+                    <FeatureRow text={i18n.t('paywall.feature.supportIndie')} styles={styles} accent={t.colors.accent} />
                 </View>
 
                 {state.error && <Text style={styles.error}>{state.error}</Text>}
@@ -69,7 +70,7 @@ export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
                         {state.isLoading ? (
                             <ActivityIndicator color={t.colors.onPrimary} />
                         ) : (
-                            <Text style={styles.subscribeButtonText}>Subscribe for {price}/year</Text>
+                            <Text style={styles.subscribeButtonText}>{i18n.t('paywall.subscribe', { price })}</Text>
                         )}
                     </TouchableOpacity>
 
@@ -79,22 +80,25 @@ export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
                         disabled={state.isLoading}
                         accessibilityRole="button"
                     >
-                        <Text style={styles.restoreButtonText}>Restore Purchase</Text>
+                        <Text style={styles.restoreButtonText}>{i18n.t('paywall.restore')}</Text>
                     </TouchableOpacity>
                 </View>
 
                 <View style={styles.footer}>
                     <Text style={styles.footerText}>
-                        Subscription automatically renews yearly. Cancel anytime in{' '}
-                        {Platform.OS === 'ios' ? 'Settings' : 'Play Store'}.
+                        {i18n.t('paywall.footer', {
+                            store: Platform.OS === 'ios'
+                                ? i18n.t('paywall.platform.ios')
+                                : i18n.t('paywall.platform.android'),
+                        })}
                     </Text>
                     <View style={styles.links}>
                         <TouchableOpacity onPress={openPrivacyPolicy}>
-                            <Text style={styles.link}>Privacy Policy</Text>
+                            <Text style={styles.link}>{i18n.t('paywall.privacy')}</Text>
                         </TouchableOpacity>
                         <Text style={styles.linkSeparator}>|</Text>
                         <TouchableOpacity onPress={openTerms}>
-                            <Text style={styles.link}>Terms of Service</Text>
+                            <Text style={styles.link}>{i18n.t('paywall.terms')}</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
