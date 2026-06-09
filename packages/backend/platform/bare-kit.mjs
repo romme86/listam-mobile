@@ -10,6 +10,10 @@ export function createBareKitPlatform({ Bare, BareKit }) {
         fs,
         join,
         fileURLToPath: URL.fileURLToPath,
+        // The worklet runs under a user-facing app, so corruption recovery can
+        // offer an owner-confirmed destructive reset. Headless nodes must use
+        // 'refuse-destructive' (the backend default).
+        recoveryPolicy: 'interactive',
         createRpc(handler) {
             return new RPC(BareKit.IPC, handler)
         },

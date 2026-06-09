@@ -45,6 +45,10 @@ export let addedStaticPeers = false
 export let isResettingState = false
 export let isPendingJoinSuccess = false
 
+// Corruption recovery: non-null while the storage root failed to open and the
+// backend is waiting for an owner-directed recovery action (M4).
+export let pendingRecovery = null
+
 // Transient error tracking
 export let transientErrorCount = 0
 export let lastTransientErrorTime = 0
@@ -77,6 +81,7 @@ export function setPeerCount(val) { peerCount = val }
 export function setAddedStaticPeers(val) { addedStaticPeers = val }
 export function setIsResettingState(val) { isResettingState = val }
 export function setIsPendingJoinSuccess(val) { isPendingJoinSuccess = val }
+export function setPendingRecovery(val) { pendingRecovery = val }
 export function setTransientErrorCount(val) { transientErrorCount = val }
 export function setLastTransientErrorTime(val) { lastTransientErrorTime = val }
 

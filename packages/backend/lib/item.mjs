@@ -11,8 +11,8 @@ import {
     DEFAULT_LIST_TYPE,
     createListOperation,
     normalizeListItem,
-    reduceListViewEntries,
 } from './list-reducer.mjs'
+import { createViewCheckpoint } from './view-checkpoint.mjs'
 
 // --- WRITE SERIALIZATION (prevents concurrent autobase.append / flush races) ---
 let _writeChain = Promise.resolve()
@@ -227,59 +227,39 @@ async function persistAndVerify (expectedLength, operationType) {
     }
 }
 
-export async function rebuildListFromPersistedOps() {
-    await autobase.update()
+// One materialized-view checkpoint per active base. Both rebuild entry points
+// below share it, so the view is scanned once and later passes resume from the
+// last processed index instead of replaying from 0 (the join flow calls
+// rebuildListFromPersistedOps on a 1-second poll for up to two minutes).
+// initAutobase resets it whenever the base/view identity changes.
+let _viewCheckpoint = createViewCheckpoint()
+
+export function resetViewCheckpoint() {
+    _viewCheckpoint.reset()
+}
+
+async function updateViewCheckpoint(caller) {
     if (!autobase || !autobase.view) {
-        logger.log('[WARNING] rebuildListFromPersistedOps: autobase or view not available')
-        return []
+        logger.log(`[WARNING] ${caller}: autobase or view not available`)
+        return { items: [], membershipRecords: [] }
     }
+    await autobase.update()
+    return _viewCheckpoint.update(autobase.view, {
+        onError: (index, error) => {
+            logger.log(`[ERROR] ${caller}: error reading entry ${index}:`, error.message)
+        },
+    })
+}
 
-    const view = autobase.view
-    const length = view.length
-    const entries = []
-
-    for (let i = 0; i < length; i++) {
-        try {
-            const entry = await view.get(i)
-            if (!entry) continue
-
-            // Membership records share the view but are not list items; the
-            // membership rebuild consumes them instead (readPersistedMembershipRecords).
-            if (entry.op === 'membership') continue
-
-            entries.push(entry)
-        } catch (e) {
-            logger.log(`[ERROR] rebuildListFromPersistedOps: error reading entry ${i}:`, e.message)
-        }
-    }
-
-    return reduceListViewEntries(entries).items
+export async function rebuildListFromPersistedOps() {
+    const { items } = await updateViewCheckpoint('rebuildListFromPersistedOps')
+    return items
 }
 
 // Read the owner-signed membership records that apply() persisted into the view,
 // in linearized order. Callers fold these back through reduceMembershipLog to
 // restore membership state after a restart (the in-memory state is not durable).
 export async function readPersistedMembershipRecords() {
-    await autobase.update()
-    if (!autobase || !autobase.view) {
-        logger.log('[WARNING] readPersistedMembershipRecords: autobase or view not available')
-        return []
-    }
-
-    const view = autobase.view
-    const length = view.length
-    const records = []
-
-    for (let i = 0; i < length; i++) {
-        try {
-            const entry = await view.get(i)
-            if (entry && entry.op === 'membership' && entry.record) {
-                records.push(entry.record)
-            }
-        } catch (e) {
-            logger.log(`[ERROR] readPersistedMembershipRecords: error reading entry ${i}:`, e.message)
-        }
-    }
-
-    return records
+    const { membershipRecords } = await updateViewCheckpoint('readPersistedMembershipRecords')
+    return membershipRecords
 }

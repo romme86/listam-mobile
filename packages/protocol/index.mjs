@@ -16,3 +16,4 @@ export const RPC_REMOVE_MEMBER = 14
 export const RPC_GET_MEMBERS = 15
 export const RPC_GET_OWNER_RECOVERY_CODE = 16
 export const RPC_RECOVER_OWNER = 17
+export const RPC_RECOVER_STORAGE = 18

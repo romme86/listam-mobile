@@ -186,6 +186,16 @@ export type MessageKey =
     | 'backend.memberRemoval.failed'
     | 'backend.memberRemoval.incomplete'
     | 'backend.startFailed'
+    | 'backend.recovery.title'
+    | 'backend.recovery.message'
+    | 'backend.recovery.retry'
+    | 'backend.recovery.reset'
+    | 'backend.recovery.confirmTitle'
+    | 'backend.recovery.confirmMessage'
+    | 'backend.recovery.confirmReset'
+    | 'backend.recovery.completeRetry'
+    | 'backend.recovery.completeFresh'
+    | 'backend.recovery.failed'
 
 export type MessageCatalog = Record<MessageKey, MessageEntry>
 

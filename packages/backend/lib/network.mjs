@@ -1,9 +1,10 @@
 import Hyperswarm from "hyperswarm"
 import BlindPairing from "blind-pairing"
 import z32 from "z32"
-import { apply, open, storagePath, peerKeysString, keyFilePath, encKeyFilePath, ownerAuthorityKeyFilePath, legacyInviteFilePath } from "../backend.mjs"
-import { saveAutobaseKey, saveEncryptionKey, saveOwnerAuthorityKey, deleteOwnerAuthorityKey, saveEpochKey, deleteEpochKey, saveEpochEncryptionKey, deleteEpochEncryptionKey, deleteLegacyInviteFile } from "./key.mjs"
-import { deleteBackendSecret } from "./secrets.mjs"
+import { apply, open, storagePath, peerKeysString, keyFilePath, encKeyFilePath, ownerAuthorityKeyFilePath, legacyInviteFilePath, recoveryPolicy } from "../backend.mjs"
+import { saveAutobaseKey, saveEncryptionKey, saveOwnerAuthorityKey, deleteOwnerAuthorityKey, saveEpochKey, deleteEpochKey, saveEpochEncryptionKey, deleteEpochEncryptionKey, deleteLegacyInviteFile, deleteLegacyKeyFile } from "./key.mjs"
+import { deleteBackendSecret, secretFingerprint } from "./secrets.mjs"
+import { describeCorruption, isCorruptionSignature, planRecoveryAction, quarantineStorageRoot } from "./recovery.mjs"
 import { INVITE_MAX_USES, isInviteUsable, reserveInviteUse, withInvitePolicy } from "./invite-policy.mjs"
 import { createJoinRollbackSnapshot, restoreJoinRollbackSnapshot } from "./join-rollback.mjs"
 import { performMemberRemovalRekey } from "./rekey.mjs"
@@ -45,6 +46,7 @@ import {
     epochKey,
     epochEncryptionKeyPair,
     membershipState,
+    pendingRecovery,
     setAutobase,
     setAddedStaticPeers,
     setSwarm,
@@ -61,10 +63,11 @@ import {
     setEpochKey,
     setEpochEncryptionKeyPair,
     setMembershipState,
+    setPendingRecovery,
     isPendingJoinSuccess,
     setIsPendingJoinSuccess
 } from "./state.mjs"
-import { enqueueWrite, prepareListAppendOperation, rebuildListFromPersistedOps, readPersistedMembershipRecords, syncListToFrontend } from "./item.mjs"
+import { enqueueWrite, prepareListAppendOperation, rebuildListFromPersistedOps, readPersistedMembershipRecords, resetViewCheckpoint, syncListToFrontend } from "./item.mjs"
 import { logger } from "./logger.mjs"
 import { getBackendFs } from './platform-fs.mjs'
 
@@ -438,6 +441,9 @@ export async function initAutobase(newBaseKey, options = {}) {
         setMembershipState(createMembershipState())
         setCurrentInvite(null)
         inviteUsesRemaining = 0
+        // The checkpoint is keyed to one base's linearized view; a teardown or
+        // base switch invalidates it.
+        resetViewCheckpoint()
 
         const baseStoragePath = `${storagePath}-local`
 
@@ -481,28 +487,16 @@ export async function initAutobase(newBaseKey, options = {}) {
         try {
             await autobase.ready()
         } catch (e) {
-            const msg = String(e?.stack || e?.message || e)
-            if (msg.includes("reading 'signers'") || msg.includes('autobase/lib/store.js')) {
-                logger.log('[ERROR] Autobase appears corrupted. Wiping local state and recreating a new base...')
-                deleteBackendSecret('autobaseKey')
-                deleteBackendSecret('encryptionKey')
-                deleteBackendSecret('ownerAuthorityKey')
-                deleteBackendSecret('epochKey')
-                deleteBackendSecret('epochEncryptionKey')
-                rmrfSafe(keyFilePath)
-                rmrfSafe(encKeyFilePath)
-                rmrfSafe(ownerAuthorityKeyFilePath)
-                rmrfSafe(baseStoragePath)
-                setEncryptionKey(null)
-                setOwnerAuthorityKeyPair(null)
-                setEpochKey(null)
-                setEpochEncryptionKeyPair(null)
-                // Clear the promise so recursive call can start fresh
-                _initPromise = null
-                return initAutobase(null)
+            if (isCorruptionSignature(e)) {
+                // M4: never wipe on corruption. Keep the data and key material
+                // untouched, release the storage root, and wait for an
+                // owner-directed recovery action (performStorageRecovery).
+                await enterPendingRecovery(e, baseStoragePath)
+                return
             }
             throw e
         }
+        setPendingRecovery(null)
         logger.log(
             '[INFO] autobase.ready() resolved. writable?',
             autobase.writable,
@@ -615,6 +609,98 @@ export async function initAutobase(newBaseKey, options = {}) {
     } finally {
         _initPromise = null
     }
+}
+
+// Park the backend in a non-destructive degraded state after a corrupt
+// ready(): close the handles that point at the suspect root, record what
+// happened, and tell the frontend a recovery decision is needed. Data, key
+// material, and the storage root itself are left exactly as they were.
+async function enterPendingRecovery(error, baseStoragePath) {
+    const description = describeCorruption(error)
+    logger.log('[ERROR] Autobase storage appears corrupted; awaiting owner-directed recovery (nothing was deleted).', {
+        signature: description.signature,
+    })
+
+    setAutobase(null)
+    if (store) {
+        try {
+            await store.close()
+        } catch (e) {
+            logger.log('[ERROR] Error closing store of corrupt base:', e)
+        }
+        setStore(null)
+    }
+
+    setPendingRecovery({
+        ...description,
+        baseStoragePath,
+        detectedAt: new Date().toISOString(),
+    })
+    broadcastMessage({
+        type: 'recovery-required',
+        reason: description.reason,
+        policy: recoveryPolicy,
+    })
+}
+
+// Owner-directed recovery (RPC_RECOVER_STORAGE). 'retry' reopens the same
+// storage root (transient failures). 'reset' is the only destructive path:
+// it requires an interactive policy plus pending corruption, quarantines the
+// suspect root intact as a backup, and only then clears the key slots and
+// starts a fresh base. Headless ('refuse-destructive') nodes can only retry.
+export async function performStorageRecovery(action) {
+    const plan = planRecoveryAction({ action, policy: recoveryPolicy, pending: pendingRecovery })
+    if (!plan.ok) {
+        logger.log('[WARNING] Storage recovery action rejected', { action, reason: plan.reason })
+        broadcastMessage({ type: 'recovery-failed', reason: plan.reason })
+        return { ok: false, reason: plan.reason }
+    }
+
+    if (action === 'retry') {
+        logger.log('[AUDIT] Storage recovery: retrying with existing storage root')
+        setPendingRecovery(null)
+        await initAutobase(baseKey)
+        if (pendingRecovery) return { ok: false, reason: 'still-corrupt' }
+        broadcastMessage({ type: 'recovery-complete', mode: 'retry' })
+        return { ok: true, mode: 'retry' }
+    }
+
+    const targetPath = pendingRecovery.baseStoragePath || `${storagePath}-local`
+    const quarantined = quarantineStorageRoot(getBackendFs(), targetPath, {
+        reason: pendingRecovery.reason,
+        fingerprints: {
+            baseKey: baseKey ? secretFingerprint(baseKey.toString('hex')) : null,
+            encryptionKey: encryptionKey ? secretFingerprint(encryptionKey.toString('hex')) : null,
+        },
+    })
+    if (!quarantined.ok && quarantined.reason !== 'missing') {
+        logger.log('[ERROR] Storage recovery: quarantine failed; aborting reset so no data is lost', { reason: quarantined.reason })
+        broadcastMessage({ type: 'recovery-failed', reason: 'quarantine-failed' })
+        return { ok: false, reason: 'quarantine-failed' }
+    }
+    logger.log('[AUDIT] Storage recovery: corrupt root quarantined; starting owner-approved fresh base', {
+        quarantined: quarantined.ok,
+    })
+
+    deleteBackendSecret('autobaseKey')
+    deleteBackendSecret('encryptionKey')
+    deleteBackendSecret('ownerAuthorityKey')
+    deleteBackendSecret('epochKey')
+    deleteBackendSecret('epochEncryptionKey')
+    deleteLegacyKeyFile(keyFilePath)
+    deleteLegacyKeyFile(encKeyFilePath)
+    deleteLegacyKeyFile(ownerAuthorityKeyFilePath)
+    setBaseKey(null)
+    setEncryptionKey(null)
+    setOwnerAuthorityKeyPair(null)
+    setEpochKey(null)
+    setEpochEncryptionKeyPair(null)
+
+    setPendingRecovery(null)
+    await initAutobase(null)
+    if (pendingRecovery) return { ok: false, reason: 'still-corrupt' }
+    broadcastMessage({ type: 'recovery-complete', mode: 'fresh-base' })
+    return { ok: true, mode: 'fresh-base' }
 }
 
 let _joinPromise = null
@@ -880,15 +966,6 @@ function broadcastMessage(payload) {
         req.send(JSON.stringify(payload))
     } catch (e) {
         logger.log('[ERROR] Failed to broadcast message', e)
-    }
-}
-
-function rmrfSafe(p) {
-    try {
-        const fs = getBackendFs()
-        if (fs.existsSync(p)) fs.rmSync(p, { recursive: true, force: true })
-    } catch (e) {
-        logger.log('[ERROR] rmrfSafe failed for', p, e)
     }
 }
 

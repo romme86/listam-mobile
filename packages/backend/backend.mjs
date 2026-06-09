@@ -14,7 +14,8 @@ import {
     RPC_REMOVE_MEMBER,
     RPC_GET_MEMBERS,
     RPC_GET_OWNER_RECOVERY_CODE,
-    RPC_RECOVER_OWNER
+    RPC_RECOVER_OWNER,
+    RPC_RECOVER_STORAGE
 } from '@listam/protocol'
 import b4a from 'b4a'
 import {syncListToFrontend, validateItem, addItem, updateItem, deleteItem} from './lib/item.mjs'
@@ -24,7 +25,9 @@ import {
     normalizeListOperation,
 } from './lib/list-reducer.mjs'
 import {loadAutobaseKey, saveAutobaseKey, loadEncryptionKey, saveEncryptionKey, loadOwnerAuthorityKey, saveOwnerAuthorityKey, deleteLegacyKeyFile, deleteLegacyInviteFile, loadEpochKey, saveEpochKey, deleteEpochKey, loadEpochEncryptionKey, saveEpochEncryptionKey} from "./lib/key.mjs"
-import {initAutobase, joinViaInvite, createInvite, removeMemberAndRotateEpoch, broadcastMembershipRoster, sendOwnerRecoveryCodeToFrontend, recoverOwnerAuthority} from "./lib/network.mjs"
+import {initAutobase, joinViaInvite, createInvite, removeMemberAndRotateEpoch, broadcastMembershipRoster, sendOwnerRecoveryCodeToFrontend, recoverOwnerAuthority, performStorageRecovery} from "./lib/network.mjs"
+import { normalizeRecoveryPolicy } from './lib/recovery.mjs'
+import { createStorageLease } from './lib/storage-lease.mjs'
 import { parseBootSecretPayload } from './lib/secrets.mjs'
 import { isMembershipRecord, reduceMembershipOperation } from './lib/membership.mjs'
 import { removeWriterAtConsensus } from './lib/writer-removal.mjs'
@@ -59,10 +62,11 @@ export let keyFilePath = './autobase-key.txt'
 export let encKeyFilePath = './encryption-key.txt'
 export let ownerAuthorityKeyFilePath = './owner-authority-key.txt'
 export let legacyInviteFilePath = './invite.json'
+export let recoveryPolicy = 'refuse-destructive'
 
 let localWriterKeyFilePath = './local-writer-key.txt'
 let lockPath = './lista.lock'
-let lockFd = null
+let storageLease = null
 let platformFs = null
 let shutdownStarted = false
 
@@ -79,9 +83,18 @@ export function createBackendPaths(platform, argv = platform.argv ?? []) {
         }
     }
 
+    // Storage-root isolation: each app role gets its own storage root and its
+    // own lease, so desktop + headless on one machine never contend for (or
+    // corrupt) the same Corestore. The default namespace keeps the historical
+    // mobile paths. Legacy key-file names stay un-namespaced — they are
+    // migration inputs from the single-app era.
+    const namespace = normalizeStorageNamespace(platform.storageNamespace)
+    const rootName = namespace ? `lista-${namespace}` : 'lista'
+
     return {
         baseDir,
-        storagePath: baseDir ? join(baseDir, 'lista') : './data',
+        storageNamespace: namespace,
+        storagePath: baseDir ? join(baseDir, rootName) : `./data${namespace ? `-${namespace}` : ''}`,
         peerKeysString: argv?.[1] || '',
         baseKeyHex: argv?.[2] || '',
         bootSecretPayload: argv?.[3] || '',
@@ -90,8 +103,13 @@ export function createBackendPaths(platform, argv = platform.argv ?? []) {
         encKeyFilePath: baseDir ? join(baseDir, 'lista-encryption-key.txt') : './encryption-key.txt',
         ownerAuthorityKeyFilePath: baseDir ? join(baseDir, 'lista-owner-authority-key.txt') : './owner-authority-key.txt',
         legacyInviteFilePath: baseDir ? join(baseDir, 'lista-invite.json') : './invite.json',
-        lockPath: baseDir ? join(baseDir, 'lista.lock') : './lista.lock',
+        lockPath: baseDir ? join(baseDir, `${rootName}.lock`) : `./${rootName}.lock`,
     }
+}
+
+function normalizeStorageNamespace(value) {
+    if (typeof value !== 'string') return ''
+    return value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 32)
 }
 
 export async function startBackend(platform) {
@@ -112,26 +130,37 @@ export async function startBackend(platform) {
     ownerAuthorityKeyFilePath = paths.ownerAuthorityKeyFilePath
     legacyInviteFilePath = paths.legacyInviteFilePath
     lockPath = paths.lockPath
+    recoveryPolicy = normalizeRecoveryPolicy(platform.recoveryPolicy)
     platformFs = platform.fs
     setBackendFs(platformFs)
 
-    // Stagger lock acquisition with random delay to detect duplicate instances.
-    const lockDelay = Math.floor(Math.random() * 500) + 100
-    logger.log(`[INFO] [${instanceId}] Waiting ${lockDelay}ms before acquiring lock...`)
-    await new Promise(resolve => setTimeout(resolve, lockDelay))
-
-    try {
-        lockFd = platformFs.openSync(lockPath, 'wx')
-        platformFs.writeSync(lockFd, instanceId + '\n')
-        logger.log(`[INFO] [${instanceId}] Acquired lock:`, lockPath)
-    } catch (e) {
-        try {
-            const owner = platformFs.readFileSync(lockPath, 'utf-8').trim()
-            logger.log(`[WARNING] [${instanceId}] Lock owned by instance: ${owner}`)
-        } catch {}
-        logger.log(`[ERROR] [${instanceId}] Another backend instance is already running (lock exists):`, lockPath)
-        throw e
+    // Single-writer lease over this storage root. Unlike the previous 'wx'
+    // lock file, a lease left behind by a crash expires and is recovered
+    // instead of blocking every later start until it is deleted by hand.
+    // The module-level storageLease is only replaced after acquisition
+    // succeeds, so a refused second start cannot clobber the running
+    // instance's lease handle.
+    const lease = createStorageLease({
+        fs: platformFs,
+        path: lockPath,
+        instanceId,
+        role: paths.storageNamespace || 'default',
+        ttlMs: platform.leaseTtlMs,
+    })
+    const leaseResult = lease.acquire()
+    if (!leaseResult.ok) {
+        const owner = leaseResult.owner
+        logger.log(`[ERROR] [${instanceId}] Another backend instance holds the storage lease:`, lockPath, owner ? { owner: owner.instanceId, role: owner.role } : {})
+        throw new Error('Storage lease is held by another running instance')
     }
+    if (leaseResult.recoveredStale) {
+        logger.log(`[AUDIT] [${instanceId}] Recovered a stale storage lease (previous instance did not shut down cleanly)`)
+    }
+    storageLease = lease
+    storageLease.startHeartbeat(() => {
+        logger.log(`[ERROR] [${instanceId}] Storage lease was lost to another instance; this backend no longer owns the storage root`)
+    })
+    logger.log(`[INFO] [${instanceId}] Acquired storage lease:`, lockPath)
 
     const bootSecrets = parseBootSecretPayload(paths.bootSecretPayload)
 
@@ -284,6 +313,12 @@ async function handleFrontendRequest(req, error) {
                 await recoverOwnerAuthority(data.code)
                 break
             }
+            case RPC_RECOVER_STORAGE: {
+                logger.log('[INFO] Command RPC_RECOVER_STORAGE')
+                const data = JSON.parse(req.data.toString())
+                await performStorageRecovery(data.action)
+                break
+            }
             case RPC_REQUEST_SYNC: {
                 logger.log('[INFO] Command RPC_REQUEST_SYNC - frontend requesting current list')
                 syncListToFrontend()
@@ -369,11 +404,10 @@ export async function shutdownBackend() {
         }
     }
     try {
-        if (lockFd && platformFs) platformFs.closeSync(lockFd)
-        if (platformFs) platformFs.rmSync(lockPath, { force: true })
-        lockFd = null
+        if (storageLease) storageLease.release()
+        storageLease = null
     } catch (e) {
-        logger.log('[ERROR] Error releasing lock:', e)
+        logger.log('[ERROR] Error releasing storage lease:', e)
     }
     logger.log('[INFO] Backend shutdown complete')
 }
