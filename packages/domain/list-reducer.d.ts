@@ -36,3 +36,9 @@ export function reduceListViewEntries(entries: unknown[], options?: { selectedLi
 export function reduceListOperations(operations: unknown[], options?: { selectedListId?: string }): ReducedList
 export function applyOperationToList(currentItems: unknown[], operation: unknown, options?: { selectedListId?: string; listType?: string }): NormalizedListItem[]
 export function sameListItem(left: ListLikeEntry | null | undefined, right: ListLikeEntry | null | undefined): boolean
+export type ListReduction = {
+    applyEntry(entry: unknown): boolean
+    applyOperation(operation: unknown): boolean
+    items(listId?: string): NormalizedListItem[]
+}
+export function createListReduction(options?: { selectedListId?: string }): ListReduction

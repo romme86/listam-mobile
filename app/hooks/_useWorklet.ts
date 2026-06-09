@@ -32,6 +32,7 @@ import {
     RPC_GET_MEMBERS,
     RPC_GET_OWNER_RECOVERY_CODE,
     RPC_RECOVER_OWNER,
+    RPC_RECOVER_STORAGE,
 } from '@listam/protocol'
 import type { ListEntry } from '@/app/components/_types'
 
@@ -235,6 +236,52 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                     } else if (payload.type === 'member-removal-incomplete') {
                         if (notifyRef.current) {
                             notifyRef.current(i18nRef.current.t('backend.memberRemoval.incomplete'), 'error')
+                        }
+                    } else if (payload.type === 'recovery-required') {
+                        // M4: storage failed to open. Nothing was deleted; the
+                        // user chooses retry or an explicitly destructive reset
+                        // (which quarantines the old data first).
+                        const sendRecovery = (action: 'retry' | 'reset') => {
+                            sendRPC(RPC_RECOVER_STORAGE, JSON.stringify({ action }))
+                        }
+                        Alert.alert(
+                            i18nRef.current.t('backend.recovery.title'),
+                            i18nRef.current.t('backend.recovery.message'),
+                            [
+                                { text: i18nRef.current.t('common.cancel'), style: 'cancel' },
+                                {
+                                    text: i18nRef.current.t('backend.recovery.reset'),
+                                    style: 'destructive',
+                                    onPress: () => {
+                                        Alert.alert(
+                                            i18nRef.current.t('backend.recovery.confirmTitle'),
+                                            i18nRef.current.t('backend.recovery.confirmMessage'),
+                                            [
+                                                { text: i18nRef.current.t('common.cancel'), style: 'cancel' },
+                                                {
+                                                    text: i18nRef.current.t('backend.recovery.confirmReset'),
+                                                    style: 'destructive',
+                                                    onPress: () => sendRecovery('reset'),
+                                                },
+                                            ],
+                                        )
+                                    },
+                                },
+                                {
+                                    text: i18nRef.current.t('backend.recovery.retry'),
+                                    onPress: () => sendRecovery('retry'),
+                                },
+                            ],
+                        )
+                    } else if (payload.type === 'recovery-complete') {
+                        if (notifyRef.current) {
+                            notifyRef.current(payload.mode === 'fresh-base'
+                                ? i18nRef.current.t('backend.recovery.completeFresh')
+                                : i18nRef.current.t('backend.recovery.completeRetry'), 'success')
+                        }
+                    } else if (payload.type === 'recovery-failed') {
+                        if (notifyRef.current) {
+                            notifyRef.current(i18nRef.current.t('backend.recovery.failed'), 'error')
                         }
                     } else {
                         appLogger.info('Unhandled backend message payload', payload)

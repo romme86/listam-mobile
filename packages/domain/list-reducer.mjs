@@ -215,6 +215,34 @@ export function applyOperationToList(currentItems, operation, options = {}) {
     return getListItems(byList, selectedListId)
 }
 
+// Incremental form of reduceListViewEntries: holds the reduction state so a
+// caller replaying a growing operation log (e.g. a materialized-view
+// checkpoint) can feed only the entries appended since the last pass instead
+// of re-reducing from index 0. Feeding the same entries in the same order
+// yields the same items as one reduceListViewEntries call over the full log.
+export function createListReduction(options = {}) {
+    const selectedListId = normalizeListId(options.selectedListId)
+    const byList = new Map()
+
+    return {
+        applyEntry(entry) {
+            const operation = normalizeViewEntry(entry)
+            if (!operation) return false
+            applyNormalizedOperation(byList, normalizeListOperation(operation))
+            return true
+        },
+        applyOperation(operation) {
+            const normalized = normalizeListOperation(operation)
+            if (!normalized) return false
+            applyNormalizedOperation(byList, normalized)
+            return true
+        },
+        items(listId = selectedListId) {
+            return getListItems(byList, listId)
+        },
+    }
+}
+
 export function sameListItem(left, right) {
     if (!left || !right) return false
     if (normalizeListId(left.listId) !== normalizeListId(right.listId)) return false

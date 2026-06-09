@@ -12,6 +12,11 @@ export function createNodePlatform(options = {}) {
         fs: options.fs ?? fs,
         join: options.join ?? join,
         fileURLToPath: options.fileURLToPath ?? fileURLToPath,
+        // Node hosts are headless/server contexts by default: corruption
+        // recovery never offers a destructive reset unless explicitly opted in.
+        recoveryPolicy: options.recoveryPolicy ?? 'refuse-destructive',
+        storageNamespace: options.storageNamespace,
+        leaseTtlMs: options.leaseTtlMs,
         sent,
         createRpc: options.createRpc ?? ((handler) => createNodeRpc(handler, sent, reply)),
         onTeardown(handler) {
