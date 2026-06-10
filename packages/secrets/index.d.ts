@@ -135,6 +135,11 @@ export function createDeleteSecretPayload(name: SecretName): DeleteSecretPayload
 export function parseSecretAck(ack: unknown): boolean
 export function prepareBackendSecrets(adapters: SecretStorageAdapters): Promise<PreparedBackendSecrets>
 export function persistBackendSecretRequest(rawRequest: string | BackendSecretPersistRequest, adapters: SecretStorageAdapters): Promise<{ mode: SecretMode; warning?: string }>
+export type FileSecretStoreFs = {
+    readFileSync(path: string, encoding: string): string
+    writeFileSync(path: string, data: string, options?: { mode?: number }): void
+}
+export function createFileSecretStore(options: { fs: FileSecretStoreFs; path: string }): SecureSecretStore
 export function prepareLoyaltyCardPayloads(adapters: LoyaltyCardStorageAdapters): Promise<PreparedLoyaltyCardPayloads>
 export function persistLoyaltyCardPayload(card: unknown, adapters: LoyaltyCardStorageAdapters): Promise<{ handle: LoyaltyCardHandle; mode: 'secure-store'; warnings: string[] }>
 export function readLoyaltyCardPayload(handleOrRef: unknown, adapters: LoyaltyCardStorageAdapters): Promise<LoyaltyCardPayload | null>

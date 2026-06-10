@@ -485,6 +485,50 @@ export async function deleteLoyaltyCardPayload(handleOrId, adapters) {
     }
 }
 
+// File-backed secret store with the SecureSecretStore adapter shape, for
+// desktop/headless hosts that have no platform keychain bridge yet. All
+// values live in one owner-only (0600) JSON file under the app's private
+// storage directory — the documented dev/file tier; OS keychain/keyring
+// integration is the planned upgrade. The fs module is injected so node:fs
+// and bare-fs both work.
+export function createFileSecretStore({ fs, path }) {
+    if (!fs || !path) throw new Error('A filesystem adapter and file path are required')
+
+    function readAll() {
+        try {
+            const parsed = JSON.parse(fs.readFileSync(path, 'utf8'))
+            return parsed && typeof parsed === 'object' ? parsed : {}
+        } catch {
+            return {}
+        }
+    }
+
+    function writeAll(values) {
+        fs.writeFileSync(path, JSON.stringify(values), { mode: 0o600 })
+    }
+
+    return {
+        async isAvailable() {
+            return true
+        },
+        async getItem(key) {
+            const values = readAll()
+            return typeof values[key] === 'string' ? values[key] : null
+        },
+        async setItem(key, value) {
+            const values = readAll()
+            values[key] = String(value)
+            writeAll(values)
+        },
+        async deleteItem(key) {
+            const values = readAll()
+            if (!(key in values)) return
+            delete values[key]
+            writeAll(values)
+        },
+    }
+}
+
 function parsePersistRequest(rawRequest) {
     if (typeof rawRequest !== 'string') return rawRequest
     return JSON.parse(rawRequest)

@@ -17,6 +17,7 @@ export function createNodePlatform(options = {}) {
         recoveryPolicy: options.recoveryPolicy ?? 'refuse-destructive',
         storageNamespace: options.storageNamespace,
         leaseTtlMs: options.leaseTtlMs,
+        bootstrap: options.bootstrap,
         sent,
         createRpc: options.createRpc ?? ((handler) => createNodeRpc(handler, sent, reply)),
         onTeardown(handler) {
