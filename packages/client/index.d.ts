@@ -31,3 +31,19 @@ export function decodeWithClientAdapter(
 ): ClientEvent
 export function encodePayload(value: unknown): string
 export function dataToString(data: unknown): string | null
+
+export type ChannelEvent = ClientEvent & { reply(value: unknown): void }
+export type BackendChannel = {
+    platform: {
+        createRpc(handler: (req: { command: number; data: Uint8Array; reply(value: unknown): void }, error: unknown) => unknown): {
+            request(command: number): { command: number; send(data: unknown): void; reply(): Promise<unknown> }
+            close(): void
+        }
+    }
+    client: {
+        send(command: number, payload?: unknown): Promise<unknown>
+        onEvent(listener: (event: ChannelEvent) => void): () => void
+        isConnected(): boolean
+    }
+}
+export function createBackendChannel(): BackendChannel

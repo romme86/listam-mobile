@@ -29,7 +29,8 @@ import {initAutobase, joinViaInvite, createInvite, removeMemberAndRotateEpoch, b
 import { normalizeRecoveryPolicy } from './lib/recovery.mjs'
 import { createStorageLease } from './lib/storage-lease.mjs'
 import { parseBootSecretPayload } from './lib/secrets.mjs'
-import { isMembershipRecord, reduceMembershipOperation } from './lib/membership.mjs'
+import { isMembershipRecord, reduceMembershipLog, reduceMembershipOperation } from './lib/membership.mjs'
+import { createViewCheckpoint } from './lib/view-checkpoint.mjs'
 import { removeWriterAtConsensus } from './lib/writer-removal.mjs'
 import { decryptEncryptedListOperation, decryptEpochGrantForWriter, epochKeyHashHex, isEncryptedListOperation } from './lib/key-epochs.mjs'
 import {
@@ -63,6 +64,10 @@ export let encKeyFilePath = './encryption-key.txt'
 export let ownerAuthorityKeyFilePath = './owner-authority-key.txt'
 export let legacyInviteFilePath = './invite.json'
 export let recoveryPolicy = 'refuse-destructive'
+// Optional private DHT bootstrap nodes (the shared test harness requirement):
+// when set, every Hyperswarm this backend creates joins the private testnet
+// instead of the public DHT, so cross-instance tests run hermetically.
+export let swarmBootstrap = null
 
 let localWriterKeyFilePath = './local-writer-key.txt'
 let lockPath = './lista.lock'
@@ -131,6 +136,9 @@ export async function startBackend(platform) {
     legacyInviteFilePath = paths.legacyInviteFilePath
     lockPath = paths.lockPath
     recoveryPolicy = normalizeRecoveryPolicy(platform.recoveryPolicy)
+    swarmBootstrap = Array.isArray(platform.bootstrap) && platform.bootstrap.length > 0
+        ? platform.bootstrap
+        : null
     platformFs = platform.fs
     setBackendFs(platformFs)
 
@@ -432,12 +440,30 @@ function notifyFrontend(payload) {
     }
 }
 
+// Membership state must be derived from the view, not accumulated in memory
+// across apply() calls: when the indexer set changes (e.g. a writer is added),
+// the linearizer truncates the view and re-runs history through apply. An
+// in-memory accumulator survives that truncation, so the re-processed
+// membership records would be rejected as replays — and host.addWriter would
+// never run on the reorged timeline, leaving a just-added member permanently
+// non-writable. The truncation-aware checkpoint re-reduces from the view
+// (incrementally; full re-scan only after an actual reorg).
+const applyMembershipCheckpoint = createViewCheckpoint()
+
+export function resetApplyMembershipCheckpoint() {
+    applyMembershipCheckpoint.reset()
+}
+
 export async function apply (nodes, view, host) {
     if (autobase?.closing) {
         logger.log('[WARNING] Apply called while Autobase is closing; skipping.')
         return
     }
     logger.log('[INFO] Apply started')
+
+    const { membershipRecords } = await applyMembershipCheckpoint.update(view)
+    setMembershipState(reduceMembershipLog(membershipRecords, { baseKey: autobase?.key }))
+
     for (const { value } of nodes) {
         if (!value) continue
 

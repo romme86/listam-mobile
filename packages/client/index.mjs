@@ -89,6 +89,93 @@ export function encodePayload(value) {
     return JSON.stringify(value)
 }
 
+// In-process duplex between a UI and an embedded @listam/backend — the desktop
+// IPC contract. Where mobile bridges the same RPC command surface over BareKit
+// IPC, a Pear Desktop app runs the backend in-process, so the "transport" is a
+// pair of plain function calls:
+//
+//   - channel.platform.createRpc is handed to startBackend; backend-originated
+//     requests (`rpc.request(cmd).send(data)` and the awaited `.reply()` used
+//     by secret persistence) surface to the UI as decoded client events.
+//   - channel.client.send(command, payload) dispatches a frontend request into
+//     the backend's handler, exactly like a worklet RPC request arriving.
+//
+// Events are decoded with the same decodeBackendRequest used by the worklet
+// adapter, so both transports honor one contract.
+export function createBackendChannel() {
+    let backendHandler = null
+    const listeners = new Set()
+
+    // Emits one decoded event to every listener. The returned promise resolves
+    // when (if ever) a listener calls event.reply — listeners may reply
+    // asynchronously, so backend code awaiting `req.reply()` (the secret
+    // persistence ack) gets the first reply whenever it lands; the backend's
+    // own ack timeout covers events nobody answers.
+    function emitBackendRequest(command, data) {
+        let resolveReply
+        const firstReply = new Promise((resolve) => {
+            resolveReply = resolve
+        })
+        const event = {
+            ...decodeBackendRequest(command, data),
+            reply(value) {
+                resolveReply(value)
+            },
+        }
+        for (const listener of listeners) {
+            listener(event)
+        }
+        return firstReply
+    }
+
+    const platform = {
+        createRpc(handler) {
+            backendHandler = handler
+            return {
+                request(command) {
+                    let firstReply = null
+                    return {
+                        command,
+                        send(data) {
+                            firstReply = emitBackendRequest(command, dataToString(data))
+                        },
+                        reply() {
+                            return firstReply ?? Promise.resolve(null)
+                        },
+                    }
+                },
+                close() {
+                    backendHandler = null
+                },
+            }
+        },
+    }
+
+    const client = {
+        async send(command, payload) {
+            if (!backendHandler) throw new Error('Backend channel is not connected')
+            let replyData = null
+            await backendHandler({
+                command,
+                data: b4a.from(encodePayload(payload ?? '')),
+                reply(value) {
+                    replyData = value
+                },
+            }, null)
+            return replyData
+        },
+        onEvent(listener) {
+            listeners.add(listener)
+            return () => listeners.delete(listener)
+        },
+        isConnected() {
+            return backendHandler !== null
+        },
+    }
+
+    return { platform, client }
+}
+
 export function dataToString(data) {
     if (data == null) return null
     if (typeof data === 'string') return data

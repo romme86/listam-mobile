@@ -1,7 +1,7 @@
 import Hyperswarm from "hyperswarm"
 import BlindPairing from "blind-pairing"
 import z32 from "z32"
-import { apply, open, storagePath, peerKeysString, keyFilePath, encKeyFilePath, ownerAuthorityKeyFilePath, legacyInviteFilePath, recoveryPolicy } from "../backend.mjs"
+import { apply, open, resetApplyMembershipCheckpoint, storagePath, peerKeysString, keyFilePath, encKeyFilePath, ownerAuthorityKeyFilePath, legacyInviteFilePath, recoveryPolicy, swarmBootstrap } from "../backend.mjs"
 import { saveAutobaseKey, saveEncryptionKey, saveOwnerAuthorityKey, deleteOwnerAuthorityKey, saveEpochKey, deleteEpochKey, saveEpochEncryptionKey, deleteEpochEncryptionKey, deleteLegacyInviteFile, deleteLegacyKeyFile } from "./key.mjs"
 import { deleteBackendSecret, secretFingerprint } from "./secrets.mjs"
 import { describeCorruption, isCorruptionSignature, planRecoveryAction, quarantineStorageRoot } from "./recovery.mjs"
@@ -22,6 +22,8 @@ import {
 import { ownerRecoveryCodeFromKeyPair, recoverOwnerAuthorityFromCode } from "./owner-recovery.mjs"
 import {
     createEpochEncryptionKeyPair,
+    decodeInviteEpochData,
+    encodeInviteEpochData,
     epochPublicKeyHex,
     generateEpochKey,
 } from './key-epochs.mjs'
@@ -208,12 +210,23 @@ export function createInvite() {
         return null
     }
 
-    // Return an existing invite only while it is unexpired and unused.
-    if (isInviteUsable(currentInvite, inviteUsesRemaining)) {
+    // Return an existing invite only while it is unexpired, unused, AND minted
+    // for the current epoch — its signed additional data carries the epoch key
+    // the joiner bootstraps from, so a rotation must retire it.
+    const currentEpoch = Number(membershipState?.currentEpoch) || 0
+    if (isInviteUsable(currentInvite, inviteUsesRemaining) && currentInvite.epochAtMint === currentEpoch) {
         return z32.encode(currentInvite.invite)
     }
 
-    const inv = withInvitePolicy(BlindPairing.createInvite(autobase.key))
+    // The epoch key rides in the invite's signed additional data because the
+    // BlindPairing confirm payload cannot carry extra fields (see key-epochs).
+    const epochData = encodeInviteEpochData(epochKey, currentEpoch)
+    if (!epochData) {
+        logger.log('[WARNING] Invite creation rejected; no current epoch key to embed')
+        return null
+    }
+    const inv = withInvitePolicy(BlindPairing.createInvite(autobase.key, { data: epochData }))
+    inv.epochAtMint = currentEpoch
     setCurrentInvite(inv)
     inviteUsesRemaining = INVITE_MAX_USES
     deleteLegacyInviteFile(legacyInviteFilePath)
@@ -286,12 +299,20 @@ export function setupBlindPairing() {
                 await autobase.append(membershipRecord)
                 await autobase.update()
 
-                // Send our base key + encryption key
+                // A rekey while this invite was outstanding would hand the
+                // joiner a stale epoch key; refuse and rotate instead.
+                if (reservedInvite.epochAtMint !== (Number(membershipState.currentEpoch) || 0)) {
+                    throw new Error('Invite was minted for a rotated epoch; rotating invite')
+                }
+
+                // Send our base key + encryption key. The current epoch key
+                // travels in the invite's signed additional data
+                // (reservedInvite.additional) — confirm() cannot carry extra
+                // fields.
                 candidate.confirm({
                     key: autobase.key,
                     encryptionKey: autobase.encryptionKey,
-                    epochKey,
-                    epoch: membershipState.currentEpoch || 1,
+                    additional: reservedInvite.additional,
                 })
             } catch (e) {
                 logger.log('[ERROR] Failed to accept invite candidate:', e)
@@ -441,9 +462,10 @@ export async function initAutobase(newBaseKey, options = {}) {
         setMembershipState(createMembershipState())
         setCurrentInvite(null)
         inviteUsesRemaining = 0
-        // The checkpoint is keyed to one base's linearized view; a teardown or
-        // base switch invalidates it.
+        // The checkpoints are keyed to one base's linearized view; a teardown
+        // or base switch invalidates them.
         resetViewCheckpoint()
+        resetApplyMembershipCheckpoint()
 
         const baseStoragePath = `${storagePath}-local`
 
@@ -571,7 +593,7 @@ export async function initAutobase(newBaseKey, options = {}) {
             }
         }
 
-        setSwarm(new Hyperswarm())
+        setSwarm(new Hyperswarm(swarmOptions()))
         swarm.on('error', (err) => {
             logger.log('[ERROR] Replication swarm error:', err)
         })
@@ -747,7 +769,7 @@ export async function joinViaInvite(z32InviteStr) {
             //    DO NOT close the candidate in onadd — closing it kills the
             //    underlying Noise connection, which is the only live link to the
             //    host. The temp swarm stays alive so we can replicate over it.
-            _tempSwarm = new Hyperswarm()
+            _tempSwarm = new Hyperswarm(swarmOptions())
             _tempPairing = new BlindPairing(_tempSwarm)
 
             const result = await new Promise((resolve, reject) => {
@@ -774,7 +796,10 @@ export async function joinViaInvite(z32InviteStr) {
             if (!result?.key || !result?.encryptionKey) {
                 throw new Error('Pairing returned incomplete credentials')
             }
-            if (!result?.epochKey) {
+            // The epoch key arrives as the invite's signed additional data
+            // (verified against the invite key pair by blind-pairing-core).
+            const inviteEpoch = decodeInviteEpochData(result.data)
+            if (!inviteEpoch) {
                 throw new Error('Pairing returned no epoch key')
             }
 
@@ -791,8 +816,8 @@ export async function joinViaInvite(z32InviteStr) {
             await deleteOwnerAuthorityKey()
             setEpochEncryptionKeyPair(joinEpochEncryptionKeyPair)
             await saveEpochEncryptionKey(joinEpochEncryptionKeyPair.secretKey)
-            setEpochKey(result.epochKey)
-            await saveEpochKey(result.epochKey)
+            setEpochKey(inviteEpoch.epochKey)
+            await saveEpochKey(inviteEpoch.epochKey)
             setEncryptionKey(result.encryptionKey)
             await initAutobase(result.key, { allowOwnerMigration: false })
 
@@ -888,7 +913,12 @@ export async function removeMemberAndRotateEpoch(writerKey) {
         setMembershipState,
         logger,
     })
-    if (result.committed) broadcastMembershipRoster()
+    if (result.committed) {
+        broadcastMembershipRoster()
+        // The epoch rotated: any outstanding invite embeds the retired epoch
+        // key in its signed additional data, so mint a fresh one.
+        rotateInviteAndNotifyFrontend()
+    }
     broadcastMessage(result.ok
         ? { type: 'member-removed', writerKey: normalizeHex(writerKey, 32), snapshot: result.snapshot !== false }
         : { type: 'member-removal-failed', reason: result.reason })
@@ -967,6 +997,10 @@ function broadcastMessage(payload) {
     } catch (e) {
         logger.log('[ERROR] Failed to broadcast message', e)
     }
+}
+
+function swarmOptions() {
+    return swarmBootstrap ? { bootstrap: swarmBootstrap } : {}
 }
 
 function normalizeInviteCode(raw) {
