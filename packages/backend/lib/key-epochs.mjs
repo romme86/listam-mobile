@@ -31,6 +31,41 @@ export function generateEpochKey() {
     return randomBytes(EPOCH_KEY_BYTES)
 }
 
+// Epoch bootstrap material carried in the invite's signed additional data.
+//
+// BlindPairing's confirm payload encodes exactly { key, encryptionKey,
+// additional } — extra fields like epochKey passed to confirm() are silently
+// dropped (the candidate would pair but never receive the list epoch key, so
+// pre-join history would stay undecryptable). The supported channel is
+// createInvite(key, { data }), which signs the data with the invite key pair;
+// the candidate verifies the signature and surfaces it as `paired.data`.
+export const INVITE_EPOCH_DATA_VERSION = 1
+
+export function encodeInviteEpochData(epochKey, epoch) {
+    const keyHex = normalizeHex(epochKey, EPOCH_KEY_BYTES)
+    const epochNumber = Number(epoch)
+    if (!keyHex || !Number.isInteger(epochNumber) || epochNumber <= 0) return null
+    return Buffer.from(JSON.stringify({
+        version: INVITE_EPOCH_DATA_VERSION,
+        epochKey: keyHex,
+        epoch: epochNumber,
+    }))
+}
+
+export function decodeInviteEpochData(data) {
+    if (!data) return null
+    try {
+        const parsed = JSON.parse(Buffer.from(data).toString('utf8'))
+        if (Number(parsed?.version) !== INVITE_EPOCH_DATA_VERSION) return null
+        const epochKey = normalizeBuffer(parsed.epochKey, EPOCH_KEY_BYTES)
+        const epoch = Number(parsed.epoch)
+        if (!epochKey || !Number.isInteger(epoch) || epoch <= 0) return null
+        return { epochKey, epoch }
+    } catch {
+        return null
+    }
+}
+
 export function epochKeyHashHex(epochKey) {
     const key = normalizeBuffer(epochKey, EPOCH_KEY_BYTES)
     return key ? hash([EPOCH_KEY_HASH_NAMESPACE, key]).toString('hex') : null

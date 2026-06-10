@@ -58,3 +58,70 @@ for (const adapter of adapters) {
         })
     })
 }
+
+// The desktop in-process channel must honor the same backend event contract as
+// the worklet transport, plus the request/reply path secret persistence uses.
+test('@listam/client backend channel (desktop in-process transport)', async (t) => {
+    const { createBackendChannel } = await import('./index.mjs')
+
+    await t.test('delivers backend-originated events decoded like the worklet adapter', () => {
+        const channel = createBackendChannel()
+        const received = []
+        channel.client.onEvent((event) => received.push(event))
+
+        const rpc = channel.platform.createRpc(async () => {})
+        rpc.request(RPC_GET_KEY).send('invite-z32')
+        rpc.request(SYNC_LIST).send(JSON.stringify([{ id: 'item-1', text: 'milk' }]))
+        rpc.request(RPC_MESSAGE).send(JSON.stringify({ type: 'peer-count', count: 2 }))
+        rpc.request(RPC_RESET).send('')
+
+        assert.deepEqual(received.map((event) => event.type), ['invite-key', 'sync-list', 'message', 'reset'])
+        assert.equal(received[0].key, 'invite-z32')
+        assert.deepEqual(received[1].items, [{ id: 'item-1', text: 'milk' }])
+        assert.deepEqual(received[2].payload, { type: 'peer-count', count: 2 })
+    })
+
+    await t.test('dispatches frontend commands into the backend handler with worklet-shaped requests', async () => {
+        const channel = createBackendChannel()
+        const seen = []
+        channel.platform.createRpc(async (req) => {
+            seen.push({ command: req.command, data: req.data.toString() })
+            req.reply('ack')
+        })
+
+        const reply = await channel.client.send(7, { key: 'z32-invite' })
+        assert.equal(reply, 'ack')
+        assert.deepEqual(seen, [{ command: 7, data: JSON.stringify({ key: 'z32-invite' }) }])
+    })
+
+    await t.test('resolves backend reply() from an asynchronous listener reply (secret persistence ack)', async () => {
+        const channel = createBackendChannel()
+        channel.client.onEvent((event) => {
+            if (event.type !== 'persist-secret') return
+            setTimeout(() => event.reply(JSON.stringify({ stored: true })), 5)
+        })
+
+        const rpc = channel.platform.createRpc(async () => {})
+        const req = rpc.request(RPC_PERSIST_SECRET)
+        req.send(JSON.stringify({ op: 'set', name: 'autobaseKey' }))
+        assert.equal(JSON.parse(await req.reply()).stored, true)
+    })
+
+    await t.test('reports connection state and unsubscribes listeners', async () => {
+        const channel = createBackendChannel()
+        assert.equal(channel.client.isConnected(), false)
+        await assert.rejects(() => channel.client.send(2, 'milk'), /not connected/)
+
+        const rpc = channel.platform.createRpc(async () => {})
+        assert.equal(channel.client.isConnected(), true)
+
+        const received = []
+        const unsubscribe = channel.client.onEvent((event) => received.push(event))
+        unsubscribe()
+        rpc.request(RPC_RESET).send('')
+        assert.equal(received.length, 0)
+
+        rpc.close()
+        assert.equal(channel.client.isConnected(), false)
+    })
+})
