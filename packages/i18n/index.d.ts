@@ -227,6 +227,17 @@ export type MessageKey =
     | 'desktop.shortcuts.deleteItem'
     | 'desktop.shortcuts.help'
     | 'desktop.shortcuts.close'
+    | 'desktop.control.title'
+    | 'desktop.control.empty'
+    | 'desktop.control.codePlaceholder'
+    | 'desktop.control.namePlaceholder'
+    | 'desktop.control.pair'
+    | 'desktop.control.paired'
+    | 'desktop.control.pairFailed'
+    | 'desktop.control.query'
+    | 'desktop.control.queryFailed'
+    | 'desktop.control.capabilities'
+    | 'desktop.control.unavailable'
 
 export type MessageCatalog = Record<MessageKey, MessageEntry>
 
