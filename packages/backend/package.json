@@ -33,6 +33,8 @@
     "hypercore-crypto": "^3.6.1",
     "hyperswarm": "^4.12.1",
     "sodium-universal": "^5.0.1",
-    "z32": "^1.1.0"
+    "z32": "^1.1.0",
+    "@listam/owner-control": "0.14.0",
+    "hyperdht": "^6.27.0"
   }
 }

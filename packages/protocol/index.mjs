@@ -17,3 +17,9 @@ export const RPC_GET_MEMBERS = 15
 export const RPC_GET_OWNER_RECOVERY_CODE = 16
 export const RPC_RECOVER_OWNER = 17
 export const RPC_RECOVER_STORAGE = 18
+// Owner-control client (Phase 14/15): the frontend drives the worklet's
+// hyperdht owner-control client to pair with and command the user's headless
+// devices. Replies come back over RPC_MESSAGE as { type: 'owner-control-*' }.
+export const RPC_CONTROL_PAIR = 19
+export const RPC_CONTROL_COMMAND = 20
+export const RPC_CONTROL_LIST = 21

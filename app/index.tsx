@@ -23,6 +23,9 @@ import {
     RPC_GET_MEMBERS,
     RPC_GET_OWNER_RECOVERY_CODE,
     RPC_RECOVER_OWNER,
+    RPC_CONTROL_PAIR,
+    RPC_CONTROL_COMMAND,
+    RPC_CONTROL_LIST,
     type NotifyType,
 } from './hooks/_useWorklet'
 import { store } from './store/store'
@@ -44,6 +47,7 @@ import { useReduceMotion } from './hooks/useReduceMotion'
 import { Header } from './components/Header'
 import { JoinDialog } from './components/JoinDialog'
 import { MembersDialog } from './components/MembersDialog'
+import { OwnedDevicesDialog } from './components/OwnedDevicesDialog'
 import { JoiningOverlay, P2P_MESSAGE_KEYS } from './components/JoiningOverlay'
 import { Paywall } from './components/Paywall'
 import { LoyaltyCardScanner } from './components/LoyaltyCardScanner'
@@ -122,6 +126,7 @@ function AppInner() {
         membershipRoster,
         ownerRecoveryCode,
         clearOwnerRecoveryCode,
+        ownerControl,
         sendRPC,
     } = useWorklet(notify)
 
@@ -130,6 +135,7 @@ function AppInner() {
     const [joinDialogVisible, setJoinDialogVisible] = useState(false)
     const [joinKeyInput, setJoinKeyInput] = useState('')
     const [membersDialogVisible, setMembersDialogVisible] = useState(false)
+    const [ownedDevicesVisible, setOwnedDevicesVisible] = useState(false)
     const [recoverCodeInput, setRecoverCodeInput] = useState('')
     const [currentP2PMessage, setCurrentP2PMessage] = useState(0)
     const [menuVisible, setMenuVisible] = useState(false)
@@ -523,6 +529,19 @@ function AppInner() {
         clearOwnerRecoveryCode()
     }, [clearOwnerRecoveryCode])
 
+    const handleOpenOwnedDevices = useCallback(() => {
+        setOwnedDevicesVisible(true)
+        sendRPC(RPC_CONTROL_LIST)
+    }, [sendRPC])
+
+    const handlePairOwnedDevice = useCallback((code: string, name: string) => {
+        sendRPC(RPC_CONTROL_PAIR, JSON.stringify({ code, name }))
+    }, [sendRPC])
+
+    const handleOwnedDeviceStatus = useCallback((serverPublicKeyHex: string) => {
+        sendRPC(RPC_CONTROL_COMMAND, JSON.stringify({ serverPublicKeyHex, command: 'status' }))
+    }, [sendRPC])
+
     const handleJoinSubmit = useCallback(() => {
         if (!joinKeyInput.trim()) {
             snackbar.show(i18n.t('invite.notification.emptyManual'), 'error')
@@ -593,6 +612,7 @@ function AppInner() {
                 onShare={handleShare}
                 onJoin={handleJoin}
                 onManageMembers={handleManageMembers}
+                onManageOwnedDevices={handleOpenOwnedDevices}
                 trialDaysRemaining={subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
                 menuVisible={menuVisible}
                 onMenuToggle={() => setMenuVisible(v => !v)}
@@ -643,6 +663,13 @@ function AppInner() {
                 onDismissRecoveryCode={clearOwnerRecoveryCode}
                 onRecoverOwnership={handleRecoverOwnership}
                 onClose={handleCloseMembers}
+            />
+            <OwnedDevicesDialog
+                visible={ownedDevicesVisible}
+                ownerControl={ownerControl}
+                onPair={handlePairOwnedDevice}
+                onCheckStatus={handleOwnedDeviceStatus}
+                onClose={() => setOwnedDevicesVisible(false)}
             />
             <JoiningOverlay
                 visible={isJoining}

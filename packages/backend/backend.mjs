@@ -15,7 +15,10 @@ import {
     RPC_GET_MEMBERS,
     RPC_GET_OWNER_RECOVERY_CODE,
     RPC_RECOVER_OWNER,
-    RPC_RECOVER_STORAGE
+    RPC_RECOVER_STORAGE,
+    RPC_CONTROL_PAIR,
+    RPC_CONTROL_COMMAND,
+    RPC_CONTROL_LIST
 } from '@listam/protocol'
 import b4a from 'b4a'
 import {syncListToFrontend, validateItem, addItem, updateItem, deleteItem} from './lib/item.mjs'
@@ -28,7 +31,8 @@ import {loadAutobaseKey, saveAutobaseKey, loadEncryptionKey, saveEncryptionKey, 
 import {initAutobase, joinViaInvite, createInvite, removeMemberAndRotateEpoch, broadcastMembershipRoster, sendOwnerRecoveryCodeToFrontend, recoverOwnerAuthority, performStorageRecovery} from "./lib/network.mjs"
 import { normalizeRecoveryPolicy } from './lib/recovery.mjs'
 import { createStorageLease } from './lib/storage-lease.mjs'
-import { parseBootSecretPayload } from './lib/secrets.mjs'
+import { parseBootSecretPayload, getBootSecretBuffer, persistBackendSecret } from './lib/secrets.mjs'
+import { createOwnerControlClient } from './lib/owner-control-client.mjs'
 import { isMembershipRecord, reduceMembershipLog, reduceMembershipOperation } from './lib/membership.mjs'
 import { createViewCheckpoint } from './lib/view-checkpoint.mjs'
 import { removeWriterAtConsensus } from './lib/writer-removal.mjs'
@@ -68,6 +72,11 @@ export let recoveryPolicy = 'refuse-destructive'
 // when set, every Hyperswarm this backend creates joins the private testnet
 // instead of the public DHT, so cross-instance tests run hermetically.
 export let swarmBootstrap = null
+
+// Lazily-created owner-control client (Phase 14/15): the worklet's hyperdht
+// client for pairing with and commanding the user's headless instances.
+let ownerControlClient = null
+let bootSecretsForControl = null
 
 let localWriterKeyFilePath = './local-writer-key.txt'
 let lockPath = './lista.lock'
@@ -171,6 +180,7 @@ export async function startBackend(platform) {
     logger.log(`[INFO] [${instanceId}] Acquired storage lease:`, lockPath)
 
     const bootSecrets = parseBootSecretPayload(paths.bootSecretPayload)
+    bootSecretsForControl = bootSecrets
 
     // Optional Autobase key from argv (initial base) or loaded from file.
     if (paths.baseKeyHex) {
@@ -332,10 +342,58 @@ async function handleFrontendRequest(req, error) {
                 syncListToFrontend()
                 break
             }
+            case RPC_CONTROL_LIST: {
+                logger.log('[INFO] Command RPC_CONTROL_LIST')
+                const data = parseRpcJson(req.data)
+                const client = ensureOwnerControlClient()
+                if (data?.servers) client.setServers(data.servers)
+                notifyFrontend({ type: 'owner-control-servers', servers: client.listServers(), deviceId: await client.deviceId() })
+                break
+            }
+            case RPC_CONTROL_PAIR: {
+                logger.log('[INFO] Command RPC_CONTROL_PAIR')
+                const data = parseRpcJson(req.data)
+                const result = await ensureOwnerControlClient().pair(data?.code, data?.name)
+                notifyFrontend({ type: 'owner-control-paired', ok: result?.ok === true, reason: result?.reason, servers: result?.servers })
+                break
+            }
+            case RPC_CONTROL_COMMAND: {
+                logger.log('[INFO] Command RPC_CONTROL_COMMAND')
+                const data = parseRpcJson(req.data)
+                const result = await ensureOwnerControlClient().command(data?.serverPublicKeyHex, data?.command, data?.payload)
+                notifyFrontend({ type: 'owner-control-result', command: data?.command, serverPublicKeyHex: data?.serverPublicKeyHex, result })
+                break
+            }
         }
     } catch (err) {
         logger.log('[ERROR] Error handling RPC request:', err)
     }
+}
+
+function parseRpcJson(data) {
+    try {
+        return JSON.parse(data.toString())
+    } catch {
+        return null
+    }
+}
+
+// The owner-control client is created on first use so a backend that never
+// touches headless devices pays no DHT/identity cost. The device seed rides
+// the same secure-storage boundary as the list keys.
+function ensureOwnerControlClient() {
+    if (ownerControlClient) return ownerControlClient
+    ownerControlClient = createOwnerControlClient({
+        async loadControlSeed() {
+            const buffer = getBootSecretBuffer(bootSecretsForControl, 'controlDeviceSeed')
+            return buffer ? buffer.toString('hex') : null
+        },
+        async saveControlSeed(seedHex) {
+            return persistBackendSecret('controlDeviceSeed', Buffer.from(seedHex, 'hex'))
+        },
+        logger,
+    })
+    return ownerControlClient
 }
 
 async function reconcileLegacyKeyFiles({
@@ -416,6 +474,14 @@ export async function shutdownBackend() {
         storageLease = null
     } catch (e) {
         logger.log('[ERROR] Error releasing storage lease:', e)
+    }
+    if (ownerControlClient) {
+        try {
+            await ownerControlClient.close()
+        } catch (e) {
+            logger.log('[ERROR] Error closing owner-control client:', e)
+        }
+        ownerControlClient = null
     }
     logger.log('[INFO] Backend shutdown complete')
 }
