@@ -32,7 +32,7 @@ export default [
             'backend/**/*.{ts,tsx,js,jsx,mjs,cjs}',
             'packages/**/*.{ts,tsx,js,jsx,mjs,cjs}'
         ],
-        ignores: ['**/*.test.{ts,tsx,js,mjs,cjs}', 'packages/logging/index.mjs'],
+        ignores: ['**/*.test.{ts,tsx,js,mjs,cjs}', '**/*.scenario.mjs', 'packages/logging/index.mjs'],
         languageOptions: {
             parser: tseslint.parser,
             ecmaVersion: 'latest',
@@ -49,9 +49,10 @@ export default [
             'no-console': 'off'
         }
     },
-    // Build/codegen scripts and tests may log freely.
+    // Build/codegen scripts and tests (incl. child-process test scenarios)
+    // may log freely.
     {
-        files: ['scripts/**', '**/*.test.{ts,tsx,js,mjs,cjs}'],
+        files: ['scripts/**', '**/*.test.{ts,tsx,js,mjs,cjs}', '**/*.scenario.mjs'],
         rules: {
             'no-console': 'off'
         }

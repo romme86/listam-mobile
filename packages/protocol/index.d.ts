@@ -17,3 +17,6 @@ export const RPC_GET_MEMBERS: 15
 export const RPC_GET_OWNER_RECOVERY_CODE: 16
 export const RPC_RECOVER_OWNER: 17
 export const RPC_RECOVER_STORAGE: 18
+export const RPC_CONTROL_PAIR: 19
+export const RPC_CONTROL_COMMAND: 20
+export const RPC_CONTROL_LIST: 21

@@ -46,6 +46,7 @@ type HeaderProps = {
     onShare: () => void
     onJoin: () => void
     onManageMembers: () => void
+    onManageOwnedDevices: () => void
     trialDaysRemaining?: number
     menuVisible: boolean
     onMenuToggle: () => void
@@ -76,6 +77,7 @@ export function Header(props: HeaderProps) {
         onShare,
         onJoin,
         onManageMembers,
+        onManageOwnedDevices,
         trialDaysRemaining,
         menuVisible,
         onMenuToggle,
@@ -230,6 +232,15 @@ export function Header(props: HeaderProps) {
                             >
                                 <Ionicons name="people-outline" size={22} color={t.colors.text} />
                                 <Text style={styles.menuLabel}>{i18n.t('header.action.membersRecovery')}</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.menuRow}
+                                onPress={() => { onManageOwnedDevices(); closeMenu() }}
+                                activeOpacity={0.6}
+                            >
+                                <Ionicons name="hardware-chip-outline" size={22} color={t.colors.text} />
+                                <Text style={styles.menuLabel}>{i18n.t('control.section')}</Text>
                             </TouchableOpacity>
 
                             <Text style={styles.sectionLabel}>{i18n.t('header.section.display')}</Text>

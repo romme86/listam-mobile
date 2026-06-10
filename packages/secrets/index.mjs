@@ -40,6 +40,10 @@ export const HEX_SECRET_BYTES = Object.freeze({
     ownerAuthorityKey: 64,
     epochKey: 32,
     epochEncryptionKey: 32,
+    // This device's owner-control identity seed: lets the mobile app pair with
+    // and command the user's headless instances (Phase 14/15). Service
+    // material, independent of any list keys.
+    controlDeviceSeed: 32,
 })
 
 const CLEANUP_FILES = Object.values(LEGACY_CLEANUP_FILES)
@@ -146,7 +150,11 @@ export function normalizeSecretValue(name, raw) {
 }
 
 export function parseSecretName(raw) {
-    return typeof raw === 'string' && SECRET_NAMES.includes(raw) ? raw : null
+    // HEX_SECRET_BYTES is the authoritative set of hex secrets; SECRET_NAMES
+    // (the file-backed subset) is included for completeness. controlDeviceSeed
+    // is hex-only with no legacy file, so it qualifies via HEX_SECRET_BYTES.
+    if (typeof raw !== 'string') return null
+    return raw in HEX_SECRET_BYTES || SECRET_NAMES.includes(raw) ? raw : null
 }
 
 export function secretFingerprint(value) {

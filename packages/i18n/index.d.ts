@@ -238,6 +238,16 @@ export type MessageKey =
     | 'desktop.control.queryFailed'
     | 'desktop.control.capabilities'
     | 'desktop.control.unavailable'
+    | 'control.section'
+    | 'control.empty'
+    | 'control.pairAction'
+    | 'control.codePlaceholder'
+    | 'control.namePlaceholder'
+    | 'control.pair'
+    | 'control.paired'
+    | 'control.pairFailed'
+    | 'control.checkStatus'
+    | 'control.commandFailed'
 
 export type MessageCatalog = Record<MessageKey, MessageEntry>
 

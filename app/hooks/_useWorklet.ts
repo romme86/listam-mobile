@@ -33,6 +33,9 @@ import {
     RPC_GET_OWNER_RECOVERY_CODE,
     RPC_RECOVER_OWNER,
     RPC_RECOVER_STORAGE,
+    RPC_CONTROL_PAIR,
+    RPC_CONTROL_COMMAND,
+    RPC_CONTROL_LIST,
 } from '@listam/protocol'
 import type { ListEntry } from '@/app/components/_types'
 
@@ -68,11 +71,23 @@ type UseWorkletResult = {
     membershipRoster: MembershipRoster | null
     ownerRecoveryCode: string | null
     clearOwnerRecoveryCode: () => void
+    ownerControl: OwnerControlState
     sendRPC: (command: number, payload?: string) => void
 }
 
 export type NotifyType = 'info' | 'success' | 'error'
 export type NotifyFn = (message: string, type?: NotifyType) => void
+
+export type OwnerControlServer = {
+    serverPublicKeyHex: string
+    name: string
+    capabilities: string[]
+}
+export type OwnerControlState = {
+    deviceId: string | null
+    servers: OwnerControlServer[]
+    lastResult: { command?: string; serverPublicKeyHex?: string; result?: any } | null
+}
 
 export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
     const i18n = useI18n()
@@ -88,6 +103,11 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
     } = useAppSelector(selectSyncState)
     const [ownerRecoveryCode, setOwnerRecoveryCode] = useState<string | null>(null)
     const clearOwnerRecoveryCode = useCallback(() => setOwnerRecoveryCode(null), [])
+    const [ownerControl, setOwnerControl] = useState<OwnerControlState>({
+        deviceId: null,
+        servers: [],
+        lastResult: null,
+    })
 
     const rpcRef = useRef<any>(null)
     const workletRef = useRef<Worklet | null>(null)
@@ -283,6 +303,34 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                         if (notifyRef.current) {
                             notifyRef.current(i18nRef.current.t('backend.recovery.failed'), 'error')
                         }
+                    } else if (payload.type === 'owner-control-servers') {
+                        setOwnerControl((prev) => ({
+                            ...prev,
+                            deviceId: typeof payload.deviceId === 'string' ? payload.deviceId : prev.deviceId,
+                            servers: Array.isArray(payload.servers) ? payload.servers : prev.servers,
+                        }))
+                    } else if (payload.type === 'owner-control-paired') {
+                        if (payload.ok) {
+                            setOwnerControl((prev) => ({
+                                ...prev,
+                                servers: Array.isArray(payload.servers) ? payload.servers : prev.servers,
+                            }))
+                            if (notifyRef.current) notifyRef.current(i18nRef.current.t('control.paired'), 'success')
+                        } else if (notifyRef.current) {
+                            notifyRef.current(i18nRef.current.t('control.pairFailed'), 'error')
+                        }
+                    } else if (payload.type === 'owner-control-result') {
+                        setOwnerControl((prev) => ({
+                            ...prev,
+                            lastResult: {
+                                command: payload.command,
+                                serverPublicKeyHex: payload.serverPublicKeyHex,
+                                result: payload.result,
+                            },
+                        }))
+                        if (payload.result?.ok === false && notifyRef.current) {
+                            notifyRef.current(i18nRef.current.t('control.commandFailed'), 'error')
+                        }
                     } else {
                         appLogger.info('Unhandled backend message payload', payload)
                     }
@@ -373,6 +421,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         membershipRoster,
         ownerRecoveryCode,
         clearOwnerRecoveryCode,
+        ownerControl,
         sendRPC,
     }
 }
@@ -387,4 +436,7 @@ export {
     RPC_GET_MEMBERS,
     RPC_GET_OWNER_RECOVERY_CODE,
     RPC_RECOVER_OWNER,
+    RPC_CONTROL_PAIR,
+    RPC_CONTROL_COMMAND,
+    RPC_CONTROL_LIST,
 }
