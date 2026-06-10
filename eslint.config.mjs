@@ -26,13 +26,14 @@ export default [
         ]
     },
     // Production code: raw console is banned so secrets cannot be logged.
+    // The shared @listam/* packages now ship from npm and are linted in the
+    // listam-packages repo, so they are no longer part of this app's lint.
     {
         files: [
             'app/**/*.{ts,tsx,js,jsx,mjs,cjs}',
-            'backend/**/*.{ts,tsx,js,jsx,mjs,cjs}',
-            'packages/**/*.{ts,tsx,js,jsx,mjs,cjs}'
+            'backend/**/*.{ts,tsx,js,jsx,mjs,cjs}'
         ],
-        ignores: ['**/*.test.{ts,tsx,js,mjs,cjs}', '**/*.scenario.mjs', 'packages/logging/index.mjs'],
+        ignores: ['**/*.test.{ts,tsx,js,mjs,cjs}', '**/*.scenario.mjs'],
         languageOptions: {
             parser: tseslint.parser,
             ecmaVersion: 'latest',
@@ -40,13 +41,6 @@ export default [
         },
         rules: {
             'no-console': 'error'
-        }
-    },
-    // The shared logger is the only production console boundary.
-    {
-        files: ['packages/logging/index.mjs'],
-        rules: {
-            'no-console': 'off'
         }
     },
     // Build/codegen scripts and tests (incl. child-process test scenarios)

@@ -2,19 +2,19 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-    EN_MESSAGES,
-} from '../packages/i18n/catalogs/en.mjs'
-import {
-    ES_MESSAGES,
-} from '../packages/i18n/catalogs/es.mjs'
-import {
     LONG_LOCALE,
     MESSAGE_KEYS,
     PSEUDO_LOCALE,
     assertCompleteCatalog,
     createLongStringCatalog,
     createPseudoCatalog,
-} from '../packages/i18n/index.mjs'
+    getCatalog,
+} from '@listam/i18n'
+
+// The shared i18n package now ships from npm; getCatalog('en'|'es') returns
+// the raw catalogs the parity check compares against.
+const EN_MESSAGES = getCatalog('en')
+const ES_MESSAGES = getCatalog('es')
 
 const errors = []
 

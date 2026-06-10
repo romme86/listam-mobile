@@ -3,18 +3,14 @@
   "name": "listam-mobile",
   "description": "A minimalistic p2p list app",
   "main": "expo-router/entry",
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
     "start": "expo start",
     "android": "npm run bundle:backend:android && expo run:android",
     "android:release": "cd android && ./gradlew bundleRelease",
     "ios": "npm run bundle:backend:ios && expo run:ios --device",
-    "test:shared": "node --test packages/*/*.test.mjs",
     "test:grocery": "node scripts/test-grocery-intelligence.mjs",
     "test:security": "node --test backend/lib/*.test.mjs",
-    "test": "npm run test:shared && npm run test:security && npm run test:grocery",
+    "test": "npm run test:security && npm run test:grocery",
     "lint": "eslint .",
     "check:deps": "node scripts/check-deps.mjs",
     "check:secrets": "node scripts/check-secrets.mjs",
@@ -27,14 +23,14 @@
   "dependencies": {
     "@expo/vector-icons": "^15.0.0",
     "@inquirer/prompts": "^7.8.1",
-    "@listam/backend": "file:packages/backend",
-    "@listam/client": "file:packages/client",
-    "@listam/domain": "file:packages/domain",
-    "@listam/grocery": "file:packages/grocery",
-    "@listam/i18n": "file:packages/i18n",
-    "@listam/logging": "file:packages/logging",
-    "@listam/protocol": "file:packages/protocol",
-    "@listam/secrets": "file:packages/secrets",
+    "@listam/backend": "^0.8.0",
+    "@listam/client": "^0.8.0",
+    "@listam/domain": "^0.7.0",
+    "@listam/grocery": "^0.7.0",
+    "@listam/i18n": "^0.9.0",
+    "@listam/logging": "^0.7.0",
+    "@listam/protocol": "^0.7.0",
+    "@listam/secrets": "^0.7.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-clipboard/clipboard": "1.16.3",
     "@reduxjs/toolkit": "^2.12.0",
@@ -83,7 +79,7 @@
     "react-redux": "^9.3.0",
     "sodium-universal": "^5.0.1",
     "z32": "^1.1.0",
-    "@listam/owner-control": "0.14.0"
+    "@listam/owner-control": "^0.14.0"
   },
   "devDependencies": {
     "@react-native-community/cli": "latest",
