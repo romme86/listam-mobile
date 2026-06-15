@@ -13,7 +13,8 @@ import { Ionicons } from '@expo/vector-icons'
 import { haptics } from '../feedback'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
-import type { ListEntry } from './_types'
+import { useCategoryDragGesture } from './CategoryDrag'
+import type { ListAlignment, ListEntry } from './_types'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
 const ITEM_HEIGHT = 60
@@ -29,6 +30,10 @@ type ListItemProps = {
     onDelete?: (index: number) => void
     onEdit?: (index: number, text: string) => void
     textScaleFactor?: number
+    listAlignment?: ListAlignment
+    spacing?: number
+    /** Canonical key of the category this row currently sits in (for drag-to-move). */
+    categoryKey?: string
     reduceMotion?: boolean
 }
 
@@ -42,16 +47,26 @@ export function ListItem({
     onDelete,
     onEdit,
     textScaleFactor = 1,
+    listAlignment = 'left',
+    spacing = SPACING,
+    categoryKey = '',
     reduceMotion = false,
 }: ListItemProps) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
+    const isCentered = listAlignment === 'center'
     const panX = useRef(new Animated.Value(0)).current
     const isDeleting = useRef(false)
     const passedThreshold = useRef(false)
     const [editing, setEditing] = useState(false)
     const [draft, setDraft] = useState('')
+
+    // Long-press to drag this row into another category (only while categories
+    // are on). `armedRef` flips true once a drag is picked up, so the tap and
+    // swipe gestures below stand down.
+    const { enabled: dragEnabled, armedRef, handlers: dragHandlers } =
+        useCategoryDragGesture(item, categoryKey)
 
     React.useEffect(() => {
         panX.setValue(0)
@@ -59,6 +74,8 @@ export function ListItem({
     }, [item.text, item.timeOfCompletion, panX])
 
     const handleSingleTap = useCallback(() => {
+        // A long-press that armed a drag must not also toggle on release.
+        if (armedRef.current) return
         if (!onToggleDone) return
         if (item.isDone) {
             haptics.toggleOff()
@@ -85,9 +102,11 @@ export function ListItem({
 
     const panResponder = useMemo(() => PanResponder.create({
         onMoveShouldSetPanResponder: (_, gestureState) => {
+            if (armedRef.current) return false
             return Math.abs(gestureState.dx) > 8 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy)
         },
         onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+            if (armedRef.current) return false
             return Math.abs(gestureState.dx) > 8 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy)
         },
         onPanResponderGrant: () => {
@@ -170,15 +189,20 @@ export function ListItem({
     const textStyle = [
         styles.text,
         { fontSize: 20 * textScaleFactor },
+        isCentered && { transformOrigin: 'center center' as const, textAlign: 'center' as const },
         item.isDone && styles.doneText,
         { transform: [{ scale: textScale }] },
     ]
 
     if (editing) {
         return (
-            <View style={styles.item}>
+            <View style={[styles.item, isCentered && styles.itemCentered]}>
                 <TextInput
-                    style={[styles.editInput, { fontSize: 20 * textScaleFactor }]}
+                    style={[
+                        styles.editInput,
+                        { fontSize: 20 * textScaleFactor },
+                        isCentered && styles.editInputCentered,
+                    ]}
                     value={draft}
                     onChangeText={setDraft}
                     onSubmitEditing={submitEdit}
@@ -193,7 +217,7 @@ export function ListItem({
     }
 
     return (
-        <View style={styles.itemWrapper}>
+        <View style={[styles.itemWrapper, { marginBottom: spacing }]} {...dragHandlers}>
             <Animated.View style={[styles.deleteBg, { opacity: deleteOpacity }]}>
                 <Ionicons name="trash-outline" size={22} color={t.colors.onDanger} />
                 <Text style={styles.deleteLabel}>{i18n.t('main.item.delete')}</Text>
@@ -208,14 +232,14 @@ export function ListItem({
                 <TouchableOpacity
                     activeOpacity={0.7}
                     onPress={handleSingleTap}
-                    onLongPress={startEdit}
+                    onLongPress={dragEnabled ? undefined : startEdit}
                     delayLongPress={350}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: item.isDone }}
                     accessibilityLabel={item.text}
                     accessibilityHint={i18n.t('main.item.accessibilityHint')}
                 >
-                    <Animated.View style={[styles.item, { opacity }]}>
+                    <Animated.View style={[styles.item, isCentered && styles.itemCentered, { opacity }]}>
                         <Animated.Text style={textStyle}>
                             {item.text}
                         </Animated.Text>
@@ -259,6 +283,9 @@ function makeStyles(t: Theme) {
             width: SCREEN_WIDTH - 40,
             backgroundColor: t.colors.bg,
         },
+        itemCentered: {
+            alignItems: 'center',
+        },
         text: {
             fontSize: 20,
             color: t.colors.text,
@@ -276,6 +303,10 @@ function makeStyles(t: Theme) {
             width: '100%',
             paddingLeft: 20,
             paddingVertical: 0,
+        },
+        editInputCentered: {
+            textAlign: 'center',
+            paddingLeft: 0,
         },
     })
 }

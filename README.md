@@ -53,6 +53,29 @@ Host-created BlindPairing invites are single-use and expire after 10 minutes. Th
 
 ---
 
+## Building & Running (iOS)
+
+This app is part of the Listam monorepo. The `@listam/*` packages it depends on
+live in the sibling `../listam-packages` npm workspace and are linked in via
+`file:` dependencies, so a clean build looks like:
+
+```bash
+npm install
+(cd ios && LANG=en_US.UTF-8 pod install)
+LANG=en_US.UTF-8 npx expo run:ios
+```
+
+Notes:
+
+- **CocoaPods needs a UTF-8 locale.** Without it, `pod install` aborts with
+  `Encoding::CompatibilityError`. Export `LANG=en_US.UTF-8` (and/or
+  `LC_ALL=en_US.UTF-8`) for the `pod install` step — the snippet above does this
+  inline.
+- **Metro must watch the workspace.** `metro.config.js` adds `../listam-packages`
+  to `watchFolders` so Metro can resolve the symlinked `@listam/*` packages and
+  their hoisted dependencies. Don't remove it, or the bundler will fail to
+  resolve those packages from a clean checkout.
+
 ## Building a Free Version (Disabling the Paywall)
 
 Listam includes a subscription paywall that appears after a 30-day trial. If you're building your own version of the app according to the open source philosophy, you can disable it entirely.
