@@ -16,7 +16,7 @@
     "check:secrets": "node scripts/check-secrets.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run lint && npm run check:deps && npm run check:secrets && npm run check:i18n && npm run test",
+    "ci": "npm run lint && npm run typecheck && npm run check:deps && npm run check:secrets && npm run check:i18n && npm run test",
     "bundle:backend:ios": "npx bare-pack --target ios --linked backend/backend.mjs --encoding base64 --out app/app.ios.bundle && node scripts/wrap-bare-bundle.mjs app/app.ios.bundle app/app.ios.bundle.mjs",
     "bundle:backend:android": "npx bare-pack --target android --linked backend/backend.mjs --encoding base64 --out app/assets/backend.android.bundle && node scripts/wrap-bare-bundle.mjs app/assets/backend.android.bundle app/assets/backend.android.bundle.mjs"
   },
@@ -71,6 +71,7 @@
     "react-native-b4a": "0.0.4",
     "react-native-bare-kit": "0.11.5",
     "react-native-iap": "^14.7.7",
+    "react-native-nitro-modules": "^0.35.0",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "5.6.2",
     "react-native-screens": "~4.16.0",

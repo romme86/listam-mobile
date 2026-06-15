@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { haptics } from '../feedback'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
+import { useCategoryDragGesture } from './CategoryDrag'
 import type { ListEntry } from './_types'
 import { getIconForItem, type ItemIconVariant } from './itemIconMap'
 
@@ -25,6 +26,8 @@ type GridCardProps = {
     onToggleDone?: (index: number) => void
     onDelete?: (index: number) => void
     itemIconVariant?: ItemIconVariant
+    /** Canonical key of the category this card currently sits in (for drag-to-move). */
+    categoryKey?: string
     reduceMotion?: boolean
 }
 
@@ -35,16 +38,24 @@ export function GridCard({
     onToggleDone,
     onDelete,
     itemIconVariant = 'illustrated',
+    categoryKey = '',
     reduceMotion = false,
 }: GridCardProps) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
+
+    // Long-press to drag this card into another category (only while categories
+    // are on). `armedRef` flips true once picked up, suppressing the toggle tap.
+    const { enabled: dragEnabled, armedRef, handlers: dragHandlers } =
+        useCategoryDragGesture(item, categoryKey)
     const bubbleScale = useRef(new Animated.Value(1)).current
     const bubbleOpacity = useRef(new Animated.Value(0)).current
     const iconSize = Math.max(28, Math.min(cardWidth * 0.68, 76))
 
     const handlePress = useCallback(() => {
+        // A long-press that armed a drag must not also toggle on release.
+        if (armedRef.current) return
         // Commit the state change immediately — feedback animates in parallel,
         // so the tap never feels delayed.
         if (item.isDone) {
@@ -92,11 +103,14 @@ export function GridCard({
         )
     }, [i18n, item.text, originalIndex, onDelete])
 
+    const icon = getIconForItem(item.text, itemIconVariant, t.dark ? 'dark' : 'light')
+
     return (
+        <View {...dragHandlers}>
         <TouchableOpacity
             style={[styles.card, { width: cardWidth }, item.isDone && styles.cardDone]}
             onPress={handlePress}
-            onLongPress={confirmDelete}
+            onLongPress={dragEnabled ? undefined : confirmDelete}
             delayLongPress={400}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: item.isDone }}
@@ -104,11 +118,30 @@ export function GridCard({
             accessibilityHint={i18n.t('main.grid.accessibilityHint')}
         >
             <View style={styles.iconContainer}>
-                <Image
-                    source={getIconForItem(item.text, itemIconVariant).source}
-                    style={[{ width: iconSize, height: iconSize }, item.isDone && styles.cardIconDone]}
-                    resizeMode="contain"
-                />
+                {icon.type === 'image' ? (
+                    <Image
+                        source={icon.source}
+                        style={[{ width: iconSize, height: iconSize }, item.isDone && styles.cardIconDone]}
+                        resizeMode="contain"
+                    />
+                ) : (
+                    <Text
+                        style={[
+                            styles.letterGlyph,
+                            {
+                                width: iconSize,
+                                height: iconSize,
+                                fontSize: iconSize * 0.82,
+                                lineHeight: iconSize,
+                                color: t.colors.text,
+                            },
+                            item.isDone && styles.cardIconDone,
+                        ]}
+                        numberOfLines={1}
+                    >
+                        {icon.letter}
+                    </Text>
+                )}
             </View>
             <Text
                 style={[
@@ -136,6 +169,7 @@ export function GridCard({
                 ]}
             />
         </TouchableOpacity>
+        </View>
     )
 }
 
@@ -160,6 +194,12 @@ function makeStyles(t: Theme) {
         },
         iconContainer: {
             marginBottom: 2,
+        },
+        letterGlyph: {
+            fontFamily: 'CasinoGrotesk-Bold',
+            textAlign: 'center',
+            textAlignVertical: 'center',
+            includeFontPadding: false,
         },
         cardIconDone: {
             opacity: 0.4,

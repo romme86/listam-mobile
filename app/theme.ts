@@ -1,4 +1,5 @@
 import { useColorScheme, Easing } from 'react-native'
+import { useAppSelector } from './store/hooks'
 
 /**
  * Design tokens — the single source of truth for color, spacing, radius,
@@ -126,5 +127,7 @@ export const darkTheme: Theme = { colors: dark, spacing, radius, type, motion, d
 
 export function useTheme(): Theme {
     const scheme = useColorScheme()
-    return scheme === 'dark' ? darkTheme : lightTheme
+    const choice = useAppSelector((s) => s.preferences.themeChoice)
+    const resolved = choice === 'system' ? scheme : choice
+    return resolved === 'dark' ? darkTheme : lightTheme
 }

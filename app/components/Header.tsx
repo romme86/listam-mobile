@@ -18,14 +18,17 @@ import { useTheme, cardColor, type Theme } from '../theme'
 import { useReduceMotion } from '../hooks/useReduceMotion'
 import { useI18n, type LocaleChoice } from '../i18n'
 import type { LoyaltyCardHandle } from '../store/loyaltyCardsSlice'
+import { THEME_CHOICES, type ThemeChoice } from '../store/preferencesSlice'
 import type { ItemIconVariant } from './itemIconMap'
-import type { SizeOption } from './_types'
+import type { ListAlignment, ListSpacing, SizeOption } from './_types'
 
 const DRAWER_WIDTH = 280
 const { height: SCREEN_HEIGHT } = Dimensions.get('window')
 const HEADER_ICON_SIZE = 22
 const SIZE_OPTIONS: SizeOption[] = ['small', 'medium', 'normal', 'large']
 const ITEM_ICON_VARIANT_OPTIONS: ItemIconVariant[] = ['illustrated', 'minimal']
+const LIST_ALIGNMENT_OPTIONS: ListAlignment[] = ['left', 'center']
+const LIST_SPACING_OPTIONS: ListSpacing[] = ['compact', 'cozy', 'normal', 'relaxed']
 
 function sizeLabelKey(size: SizeOption) {
     switch (size) {
@@ -37,6 +40,34 @@ function sizeLabelKey(size: SizeOption) {
             return 'header.size.large'
         default:
             return 'header.size.normal'
+    }
+}
+
+function themeLabelKey(choice: ThemeChoice) {
+    switch (choice) {
+        case 'light':
+            return 'header.appearance.light'
+        case 'dark':
+            return 'header.appearance.dark'
+        default:
+            return 'header.appearance.system'
+    }
+}
+
+function alignLabelKey(alignment: ListAlignment) {
+    return alignment === 'center' ? 'header.align.center' : 'header.align.left'
+}
+
+function spacingLabelKey(spacing: ListSpacing) {
+    switch (spacing) {
+        case 'compact':
+            return 'header.spacing.compact'
+        case 'cozy':
+            return 'header.spacing.cozy'
+        case 'relaxed':
+            return 'header.spacing.relaxed'
+        default:
+            return 'header.spacing.normal'
     }
 }
 
@@ -57,14 +88,22 @@ type HeaderProps = {
     onToggleCategories: () => void
     categoryHeadersVisible: boolean
     onToggleCategoryHeaders: () => void
+    showFab: boolean
+    onToggleFab: () => void
     gridIconSize: SizeOption
     onGridIconSizeChange: (size: SizeOption) => void
     listTextSize: SizeOption
     onListTextSizeChange: (size: SizeOption) => void
+    listAlignment: ListAlignment
+    onListAlignmentChange: (alignment: ListAlignment) => void
+    listItemSpacing: ListSpacing
+    onListItemSpacingChange: (spacing: ListSpacing) => void
     itemIconVariant: ItemIconVariant
     onItemIconVariantChange: (variant: ItemIconVariant) => void
     localeChoice: LocaleChoice
     onLocaleChoiceChange: (choice: LocaleChoice) => void
+    themeChoice: ThemeChoice
+    onThemeChoiceChange: (choice: ThemeChoice) => void
     loyaltyCards: LoyaltyCardHandle[]
     onScanCard: () => void
     onSelectCard: (card: LoyaltyCardHandle) => void
@@ -88,14 +127,22 @@ export function Header(props: HeaderProps) {
         onToggleCategories,
         categoryHeadersVisible,
         onToggleCategoryHeaders,
+        showFab,
+        onToggleFab,
         gridIconSize,
         onGridIconSizeChange,
         listTextSize,
         onListTextSizeChange,
+        listAlignment,
+        onListAlignmentChange,
+        listItemSpacing,
+        onListItemSpacingChange,
         itemIconVariant,
         onItemIconVariantChange,
         localeChoice,
         onLocaleChoiceChange,
+        themeChoice,
+        onThemeChoiceChange,
         loyaltyCards,
         onScanCard,
         onSelectCard,
@@ -245,6 +292,15 @@ export function Header(props: HeaderProps) {
 
                             <Text style={styles.sectionLabel}>{i18n.t('header.section.display')}</Text>
 
+                            <SegmentedSetting
+                                title={i18n.t('header.setting.appearance')}
+                                options={THEME_CHOICES}
+                                value={themeChoice}
+                                onChange={onThemeChoiceChange}
+                                styles={styles}
+                                labelFor={(o) => i18n.t(themeLabelKey(o))}
+                            />
+
                             <View style={styles.menuRow}>
                                 <Ionicons name="pricetags-outline" size={22} color={t.colors.text} />
                                 <Text style={styles.menuLabel}>{i18n.t('header.setting.categories')}</Text>
@@ -267,6 +323,17 @@ export function Header(props: HeaderProps) {
                                 />
                             </View>
 
+                            <View style={styles.menuRow}>
+                                <Ionicons name="add-circle-outline" size={22} color={t.colors.text} />
+                                <Text style={styles.menuLabel}>{i18n.t('header.setting.showFab')}</Text>
+                                <Switch
+                                    value={showFab}
+                                    onValueChange={onToggleFab}
+                                    trackColor={{ false: t.colors.border, true: t.colors.primary }}
+                                    thumbColor={t.colors.surface}
+                                />
+                            </View>
+
                             {isGridView ? (
                                 <SegmentedSetting
                                     title={i18n.t('header.setting.gridIconSize')}
@@ -277,14 +344,32 @@ export function Header(props: HeaderProps) {
                                     labelFor={(o) => i18n.t(sizeLabelKey(o))}
                                 />
                             ) : (
-                                <SegmentedSetting
-                                    title={i18n.t('header.setting.listTextSize')}
-                                    options={SIZE_OPTIONS}
-                                    value={listTextSize}
-                                    onChange={onListTextSizeChange}
-                                    styles={styles}
-                                    labelFor={(o) => i18n.t(sizeLabelKey(o))}
-                                />
+                                <>
+                                    <SegmentedSetting
+                                        title={i18n.t('header.setting.listTextSize')}
+                                        options={SIZE_OPTIONS}
+                                        value={listTextSize}
+                                        onChange={onListTextSizeChange}
+                                        styles={styles}
+                                        labelFor={(o) => i18n.t(sizeLabelKey(o))}
+                                    />
+                                    <SegmentedSetting
+                                        title={i18n.t('header.setting.listAlignment')}
+                                        options={LIST_ALIGNMENT_OPTIONS}
+                                        value={listAlignment}
+                                        onChange={onListAlignmentChange}
+                                        styles={styles}
+                                        labelFor={(o) => i18n.t(alignLabelKey(o))}
+                                    />
+                                    <SegmentedSetting
+                                        title={i18n.t('header.setting.listItemSpacing')}
+                                        options={LIST_SPACING_OPTIONS}
+                                        value={listItemSpacing}
+                                        onChange={onListItemSpacingChange}
+                                        styles={styles}
+                                        labelFor={(o) => i18n.t(spacingLabelKey(o))}
+                                    />
+                                </>
                             )}
 
                             <SegmentedSetting
@@ -541,7 +626,13 @@ function makeStyles(t: Theme) {
             gap: t.spacing.sm,
         },
         optionButton: {
-            flex: 1,
+            // flexBasis must be non-zero: `flex: 1` (flexBasis 0%) inside a
+            // `flexWrap` row makes Yoga mis-measure the wrapped container's
+            // height, so extra rows overflow onto the next setting. A real
+            // basis lets lines break (max 3 per row) and measure correctly;
+            // flexGrow still fills full rows edge-to-edge.
+            flexGrow: 1,
+            flexBasis: '30%',
             minWidth: 68,
             borderRadius: t.radius.sm,
             borderWidth: 1,

@@ -13,6 +13,7 @@ import { groupByCategory, type IndexedEntry } from './categoryGrouping'
 import { CATEGORY_ICONS } from './categoryConstants'
 import { GridCard } from './GridCard'
 import { EmptyState } from './EmptyState'
+import { useCategoryDrag } from './CategoryDrag'
 import type { ItemIconVariant } from './itemIconMap'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
@@ -54,6 +55,7 @@ export function VisualGridList({
     const t = useTheme()
     const i18n = useI18n()
     const insets = useSafeAreaInsets()
+    const drag = useCategoryDrag()
     const styles = useMemo(() => makeStyles(t), [t])
     const numColumns = getNumColumns(gridIconSize)
     const cardWidth = useMemo(
@@ -70,7 +72,7 @@ export function VisualGridList({
         }]
     }, [data, categoriesEnabled, i18n.groceryLocale])
 
-    const renderCard = (indexed: IndexedEntry, cardKey: number) => (
+    const renderCard = (indexed: IndexedEntry, cardKey: number, canonicalKey: string) => (
         <GridCard
             key={identityKey(indexed.entry)}
             item={indexed.entry}
@@ -80,17 +82,18 @@ export function VisualGridList({
             onToggleDone={onToggleDone}
             onDelete={onDelete}
             itemIconVariant={itemIconVariant}
+            categoryKey={canonicalKey}
             reduceMotion={reduceMotion}
         />
     )
 
-    const renderRows = (items: IndexedEntry[]) => {
+    const renderRows = (items: IndexedEntry[], canonicalKey: string) => {
         const rows: React.ReactElement[] = []
         for (let i = 0; i < items.length; i += numColumns) {
             const rowItems = items.slice(i, i + numColumns)
             rows.push(
                 <View key={`row-${i}`} style={styles.row}>
-                    {rowItems.map((indexed, idx) => renderCard(indexed, i + idx))}
+                    {rowItems.map((indexed, idx) => renderCard(indexed, i + idx, canonicalKey))}
                     {rowItems.length < numColumns &&
                         Array(numColumns - rowItems.length)
                             .fill(null)
@@ -115,6 +118,7 @@ export function VisualGridList({
         <View style={styles.container}>
             <ScrollView
                 contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 140 }]}
+                scrollEnabled={drag.draggingId === null}
                 showsVerticalScrollIndicator={false}
             >
                 {sections.map((section) => (
@@ -129,7 +133,7 @@ export function VisualGridList({
                                 <Text style={styles.categoryTitle}>{section.category.toUpperCase()}</Text>
                             </View>
                         )}
-                        {renderRows(section.items)}
+                        {renderRows(section.items, section.canonicalKey)}
                     </View>
                 ))}
             </ScrollView>

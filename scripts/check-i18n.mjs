@@ -14,13 +14,16 @@ import {
 // The shared i18n package now ships from npm; getCatalog('en'|'es') returns
 // the raw catalogs the parity check compares against.
 const EN_MESSAGES = getCatalog('en')
-const ES_MESSAGES = getCatalog('es')
 
 const errors = []
 
 // 1. Catalog parity: every non-default catalog must define exactly the EN keys.
 for (const [locale, catalog] of [
-    ['es', ES_MESSAGES],
+    ['es', getCatalog('es')],
+    ['de', getCatalog('de')],
+    ['fr', getCatalog('fr')],
+    ['it', getCatalog('it')],
+    ['pt', getCatalog('pt')],
     [PSEUDO_LOCALE, createPseudoCatalog()],
     [LONG_LOCALE, createLongStringCatalog()],
 ]) {

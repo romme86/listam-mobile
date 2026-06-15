@@ -7,10 +7,15 @@ import {
     TRANSLATED_ITEM_TO_EN,
     toRawLookupText,
 } from '@listam/grocery'
+import {
+    ITEM_ICONS_DARK,
+    MINIMAL_ITEM_ICONS_DARK,
+} from './itemIconMapDark'
 
 // Static require maps — React Native needs literal require() calls
 
 export type ItemIconVariant = 'illustrated' | 'minimal'
+export type IconScheme = 'light' | 'dark'
 
 const ITEM_ICONS: Record<string, ImageSourcePropType> = {
     // ── Fruits ──────────────────────────────────────────────────────────────
@@ -782,64 +787,6 @@ const MINIMAL_ITEM_ICONS: Partial<Record<string, ImageSourcePropType>> = {
     'dog treats': require('@/app/assets/icons/items/minimal/dog-treats.png'),
 }
 
-const ILLUSTRATED_LETTER_ICONS: Record<string, ImageSourcePropType> = {
-    a: require('../assets/icons/letters/illustrated/a.png'),
-    b: require('../assets/icons/letters/illustrated/b.png'),
-    c: require('../assets/icons/letters/illustrated/c.png'),
-    d: require('../assets/icons/letters/illustrated/d.png'),
-    e: require('../assets/icons/letters/illustrated/e.png'),
-    f: require('../assets/icons/letters/illustrated/f.png'),
-    g: require('../assets/icons/letters/illustrated/g.png'),
-    h: require('../assets/icons/letters/illustrated/h.png'),
-    i: require('../assets/icons/letters/illustrated/i.png'),
-    j: require('../assets/icons/letters/illustrated/j.png'),
-    k: require('../assets/icons/letters/illustrated/k.png'),
-    l: require('../assets/icons/letters/illustrated/l.png'),
-    m: require('../assets/icons/letters/illustrated/m.png'),
-    n: require('../assets/icons/letters/illustrated/n.png'),
-    o: require('../assets/icons/letters/illustrated/o.png'),
-    p: require('../assets/icons/letters/illustrated/p.png'),
-    q: require('../assets/icons/letters/illustrated/q.png'),
-    r: require('../assets/icons/letters/illustrated/r.png'),
-    s: require('../assets/icons/letters/illustrated/s.png'),
-    t: require('../assets/icons/letters/illustrated/t.png'),
-    u: require('../assets/icons/letters/illustrated/u.png'),
-    v: require('../assets/icons/letters/illustrated/v.png'),
-    w: require('../assets/icons/letters/illustrated/w.png'),
-    x: require('../assets/icons/letters/illustrated/x.png'),
-    y: require('../assets/icons/letters/illustrated/y.png'),
-    z: require('../assets/icons/letters/illustrated/z.png'),
-}
-
-const MINIMAL_LETTER_ICONS: Record<string, ImageSourcePropType> = {
-    a: require('../assets/icons/letters/minimal/a.png'),
-    b: require('../assets/icons/letters/minimal/b.png'),
-    c: require('../assets/icons/letters/minimal/c.png'),
-    d: require('../assets/icons/letters/minimal/d.png'),
-    e: require('../assets/icons/letters/minimal/e.png'),
-    f: require('../assets/icons/letters/minimal/f.png'),
-    g: require('../assets/icons/letters/minimal/g.png'),
-    h: require('../assets/icons/letters/minimal/h.png'),
-    i: require('../assets/icons/letters/minimal/i.png'),
-    j: require('../assets/icons/letters/minimal/j.png'),
-    k: require('../assets/icons/letters/minimal/k.png'),
-    l: require('../assets/icons/letters/minimal/l.png'),
-    m: require('../assets/icons/letters/minimal/m.png'),
-    n: require('../assets/icons/letters/minimal/n.png'),
-    o: require('../assets/icons/letters/minimal/o.png'),
-    p: require('../assets/icons/letters/minimal/p.png'),
-    q: require('../assets/icons/letters/minimal/q.png'),
-    r: require('../assets/icons/letters/minimal/r.png'),
-    s: require('../assets/icons/letters/minimal/s.png'),
-    t: require('../assets/icons/letters/minimal/t.png'),
-    u: require('../assets/icons/letters/minimal/u.png'),
-    v: require('../assets/icons/letters/minimal/v.png'),
-    w: require('../assets/icons/letters/minimal/w.png'),
-    x: require('../assets/icons/letters/minimal/x.png'),
-    y: require('../assets/icons/letters/minimal/y.png'),
-    z: require('../assets/icons/letters/minimal/z.png'),
-}
-
 // Manual translations for common grocery words missing from the auto-generated CSV map.
 // Values must match existing ITEM_ICONS keys exactly (lowercase).
 const MANUAL_TRANSLATIONS: Record<string, string> = {
@@ -859,7 +806,7 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'pere': 'pears',
     'prugne': 'plums', 'prugna': 'plum',
     'nettarine': 'nectarines', 'nettarina': 'nectarine',
-    'clementine': 'clementines', 'clementina': 'clementine',
+    'clementina': 'clementine',
     'mandarini': 'tangerines', 'mandarino': 'tangerine',
     'cocco': 'coconut', 'noce di cocco': 'coconut',
     'fichi': 'figs', 'fico': 'fig',
@@ -1009,7 +956,6 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'kirsche': 'cherry', 'kirschen': 'cherries',
     'zitrone': 'lemon', 'zitronen': 'lemons',
     'orange': 'orange', 'orangen': 'oranges',
-    'melone': 'melon',
     'wassermelone': 'watermelon',
     'pfirsich': 'peach', 'pfirsiche': 'peaches',
     'pflaume': 'plum', 'pflaumen': 'plums',
@@ -1163,7 +1109,7 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'prune': 'plum', 'prunes': 'plums',
     'nectarine': 'nectarine', 'nectarines': 'nectarines',
     'clémentine': 'clementine', 'clémentines': 'clementines',
-    'mandarine': 'tangerine', 'mandarines': 'tangerines',
+    'mandarines': 'tangerines',
     'noix de coco': 'coconut',
     'figue': 'fig', 'figues': 'figs',
     'datte': 'date', 'dattes': 'dates',
@@ -1173,7 +1119,7 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'pamplemousse': 'grapefruit',
     'mangue': 'mango', 'mangues': 'mango',
     // vegetables
-    'tomate': 'tomato', 'tomates': 'tomatoes',
+    'tomates': 'tomatoes',
     'pomme de terre': 'potato', 'pommes de terre': 'potatoes',
     'patate douce': 'sweet potato', 'patates douces': 'sweet potatoes',
     'oignon': 'onion', 'oignons': 'onions',
@@ -1184,7 +1130,6 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'salade': 'salad', 'laitue': 'lettuce',
     'concombre': 'cucumber', 'concombres': 'cucumbers',
     'poivron': 'bell pepper', 'poivrons': 'bell peppers',
-    'champignon': 'mushroom', 'champignons': 'mushrooms',
     'maïs': 'corn',
     'haricots verts': 'green beans',
     'haricot': 'bean', 'haricots': 'beans',
@@ -1248,7 +1193,6 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'céréales': 'cereal',
     'bicarbonate': 'baking soda',
     'levure': 'yeast',
-    'vanille': 'vanilla',
     'fécule': 'cornstarch', 'maïzena': 'cornstarch',
     "huile d'olive": 'olive oil',
     'cannelle': 'cinnamon',
@@ -1303,7 +1247,6 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     // fruits
     'manzana': 'apple', 'manzanas': 'apples',
     'plátano': 'banana', 'plátanos': 'bananas', 'banano': 'banana',
-    'uva': 'grapes',
     'fresa': 'strawberry', 'fresas': 'strawberries',
     'arándano': 'blueberry', 'arándanos': 'blueberries',
     'mora': 'blackberry', 'moras': 'blackberries',
@@ -1319,7 +1262,7 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'pera': 'pear', 'peras': 'pears',
     'ciruela': 'plum', 'ciruelas': 'plums',
     'nectarina': 'nectarine', 'nectarinas': 'nectarines',
-    'clementina': 'clementine', 'clementinas': 'clementines',
+    'clementinas': 'clementines',
     'mandarina': 'tangerine', 'mandarinas': 'tangerines',
     'coco': 'coconut',
     'higo': 'fig', 'higos': 'figs',
@@ -1327,13 +1270,12 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'maracuyá': 'passion fruit', 'maracuya': 'passion fruit',
     'granada': 'pomegranate',
     // vegetables
-    'tomate': 'tomato', 'tomates': 'tomatoes',
-    'patata': 'potato', 'patatas': 'potatoes', 'papa': 'potato', 'papas': 'potatoes',
+    'patatas': 'potatoes', 'papa': 'potato', 'papas': 'potatoes',
     'boniato': 'sweet potato',
     'cebolla': 'onion', 'cebollas': 'onions',
     'cebolleta': 'spring onion', 'cebolletas': 'spring onions',
     'zanahoria': 'carrot', 'zanahorias': 'carrots',
-    'brócoli': 'broccoli', 'brocoli': 'broccoli',
+    'brócoli': 'broccoli',
     'espinaca': 'spinach', 'espinacas': 'spinach',
     'ensalada': 'salad', 'lechuga': 'lettuce',
     'pepino': 'cucumber', 'pepinos': 'cucumbers',
@@ -1397,9 +1339,8 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'mermelada': 'marmalade',
     // pantry
     'arroz': 'rice',
-    'avena': 'oats', 'copos de avena': 'oats',
+    'copos de avena': 'oats',
     'cereales': 'cereal',
-    'bicarbonato': 'baking soda',
     'levadura': 'yeast',
     'vainilla': 'vanilla',
     'maicena': 'cornstarch',
@@ -1418,7 +1359,7 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'pasas': 'raisins',
     // beverages
     'agua mineral': 'mineral water',
-    'té verde': 'green tea', 'te verde': 'green tea',
+    'té verde': 'green tea',
     'cerveza': 'beer',
     'vino tinto': 'red wine',
     'refresco': 'soda',
@@ -1463,21 +1404,16 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'laranja': 'orange', 'laranjas': 'oranges',
     'melancia': 'watermelon',
     'pêssego': 'peach', 'pessego': 'peach',
-    'pera': 'pear', 'peras': 'pears',
     'ameixa': 'plum', 'ameixas': 'plums',
-    'uva': 'grapes',
     'abacate': 'avocado',
-    'coco': 'coconut',
     'figo': 'fig', 'figos': 'figs',
     'romã': 'pomegranate',
-    'tomate': 'tomato', 'tomates': 'tomatoes',
     'batata': 'potato', 'batatas': 'potatoes',
     'batata doce': 'sweet potato',
     'cebola': 'onion', 'cebolas': 'onions',
     'cebolinha': 'spring onion',
     'cenoura': 'carrot', 'cenouras': 'carrots',
     'espinafre': 'spinach',
-    'pepino': 'cucumber',
     'pimento': 'bell pepper', 'pimentos': 'bell peppers',
     'abobrinha': 'zucchini',
     'berinjela': 'eggplant',
@@ -1492,19 +1428,16 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'rabanete': 'radish',
     'beterraba': 'beetroot',
     'alcachofra': 'artichoke',
-    'nabo': 'turnip',
     'gengibre': 'ginger',
     'manjericão': 'basil',
     'salsa': 'parsley',
     'coentro': 'coriander',
     'alecrim': 'rosemary',
-    'orégano': 'oregano',
     'frango': 'chicken',
     'carne moída': 'ground beef',
     'linguiça': 'sausage',
     'cordeiro': 'lamb',
     'peru': 'turkey',
-    'pato': 'duck',
     'porco': 'pork',
     'vitela': 'veal',
     'fígado': 'liver', 'figado': 'liver',
@@ -1523,7 +1456,6 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'molho de soja': 'soy sauce',
     'mel': 'honey',
     'geléia': 'marmalade', 'geleia': 'marmalade',
-    'arroz': 'rice',
     'aveia': 'oats',
     'farinha': 'flour',
     'açúcar': 'sugar', 'acucar': 'sugar',
@@ -1531,14 +1463,12 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'baunilha': 'vanilla',
     'amido de milho': 'cornstarch',
     'azeite': 'olive oil',
-    'canela': 'cinnamon',
     'cominho': 'cumin',
     'pão': 'bread', 'pao': 'bread',
     'amêndoa': 'almond', 'amendoa': 'almond', 'amêndoas': 'almonds',
     'castanha de caju': 'cashew',
     'amendoim': 'peanut', 'amendoins': 'peanuts',
     'noz': 'walnut', 'nozes': 'walnuts',
-    'pistache': 'pistachio',
     'uva-passa': 'raisins',
     'água': 'water', 'agua': 'water',
     'água mineral': 'mineral water',
@@ -1562,10 +1492,9 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'perzik': 'peach', 'perziken': 'peaches',
     'peer': 'pear', 'peren': 'pears',
     'pruim': 'plum', 'pruimen': 'plums',
-    'nectarine': 'nectarine',
     'kokosnoot': 'coconut',
     'vijg': 'fig', 'vijgen': 'figs',
-    'tomaat': 'tomato', 'tomaten': 'tomatoes',
+    'tomaat': 'tomato',
     'aardappel': 'potato', 'aardappelen': 'potatoes',
     'zoete aardappel': 'sweet potato',
     'ui': 'onion', 'uien': 'onions',
@@ -1574,16 +1503,13 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'spinazie': 'spinach',
     'sla': 'salad',
     'komkommer': 'cucumber', 'komkommers': 'cucumbers',
-    'paprika': 'bell pepper',
     'courgette': 'zucchini',
     'aubergine': 'eggplant',
     'paddenstoel': 'mushroom', 'paddenstoelen': 'mushrooms',
-    'maïs': 'corn', 'mais': 'corn',
     'sperziebonen': 'green beans',
     'boon': 'bean', 'bonen': 'beans',
     'kool': 'cabbage',
     'bloemkool': 'cauliflower',
-    'asperge': 'asparagus', 'asperges': 'asparagus',
     'prei': 'leek',
     'radijs': 'radish',
     'rode biet': 'beetroot',
@@ -1594,9 +1520,7 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'gember': 'ginger',
     'basilicum': 'basil',
     'peterselie': 'parsley',
-    'koriander': 'coriander',
     'rozemarijn': 'rosemary',
-    'oregano': 'oregano',
     'kip': 'chicken',
     'kipfilet': 'chicken breast',
     'rundvlees': 'beef',
@@ -1621,10 +1545,9 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'ansjovis': 'anchovies',
     'melk': 'milk',
     'amandelmelk': 'almond milk',
-    'ei': 'egg', 'eieren': 'eggs',
+    'eieren': 'eggs',
     'room': 'cream',
     'slagroom': 'whipping cream',
-    'hüttenkäse': 'cottage cheese',
     'yoghurt': 'yogurt',
     'kokosmelk': 'coconut milk',
     'sojasaus': 'soy sauce',
@@ -1635,7 +1558,6 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'meel': 'flour',
     'suiker': 'sugar',
     'gist': 'yeast',
-    'vanille': 'vanilla',
     'maïszetmeel': 'cornstarch',
     'olijfolie': 'olive oil',
     'kaneel': 'cinnamon',
@@ -1645,7 +1567,6 @@ const MANUAL_TRANSLATIONS: Record<string, string> = {
     'cashew': 'cashew',
     'pinda': 'peanut', "pinda's": 'peanuts',
     'walnoot': 'walnut', 'walnoten': 'walnuts',
-    'pistache': 'pistachio',
     'rozijnen': 'raisins',
     'water': 'water',
     'mineraalwater': 'mineral water',
@@ -1691,7 +1612,9 @@ function stripQuantifiers(text: string): string {
         .trim()
 }
 
-type IconResult = { type: 'image' | 'letter'; source: ImageSourcePropType }
+type IconResult =
+    | { type: 'image'; source: ImageSourcePropType }
+    | { type: 'letter'; letter: string }
 export type IconKeyResolution =
     | { type: 'image'; key: string }
     | { type: 'letter'; letter: string }
@@ -1745,7 +1668,20 @@ function translateToEnglish(text: string): string | undefined {
     )
 }
 
-function getImageSourceForKey(key: string, variant: ItemIconVariant): ImageSourcePropType | undefined {
+function getImageSourceForKey(
+    key: string,
+    variant: ItemIconVariant,
+    scheme: IconScheme = 'light',
+): ImageSourcePropType | undefined {
+    if (scheme === 'dark') {
+        if (variant === 'minimal') {
+            return (
+                MINIMAL_ITEM_ICONS_DARK[key] ?? ITEM_ICONS_DARK[key]
+                ?? MINIMAL_ITEM_ICONS[key] ?? ITEM_ICONS[key]
+            )
+        }
+        return ITEM_ICONS_DARK[key] ?? ITEM_ICONS[key]
+    }
     if (variant === 'minimal') {
         return MINIMAL_ITEM_ICONS[key] ?? ITEM_ICONS[key]
     }
@@ -1859,15 +1795,23 @@ export function resolveIconKeyForItem(text: string, _variant: ItemIconVariant = 
     return { type: 'letter', letter: getFirstAsciiLetter(text) }
 }
 
-export function getIconForItem(text: string, variant: ItemIconVariant = 'illustrated'): IconResult {
+export function getIconForItem(
+    text: string,
+    variant: ItemIconVariant = 'illustrated',
+    scheme: IconScheme = 'light',
+): IconResult {
     const resolution = resolveIconKeyForItem(text, variant)
     if (resolution.type === 'image') {
         return {
             type: 'image',
-            source: getImageSourceForKey(resolution.key, variant) ?? ITEM_ICONS[resolution.key],
+            source:
+                getImageSourceForKey(resolution.key, variant, scheme)
+                ?? ITEM_ICONS_DARK[resolution.key]
+                ?? ITEM_ICONS[resolution.key],
         }
     }
 
-    const letterIcons = variant === 'minimal' ? MINIMAL_LETTER_ICONS : ILLUSTRATED_LETTER_ICONS
-    return { type: 'letter', source: letterIcons[resolution.letter] }
+    // Letter fallback is rendered as a themed CasinoGrotesk glyph (see GridCard),
+    // so it adapts to light/dark via the theme color — no per-theme assets needed.
+    return { type: 'letter', letter: resolution.letter.toUpperCase() }
 }

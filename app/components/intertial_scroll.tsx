@@ -7,20 +7,19 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
-import type { ListEntry, SizeOption } from './_types'
+import type { ListAlignment, ListEntry, ListSpacing, SizeOption } from './_types'
 import { ListItem, ITEM_HEIGHT, SPACING } from './ListItem'
 import { groupByCategory } from './categoryGrouping'
 import { CATEGORY_ICONS } from './categoryConstants'
 import { EmptyState } from './EmptyState'
+import { useCategoryDrag } from './CategoryDrag'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
 import { identityKey } from '../listProjection'
 
-const TOTAL_ITEM_HEIGHT = ITEM_HEIGHT + SPACING
-
 type FlatListItem =
     | { type: 'header'; category: string; canonicalKey: string; key: string }
-    | { type: 'item'; entry: ListEntry; originalIndex: number; visualIndex: number; key: string }
+    | { type: 'item'; entry: ListEntry; originalIndex: number; visualIndex: number; canonicalKey: string; key: string }
 
 type Props = {
     data: ListEntry[]
@@ -31,6 +30,8 @@ type Props = {
     categoriesEnabled?: boolean
     categoryHeadersVisible?: boolean
     listTextSize?: SizeOption
+    listAlignment?: ListAlignment
+    listItemSpacing?: ListSpacing
     reduceMotion?: boolean
 }
 
@@ -39,6 +40,13 @@ function getListTextScale(size: SizeOption) {
     if (size === 'medium') return 0.85
     if (size === 'large') return 1.25
     return 1
+}
+
+function getListSpacing(spacing: ListSpacing) {
+    if (spacing === 'compact') return 6
+    if (spacing === 'cozy') return 10
+    if (spacing === 'relaxed') return 28
+    return SPACING
 }
 
 export default function InertialElasticList({
@@ -50,14 +58,20 @@ export default function InertialElasticList({
     categoriesEnabled = true,
     categoryHeadersVisible = true,
     listTextSize = 'normal',
+    listAlignment = 'left',
+    listItemSpacing = 'normal',
     reduceMotion = false,
 }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const insets = useSafeAreaInsets()
+    const drag = useCategoryDrag()
     const styles = useMemo(() => makeStyles(t), [t])
     const scrollY = useRef(new Animated.Value(0)).current
     const textScaleFactor = getListTextScale(listTextSize)
+    const isCentered = listAlignment === 'center'
+    const spacing = getListSpacing(listItemSpacing)
+    const totalItemHeight = ITEM_HEIGHT + spacing
 
     const flatData = useMemo((): FlatListItem[] => {
         if (!categoriesEnabled) {
@@ -66,6 +80,7 @@ export default function InertialElasticList({
                 entry,
                 originalIndex: i,
                 visualIndex: i,
+                canonicalKey: '',
                 key: `item-${identityKey(entry)}`,
             }))
         }
@@ -91,6 +106,7 @@ export default function InertialElasticList({
                     entry: indexed.entry,
                     originalIndex: indexed.originalIndex,
                     visualIndex,
+                    canonicalKey: section.canonicalKey,
                     key: `item-${identityKey(indexed.entry)}`,
                 })
                 visualIndex++
@@ -104,7 +120,7 @@ export default function InertialElasticList({
         if (item.type === 'header') {
             const iconName = CATEGORY_ICONS[item.canonicalKey] || 'basket-outline'
             return (
-                <View style={styles.headerContainer}>
+                <View style={[styles.headerContainer, { height: totalItemHeight }, isCentered && styles.headerContainerCentered]}>
                     <Ionicons name={iconName as any} size={16} color={t.colors.textSecondary} />
                     <Text style={[styles.headerTitle, { fontSize: 13 * textScaleFactor }]}>
                         {item.category.toUpperCase()}
@@ -119,23 +135,26 @@ export default function InertialElasticList({
                 index={item.originalIndex}
                 visualIndex={item.visualIndex}
                 scrollY={scrollY}
-                totalItemHeight={TOTAL_ITEM_HEIGHT}
+                totalItemHeight={totalItemHeight}
                 onToggleDone={onToggleDone}
                 onDelete={onDelete}
                 onEdit={onEdit}
                 textScaleFactor={textScaleFactor}
+                listAlignment={listAlignment}
+                spacing={spacing}
+                categoryKey={item.canonicalKey}
                 reduceMotion={reduceMotion}
             />
         )
-    }, [scrollY, onToggleDone, onDelete, onEdit, textScaleFactor, reduceMotion, styles, t])
+    }, [scrollY, totalItemHeight, spacing, onToggleDone, onDelete, onEdit, textScaleFactor, listAlignment, isCentered, reduceMotion, styles, t])
 
     const keyExtractor = useCallback((item: FlatListItem) => item.key, [])
 
     const getItemLayout = useCallback((_: any, index: number) => ({
-        length: TOTAL_ITEM_HEIGHT,
-        offset: TOTAL_ITEM_HEIGHT * index,
+        length: totalItemHeight,
+        offset: totalItemHeight * index,
         index,
-    }), [])
+    }), [totalItemHeight])
 
     return (
         <View style={styles.container}>
@@ -144,6 +163,7 @@ export default function InertialElasticList({
                 keyExtractor={keyExtractor}
                 renderItem={renderItem}
                 getItemLayout={getItemLayout}
+                scrollEnabled={drag.draggingId === null}
                 showsVerticalScrollIndicator={false}
                 decelerationRate="fast"
                 bounces={true}
@@ -171,10 +191,13 @@ function makeStyles(t: Theme) {
             backgroundColor: t.colors.bg,
         },
         headerContainer: {
-            height: ITEM_HEIGHT + SPACING,
             flexDirection: 'row',
             alignItems: 'center',
             paddingLeft: 20,
+        },
+        headerContainerCentered: {
+            justifyContent: 'center',
+            paddingLeft: 0,
         },
         headerTitle: {
             fontSize: 13,

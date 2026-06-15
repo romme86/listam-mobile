@@ -10,6 +10,7 @@ import {
 } from 'react-native'
 import { Provider } from 'react-redux'
 import * as Linking from 'expo-linking'
+import { useFonts } from 'expo-font'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { isLocaleChoice } from '@listam/i18n'
@@ -35,7 +36,11 @@ import {
     preferencesActions,
     selectPreferences,
     isSizeOption,
+    isListAlignment,
+    isListSpacing,
     isItemIconVariant,
+    isThemeChoice,
+    type ThemeChoice,
 } from './store/preferencesSlice'
 import {
     loyaltyCardsActions,
@@ -44,6 +49,7 @@ import {
 } from './store/loyaltyCardsSlice'
 import { useSubscription } from './hooks/useSubscription'
 import { useReduceMotion } from './hooks/useReduceMotion'
+import { useLearnedCategories } from './hooks/useLearnedCategories'
 import { Header } from './components/Header'
 import { JoinDialog } from './components/JoinDialog'
 import { MembersDialog } from './components/MembersDialog'
@@ -55,6 +61,9 @@ import { LoyaltyCardViewer } from './components/LoyaltyCardViewer'
 import type { LoyaltyCard } from './components/LoyaltyCardScanner'
 import InertialElasticList from './components/intertial_scroll'
 import { VisualGridList } from './components/VisualGridList'
+import { CategoryDragProvider } from './components/CategoryDrag'
+import { getDisplayCategoryName } from './components/categoryGrouping'
+import { identityKey } from './listProjection'
 import { AddItemBar } from './components/AddItemBar'
 import { Fab } from './components/Fab'
 import { SummaryBar } from './components/SummaryBar'
@@ -77,7 +86,7 @@ import {
     type JoinConfirmationRequest,
 } from './invite-confirmation'
 import type { ItemIconVariant } from './components/itemIconMap'
-import type { ListEntry, SizeOption } from './components/_types'
+import type { ListAlignment, ListEntry, ListSpacing, SizeOption } from './components/_types'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -87,9 +96,16 @@ const PREF_GRID_VIEW = '@lista_grid_view'
 const PREF_CATEGORIES = '@lista_categories'
 const PREF_GRID_ICON_SIZE = '@lista_grid_icon_size'
 const PREF_LIST_TEXT_SIZE = '@lista_list_text_size'
+const PREF_LIST_ALIGNMENT = '@lista_list_alignment'
+const PREF_LIST_ITEM_SPACING = '@lista_list_item_spacing'
 const PREF_CATEGORY_HEADERS = '@lista_category_headers'
+const PREF_SHOW_FAB = '@lista_show_fab'
 const PREF_ITEM_ICON_VARIANT = '@lista_item_icon_variant'
 const PREF_LOCALE_CHOICE = '@lista_locale_choice'
+const PREF_THEME_CHOICE = '@lista_theme_choice'
+
+// Max gap between the two taps of a double-tap-to-add gesture.
+const DOUBLE_TAP_MS = 300
 
 function AppInner() {
     const t = useTheme()
@@ -102,10 +118,14 @@ function AppInner() {
         isGridView,
         categoriesEnabled,
         categoryHeadersVisible,
+        showFab,
         gridIconSize,
         listTextSize,
+        listAlignment,
+        listItemSpacing,
         itemIconVariant,
         localeChoice,
+        themeChoice,
     } = useAppSelector(selectPreferences)
     const loyaltyCards = useAppSelector(selectLoyaltyCardHandles)
 
@@ -131,6 +151,15 @@ function AppInner() {
     } = useWorklet(notify)
 
     const subscription = useSubscription()
+    const { apply: applyLearnedCategories, learn: learnCategory } = useLearnedCategories()
+
+    // The list as shown: entries without an explicit (dragged) category override
+    // inherit one from what was learned for that item name. The raw `dataList`
+    // is still the source of truth for mutations — this view is index-aligned.
+    const displayList = useMemo(
+        () => applyLearnedCategories(dataList),
+        [applyLearnedCategories, dataList]
+    )
 
     const [joinDialogVisible, setJoinDialogVisible] = useState(false)
     const [joinKeyInput, setJoinKeyInput] = useState('')
@@ -248,18 +277,26 @@ function AppInner() {
             PREF_CATEGORIES,
             PREF_GRID_ICON_SIZE,
             PREF_LIST_TEXT_SIZE,
+            PREF_LIST_ALIGNMENT,
+            PREF_LIST_ITEM_SPACING,
             PREF_CATEGORY_HEADERS,
+            PREF_SHOW_FAB,
             PREF_ITEM_ICON_VARIANT,
             PREF_LOCALE_CHOICE,
-        ]).then(([[, grid], [, cats], [, gridSize], [, textSize], [, categoryHeaders], [, iconVariant], [, localeChoice]]) => {
+            PREF_THEME_CHOICE,
+        ]).then(([[, grid], [, cats], [, gridSize], [, textSize], [, alignment], [, itemSpacing], [, categoryHeaders], [, showFab], [, iconVariant], [, localeChoice], [, themeChoice]]) => {
             dispatch(preferencesActions.preferencesHydrated({
                 ...(grid !== null ? { isGridView: grid === 'true' } : {}),
                 ...(cats !== null ? { categoriesEnabled: cats === 'true' } : {}),
                 ...(isSizeOption(gridSize) ? { gridIconSize: gridSize } : {}),
                 ...(isSizeOption(textSize) ? { listTextSize: textSize } : {}),
+                ...(isListAlignment(alignment) ? { listAlignment: alignment } : {}),
+                ...(isListSpacing(itemSpacing) ? { listItemSpacing: itemSpacing } : {}),
                 ...(categoryHeaders !== null ? { categoryHeadersVisible: categoryHeaders === 'true' } : {}),
+                ...(showFab !== null ? { showFab: showFab === 'true' } : {}),
                 ...(isItemIconVariant(iconVariant) ? { itemIconVariant: iconVariant } : {}),
                 ...(isLocaleChoice(localeChoice) ? { localeChoice } : {}),
+                ...(isThemeChoice(themeChoice) ? { themeChoice } : {}),
             }))
         })
 
@@ -296,6 +333,16 @@ function AppInner() {
         AsyncStorage.setItem(PREF_LIST_TEXT_SIZE, size)
     }, [dispatch])
 
+    const handleListItemSpacingChange = useCallback((spacing: ListSpacing) => {
+        dispatch(preferencesActions.listItemSpacingSet(spacing))
+        AsyncStorage.setItem(PREF_LIST_ITEM_SPACING, spacing)
+    }, [dispatch])
+
+    const handleListAlignmentChange = useCallback((alignment: ListAlignment) => {
+        dispatch(preferencesActions.listAlignmentSet(alignment))
+        AsyncStorage.setItem(PREF_LIST_ALIGNMENT, alignment)
+    }, [dispatch])
+
     const handleItemIconVariantChange = useCallback((variant: ItemIconVariant) => {
         dispatch(preferencesActions.itemIconVariantSet(variant))
         AsyncStorage.setItem(PREF_ITEM_ICON_VARIANT, variant)
@@ -306,11 +353,22 @@ function AppInner() {
         AsyncStorage.setItem(PREF_LOCALE_CHOICE, choice)
     }, [dispatch])
 
+    const handleThemeChoiceChange = useCallback((choice: ThemeChoice) => {
+        dispatch(preferencesActions.themeChoiceSet(choice))
+        AsyncStorage.setItem(PREF_THEME_CHOICE, choice)
+    }, [dispatch])
+
     const handleToggleCategoryHeaders = useCallback(() => {
         const next = !categoryHeadersVisible
         dispatch(preferencesActions.categoryHeadersVisibleSet(next))
         AsyncStorage.setItem(PREF_CATEGORY_HEADERS, String(next))
     }, [categoryHeadersVisible, dispatch])
+
+    const handleToggleFab = useCallback(() => {
+        const next = !showFab
+        dispatch(preferencesActions.showFabSet(next))
+        AsyncStorage.setItem(PREF_SHOW_FAB, String(next))
+    }, [showFab, dispatch])
 
     const handleCardScanned = useCallback((card: LoyaltyCard) => {
         void persistStoredLoyaltyCard(card)
@@ -450,6 +508,37 @@ function AppInner() {
         sendRPC(RPC_UPDATE, JSON.stringify({ item: updatedItem }))
     }, [animate, dataList, dispatch, i18n, sendRPC, snackbar])
 
+    // Drag-to-category: pin the dragged item to the dropped-on category. The
+    // override rides along the same update path as a rename, so it survives the
+    // reducer round-trip and replicates to peers. We also remember the choice by
+    // item name, so the next time the same item is added it lands here too.
+    const handleAssignCategory = useCallback((item: ListEntry, canonicalKey: string) => {
+        const target = identityKey(item)
+        const current = dataList.find((entry) => identityKey(entry) === target)
+        if (!current || current.categoryOverride === canonicalKey) return
+        animate()
+        const updatedItem = { ...current, categoryOverride: canonicalKey, updatedAt: Date.now() }
+        dispatch(listsActions.listItemUpdated(updatedItem))
+        sendRPC(RPC_UPDATE, JSON.stringify({ item: updatedItem }))
+        learnCategory(current.text, canonicalKey, i18n.groceryLocale)
+        haptics.success()
+        snackbar.show(i18n.t('main.drag.moved', {
+            item: current.text,
+            category: getDisplayCategoryName(canonicalKey, i18n.groceryLocale),
+        }))
+    }, [animate, dataList, dispatch, i18n, learnCategory, sendRPC, snackbar])
+
+    // Drag-to-delete: dropping a picked-up item on the trash zone removes it.
+    const handleDeleteDragged = useCallback((item: ListEntry) => {
+        const target = identityKey(item)
+        const current = dataList.find((entry) => identityKey(entry) === target)
+        if (!current) return
+        animate()
+        dispatch(listsActions.listItemDeleted(current))
+        sendRPC(RPC_DELETE, JSON.stringify({ item: current }))
+        haptics.delete()
+    }, [animate, dataList, dispatch, sendRPC])
+
     const handleClearCompleted = useCallback(() => {
         const done = dataList.filter((item) => item.isDone)
         if (done.length === 0) return
@@ -476,6 +565,32 @@ function AppInner() {
         haptics.toggleOn()
         setAddText('')
     }, [addText, dataList, handleInsert, i18n, snackbar])
+
+    // Double-tap an empty part of the list to open the add bar. The handler runs
+    // during the responder-negotiation bubble: an item or button that handles the
+    // tap claims the responder deeper in the tree and stops the bubble before it
+    // reaches this wrapper, so only taps on blank space are ever observed here. We
+    // always return false (never become the responder), leaving scrolling and item
+    // gestures untouched.
+    //
+    // Known limitation: while a non-empty list is still momentum-scrolling, the
+    // ScrollView captures the next touch-start (to halt momentum) before the
+    // bubble reaches us, so a fast double-FLICK's second tap can be missed. A
+    // deliberate double-tap on a settled list is unaffected, and the empty-list
+    // case (the primary target) never scrolls. We don't disable that capture
+    // because it would break tap-to-stop-momentum.
+    const lastBackgroundTapRef = useRef(0)
+    const handleBackgroundTap = useCallback(() => {
+        if (isAdding) return false
+        const now = Date.now()
+        if (now - lastBackgroundTapRef.current < DOUBLE_TAP_MS) {
+            lastBackgroundTapRef.current = 0
+            handleRequestAdd()
+        } else {
+            lastBackgroundTapRef.current = now
+        }
+        return false
+    }, [isAdding, handleRequestAdd])
 
     const handleShare = useCallback(async () => {
         if (!autobaseInviteKey) {
@@ -606,6 +721,13 @@ function AppInner() {
                 barStyle={t.dark ? 'light-content' : 'dark-content'}
                 backgroundColor={t.colors.bg}
             />
+            <CategoryDragProvider
+                data={displayList}
+                enabled={categoriesEnabled}
+                groceryLocale={i18n.groceryLocale}
+                onAssign={handleAssignCategory}
+                onDelete={handleDeleteDragged}
+            >
             <Header
                 peerCount={peerCount}
                 isWorkletReady={isWorkletReady}
@@ -623,14 +745,22 @@ function AppInner() {
                 onToggleCategories={handleToggleCategories}
                 categoryHeadersVisible={categoryHeadersVisible}
                 onToggleCategoryHeaders={handleToggleCategoryHeaders}
+                showFab={showFab}
+                onToggleFab={handleToggleFab}
                 gridIconSize={gridIconSize}
                 onGridIconSizeChange={handleGridIconSizeChange}
                 listTextSize={listTextSize}
                 onListTextSizeChange={handleListTextSizeChange}
+                listAlignment={listAlignment}
+                onListAlignmentChange={handleListAlignmentChange}
+                listItemSpacing={listItemSpacing}
+                onListItemSpacingChange={handleListItemSpacingChange}
                 itemIconVariant={itemIconVariant}
                 onItemIconVariantChange={handleItemIconVariantChange}
                 localeChoice={localeChoice}
                 onLocaleChoiceChange={handleLocaleChoiceChange}
+                themeChoice={themeChoice}
+                onThemeChoiceChange={handleThemeChoiceChange}
                 loyaltyCards={loyaltyCards}
                 onScanCard={() => setScannerVisible(true)}
                 onSelectCard={handleSelectCard}
@@ -678,31 +808,35 @@ function AppInner() {
                 onCancel={handleJoiningCancel}
             />
 
-            {isGridView ? (
-                <VisualGridList
-                    data={dataList}
-                    onToggleDone={handleToggleDone}
-                    onDelete={handleDelete}
-                    onRequestAdd={handleRequestAdd}
-                    categoriesEnabled={categoriesEnabled}
-                    categoryHeadersVisible={categoryHeadersVisible}
-                    gridIconSize={gridIconSize}
-                    itemIconVariant={itemIconVariant}
-                    reduceMotion={reduceMotion}
-                />
-            ) : (
-                <InertialElasticList
-                    data={dataList}
-                    onToggleDone={handleToggleDone}
-                    onDelete={handleDelete}
-                    onEdit={handleEditItem}
-                    onRequestAdd={handleRequestAdd}
-                    categoriesEnabled={categoriesEnabled}
-                    categoryHeadersVisible={categoryHeadersVisible}
-                    listTextSize={listTextSize}
-                    reduceMotion={reduceMotion}
-                />
-            )}
+            <View style={{ flex: 1 }} onStartShouldSetResponder={handleBackgroundTap}>
+                {isGridView ? (
+                    <VisualGridList
+                        data={displayList}
+                        onToggleDone={handleToggleDone}
+                        onDelete={handleDelete}
+                        onRequestAdd={handleRequestAdd}
+                        categoriesEnabled={categoriesEnabled}
+                        categoryHeadersVisible={categoryHeadersVisible}
+                        gridIconSize={gridIconSize}
+                        itemIconVariant={itemIconVariant}
+                        reduceMotion={reduceMotion}
+                    />
+                ) : (
+                    <InertialElasticList
+                        data={displayList}
+                        onToggleDone={handleToggleDone}
+                        onDelete={handleDelete}
+                        onEdit={handleEditItem}
+                        onRequestAdd={handleRequestAdd}
+                        categoriesEnabled={categoriesEnabled}
+                        categoryHeadersVisible={categoryHeadersVisible}
+                        listTextSize={listTextSize}
+                        listAlignment={listAlignment}
+                        listItemSpacing={listItemSpacing}
+                        reduceMotion={reduceMotion}
+                    />
+                )}
+            </View>
 
             {hasItems && (
                 <SummaryBar
@@ -712,7 +846,7 @@ function AppInner() {
                 />
             )}
 
-            {!isAdding && <Fab onPress={handleRequestAdd} bottomOffset={insets.bottom + 20} />}
+            {!isAdding && showFab && <Fab onPress={handleRequestAdd} bottomOffset={insets.bottom + 20} />}
 
             <LoyaltyCardScanner
                 visible={scannerVisible}
@@ -725,11 +859,18 @@ function AppInner() {
                 onClose={() => setSelectedCard(null)}
                 onDelete={handleDeleteCard}
             />
+            </CategoryDragProvider>
         </View>
     )
 }
 
 export default function App() {
+    const [fontsLoaded] = useFonts({
+        'CasinoGrotesk-Bold': require('./assets/fonts/CasinoGrotesk-Bold.ttf'),
+        'CasinoGrotesk-Medium': require('./assets/fonts/CasinoGrotesk-Medium.ttf'),
+        'CasinoGrotesk-Regular': require('./assets/fonts/CasinoGrotesk-Regular.ttf'),
+    })
+    if (!fontsLoaded) return null
     return (
         <Provider store={store}>
             <SafeAreaProvider>
