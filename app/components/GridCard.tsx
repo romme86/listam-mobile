@@ -155,7 +155,7 @@ export function GridCard({
             </Text>
             {item.isDone && (
                 <View style={styles.checkmark}>
-                    <Ionicons name="checkmark-circle" size={18} color={t.colors.accent} />
+                    <Ionicons name="checkmark-circle" size={18} color={t.colors.text} />
                 </View>
             )}
             <Animated.View

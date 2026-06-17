@@ -14,8 +14,11 @@ function writeMobileLine(line: string): void {
         // Non-JSON line (shouldn't happen) — treat as info.
     }
 
+    // eslint-disable-next-line no-console -- deliberate console writer; see comment above
     if (level === 'error' || level === 'fatal') console.error(line)
+    // eslint-disable-next-line no-console -- deliberate console writer; see comment above
     else if (level === 'warn') console.warn(line)
+    // eslint-disable-next-line no-console -- deliberate console writer; see comment above
     else console.log(line)
 }
 
