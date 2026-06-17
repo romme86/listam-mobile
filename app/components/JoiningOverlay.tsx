@@ -61,7 +61,7 @@ export function JoiningOverlay({
         >
             <View style={joiningStyles.overlay}>
                 <View style={joiningStyles.content}>
-                    <ActivityIndicator size="large" color={t.colors.accent} />
+                    <ActivityIndicator size="large" color={t.colors.text} />
                     <Text style={joiningStyles.title}>{title}</Text>
                     <View style={joiningStyles.phaseRow}>
                         {phases.map((phase, i) => (

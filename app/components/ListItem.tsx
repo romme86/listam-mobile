@@ -114,9 +114,11 @@ export function ListItem({
             passedThreshold.current = false
         },
         onPanResponderMove: (_, gestureState) => {
-            if (gestureState.dx > 0 && !isDeleting.current) {
+            // Swipe LEFT to reveal delete (iOS convention); horizontal swipe is
+            // otherwise owned by the list pager for list-to-list navigation.
+            if (gestureState.dx < 0 && !isDeleting.current) {
                 panX.setValue(gestureState.dx)
-                const past = gestureState.dx > SWIPE_THRESHOLD
+                const past = gestureState.dx < -SWIPE_THRESHOLD
                 if (past !== passedThreshold.current) {
                     passedThreshold.current = past
                     if (past) haptics.select()
@@ -126,11 +128,11 @@ export function ListItem({
         onPanResponderRelease: (_, gestureState) => {
             if (isDeleting.current) return
 
-            if (gestureState.dx > SWIPE_THRESHOLD) {
+            if (gestureState.dx < -SWIPE_THRESHOLD) {
                 isDeleting.current = true
                 haptics.delete()
                 Animated.timing(panX, {
-                    toValue: SCREEN_WIDTH,
+                    toValue: -SCREEN_WIDTH,
                     duration: 200,
                     useNativeDriver: true,
                 }).start(() => {
@@ -181,8 +183,8 @@ export function ListItem({
           })
 
     const deleteOpacity = panX.interpolate({
-        inputRange: [0, SWIPE_THRESHOLD],
-        outputRange: [0, 1],
+        inputRange: [-SWIPE_THRESHOLD, 0],
+        outputRange: [1, 0],
         extrapolate: 'clamp',
     })
 
@@ -264,7 +266,8 @@ function makeStyles(t: Theme) {
             backgroundColor: t.colors.danger,
             flexDirection: 'row',
             alignItems: 'center',
-            paddingLeft: 24,
+            justifyContent: 'flex-end',
+            paddingRight: 24,
             gap: 8,
         },
         deleteLabel: {

@@ -1,3 +1,5 @@
+import type { BoardFields } from '@listam/domain/board'
+
 export type ListEntry = {
     id?: string
     itemId?: string
@@ -14,7 +16,16 @@ export type ListEntry = {
      * this item to by dragging it. When set, it wins over text classification.
      */
     categoryOverride?: string
-}
+    /**
+     * Board-ticket fields. They ride through the store untouched (the reducers
+     * spread items), so an item on a board list carries its status/blocks/etc.
+     * `dueAt` is the one board field not in the shared `BoardFields` interface.
+     */
+    dueAt?: number
+} & Partial<BoardFields>
+
+/** A board ticket — a ListEntry on a board list, with its fields non-optional-ish for the UI. */
+export type Ticket = ListEntry
 
 /** Shared size scale for grid icons / list text. `large` is the accessibility step. */
 export type SizeOption = 'small' | 'medium' | 'normal' | 'large'

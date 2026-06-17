@@ -109,9 +109,14 @@ const listsSlice = createSlice({
             const payload = Array.isArray(action.payload)
                 ? { items: action.payload }
                 : action.payload
+            // The backend's SYNC_LIST always carries the DEFAULT list (every other
+            // list replicates per-item via add-from-backend), so fold it into the
+            // default bucket — NOT the currently-selected list. Folding into the
+            // selection would wipe a non-default list the user is viewing whenever
+            // a startup/peer-connect rebuild sync lands.
             replaceListItems(
                 state,
-                payload.listId || state.selectedListId,
+                payload.listId || DEFAULT_LIST_ID,
                 payload.listType || DEFAULT_LIST_TYPE,
                 payload.items,
             )
@@ -274,6 +279,16 @@ export const selectSelectedListId = createSelector(
     selectListsState,
     (state) => state.selectedListId,
 )
+
+// Items belonging to an arbitrary list (not just the selected one) — used by the
+// per-board/list settings screen's "delete all" action.
+export const selectItemsForList = (state: RootState, listId: string): ListEntry[] => {
+    const list = state.lists.listsById[listId]
+    if (!list) return []
+    return list.itemIds
+        .map((itemId) => state.lists.itemsById[itemId])
+        .filter((item): item is ListEntry => Boolean(item))
+}
 
 export const selectSelectedListItems = createSelector(
     selectListsState,

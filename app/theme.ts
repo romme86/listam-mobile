@@ -26,6 +26,7 @@ export type Colors = {
     onDanger: string
     dangerSurface: string
     warning: string
+    success: string
     overlay: string
     scrim: string
     placeholder: string
@@ -44,12 +45,13 @@ const light: Colors = {
     textDisabled: '#9a9596',
     primary: '#1b1b1b',
     onPrimary: '#ffffff',
-    accent: '#2f9e44',
-    onAccent: '#ffffff',
+    accent: '#c3f400',
+    onAccent: '#161e00',
     danger: '#c0271f',
     onDanger: '#ffffff',
     dangerSurface: '#fdeceb',
     warning: '#b06a00',
+    success: '#1f9d52',
     overlay: 'rgba(0,0,0,0.45)',
     scrim: 'rgba(255,255,255,0.96)',
     placeholder: '#9a9596',
@@ -68,12 +70,13 @@ const dark: Colors = {
     textDisabled: '#6c6869',
     primary: '#f1efef',
     onPrimary: '#1b1b1b',
-    accent: '#54c26b',
-    onAccent: '#0c2410',
+    accent: '#c3f400',
+    onAccent: '#161e00',
     danger: '#ff6b62',
     onDanger: '#1b1b1b',
     dangerSurface: '#3a1c1a',
     warning: '#e0a04d',
+    success: '#48c87c',
     overlay: 'rgba(0,0,0,0.6)',
     scrim: 'rgba(0,0,0,0.92)',
     placeholder: '#7d7879',

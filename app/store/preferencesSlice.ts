@@ -13,34 +13,24 @@ export const LIST_SPACINGS: ListSpacing[] = ['compact', 'cozy', 'normal', 'relax
 export type ThemeChoice = 'system' | 'light' | 'dark'
 export const THEME_CHOICES: ThemeChoice[] = ['system', 'light', 'dark']
 
+// App-global, per-device preferences. List PRESENTATION settings (grid/list,
+// categories, icons, sizes, spacing, alignment) are NOT here — they are per-list
+// and synced on each list's registry meta-item (see registrySelectors DEFAULT_VIEW).
 export type PreferencesState = {
-    isGridView: boolean
-    categoriesEnabled: boolean
-    categoryHeadersVisible: boolean
-    showFab: boolean
-    gridIconSize: SizeOption
-    listTextSize: SizeOption
-    listAlignment: ListAlignment
-    listItemSpacing: ListSpacing
-    itemIconVariant: ItemIconVariant
     localeChoice: LocaleChoice
     themeChoice: ThemeChoice
+    // Per-device: which list the app opens to on launch (null = first list).
+    defaultListId: string | null
+    // Per-device: whether the board feature is available (off by default). When
+    // off, the "New board" create tile is hidden; existing boards stay visible.
+    boardEnabled: boolean
 }
 
 const initialState: PreferencesState = {
-    isGridView: false,
-    categoriesEnabled: true,
-    categoryHeadersVisible: true,
-    // Off by default: items are added by double-tapping the empty list area.
-    // Turning this on shows the floating add button as well.
-    showFab: false,
-    gridIconSize: 'normal',
-    listTextSize: 'normal',
-    listAlignment: 'left',
-    listItemSpacing: 'normal',
-    itemIconVariant: 'illustrated',
     localeChoice: 'system',
     themeChoice: 'system',
+    defaultListId: null,
+    boardEnabled: false,
 }
 
 const preferencesSlice = createSlice({
@@ -49,54 +39,26 @@ const preferencesSlice = createSlice({
     reducers: {
         preferencesHydrated(state, action: PayloadAction<Partial<PreferencesState>>) {
             const next = action.payload
-            if (typeof next.isGridView === 'boolean') state.isGridView = next.isGridView
-            if (typeof next.categoriesEnabled === 'boolean') state.categoriesEnabled = next.categoriesEnabled
-            if (typeof next.categoryHeadersVisible === 'boolean') {
-                state.categoryHeadersVisible = next.categoryHeadersVisible
-            }
-            if (typeof next.showFab === 'boolean') state.showFab = next.showFab
-            if (isSizeOption(next.gridIconSize)) state.gridIconSize = next.gridIconSize
-            if (isSizeOption(next.listTextSize)) state.listTextSize = next.listTextSize
-            if (isListAlignment(next.listAlignment)) state.listAlignment = next.listAlignment
-            if (isListSpacing(next.listItemSpacing)) state.listItemSpacing = next.listItemSpacing
-            if (isItemIconVariant(next.itemIconVariant)) state.itemIconVariant = next.itemIconVariant
             if (isLocaleChoice(next.localeChoice)) {
                 state.localeChoice = next.localeChoice
             }
             if (isThemeChoice(next.themeChoice)) state.themeChoice = next.themeChoice
-        },
-        gridViewSet(state, action: PayloadAction<boolean>) {
-            state.isGridView = action.payload
-        },
-        categoriesEnabledSet(state, action: PayloadAction<boolean>) {
-            state.categoriesEnabled = action.payload
-        },
-        categoryHeadersVisibleSet(state, action: PayloadAction<boolean>) {
-            state.categoryHeadersVisible = action.payload
-        },
-        showFabSet(state, action: PayloadAction<boolean>) {
-            state.showFab = action.payload
-        },
-        gridIconSizeSet(state, action: PayloadAction<SizeOption>) {
-            state.gridIconSize = action.payload
-        },
-        listTextSizeSet(state, action: PayloadAction<SizeOption>) {
-            state.listTextSize = action.payload
-        },
-        listAlignmentSet(state, action: PayloadAction<ListAlignment>) {
-            state.listAlignment = action.payload
-        },
-        listItemSpacingSet(state, action: PayloadAction<ListSpacing>) {
-            state.listItemSpacing = action.payload
-        },
-        itemIconVariantSet(state, action: PayloadAction<ItemIconVariant>) {
-            state.itemIconVariant = action.payload
+            if (typeof next.defaultListId === 'string' || next.defaultListId === null) {
+                state.defaultListId = next.defaultListId
+            }
+            if (typeof next.boardEnabled === 'boolean') state.boardEnabled = next.boardEnabled
         },
         localeChoiceSet(state, action: PayloadAction<LocaleChoice>) {
             state.localeChoice = isLocaleChoice(action.payload) ? action.payload : 'system'
         },
         themeChoiceSet(state, action: PayloadAction<ThemeChoice>) {
             state.themeChoice = isThemeChoice(action.payload) ? action.payload : 'system'
+        },
+        defaultListIdSet(state, action: PayloadAction<string | null>) {
+            state.defaultListId = action.payload
+        },
+        boardEnabledSet(state, action: PayloadAction<boolean>) {
+            state.boardEnabled = !!action.payload
         },
     },
 })

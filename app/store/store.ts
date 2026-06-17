@@ -4,6 +4,7 @@ import syncReducer from './syncSlice'
 import preferencesReducer from './preferencesSlice'
 import loyaltyCardsReducer from './loyaltyCardsSlice'
 import devicesReducer from './devicesSlice'
+import boardConfigReducer from './boardConfigSlice'
 
 export const store = configureStore({
     reducer: {
@@ -12,6 +13,7 @@ export const store = configureStore({
         preferences: preferencesReducer,
         loyaltyCards: loyaltyCardsReducer,
         devices: devicesReducer,
+        boardConfig: boardConfigReducer,
     },
 })
 

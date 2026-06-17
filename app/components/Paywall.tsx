@@ -38,7 +38,7 @@ export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
             <View style={styles.content}>
                 <View style={styles.header}>
                     <View style={styles.heartCircle}>
-                        <Ionicons name="heart" size={32} color={t.colors.accent} />
+                        <Ionicons name="heart" size={32} color={t.colors.text} />
                     </View>
                     <Text style={styles.title}>{i18n.t('paywall.title')}</Text>
                     <Text style={styles.subtitle}>
@@ -52,10 +52,10 @@ export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
                 </View>
 
                 <View style={styles.features}>
-                    <FeatureRow text={i18n.t('paywall.feature.unlimitedLists')} styles={styles} accent={t.colors.accent} />
-                    <FeatureRow text={i18n.t('paywall.feature.p2pSync')} styles={styles} accent={t.colors.accent} />
-                    <FeatureRow text={i18n.t('paywall.feature.noAds')} styles={styles} accent={t.colors.accent} />
-                    <FeatureRow text={i18n.t('paywall.feature.supportIndie')} styles={styles} accent={t.colors.accent} />
+                    <FeatureRow text={i18n.t('paywall.feature.unlimitedLists')} styles={styles} accent={t.colors.text} />
+                    <FeatureRow text={i18n.t('paywall.feature.p2pSync')} styles={styles} accent={t.colors.text} />
+                    <FeatureRow text={i18n.t('paywall.feature.noAds')} styles={styles} accent={t.colors.text} />
+                    <FeatureRow text={i18n.t('paywall.feature.supportIndie')} styles={styles} accent={t.colors.text} />
                 </View>
 
                 {state.error && <Text style={styles.error}>{state.error}</Text>}

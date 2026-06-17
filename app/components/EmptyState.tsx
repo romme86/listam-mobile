@@ -46,7 +46,7 @@ export function EmptyState({ onRequestAdd }: { onRequestAdd?: () => void }) {
                 <Hint icon="add-circle-outline" text={i18n.t('main.empty.hintAdd')} />
                 <Hint icon="hand-left-outline" text={i18n.t('main.empty.hintToggle')} />
                 <Hint icon="create-outline" text={i18n.t('main.empty.hintEdit')} />
-                <Hint icon="arrow-forward-outline" text={i18n.t('main.empty.hintDelete')} />
+                <Hint icon="arrow-back-outline" text={i18n.t('main.empty.hintDelete')} />
             </View>
         </View>
     )

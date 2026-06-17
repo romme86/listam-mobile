@@ -3,12 +3,19 @@ import type { RootState } from './store'
 
 export type JoinPhase = 'pairing' | 'permission' | 'syncing' | null
 
+// Reachability of the replication swarm, reported by the backend:
+//   'connecting' — worklet/DHT still coming up (header dot: blinking grey)
+//   'online'     — on the p2p network / syncing (header dot: green)
+//   'offline'    — DHT unreachable, e.g. no connection (header dot: grey)
+export type NetworkStatus = 'connecting' | 'online' | 'offline'
+
 export type SyncState = {
     autobaseInviteKey: string
     peerCount: number
     isWorkletReady: boolean
     isJoining: boolean
     joinPhase: JoinPhase
+    networkStatus: NetworkStatus
 }
 
 const initialState: SyncState = {
@@ -17,6 +24,7 @@ const initialState: SyncState = {
     isWorkletReady: false,
     isJoining: false,
     joinPhase: null,
+    networkStatus: 'connecting',
 }
 
 const syncSlice = createSlice({
@@ -39,11 +47,18 @@ const syncSlice = createSlice({
         joinPhaseSet(state, action: PayloadAction<JoinPhase>) {
             state.joinPhase = action.payload
         },
+        networkStatusSet(state, action: PayloadAction<NetworkStatus>) {
+            const next = action.payload
+            if (next === 'connecting' || next === 'online' || next === 'offline') {
+                state.networkStatus = next
+            }
+        },
         syncReset(state) {
             state.autobaseInviteKey = ''
             state.peerCount = 0
             state.isJoining = false
             state.joinPhase = null
+            state.networkStatus = 'connecting'
         },
     },
 })

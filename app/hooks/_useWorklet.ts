@@ -15,12 +15,13 @@ import {
 import { appLogger } from '../logger'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { listsActions, selectSelectedListItems } from '../store/listsSlice'
-import { selectSyncState, syncActions, type JoinPhase } from '../store/syncSlice'
+import { selectSyncState, syncActions, type JoinPhase, type NetworkStatus } from '../store/syncSlice'
 import {
     devicesActions,
     selectMembershipRoster,
     type MembershipRoster,
 } from '../store/devicesSlice'
+import { boardConfigActions } from '../store/boardConfigSlice'
 import { useI18n } from '../i18n'
 import {
     RPC_UPDATE,
@@ -36,11 +37,13 @@ import {
     RPC_CONTROL_PAIR,
     RPC_CONTROL_COMMAND,
     RPC_CONTROL_LIST,
+    RPC_GET_BOARD_CONFIG,
+    RPC_SET_BOARD_CONFIG,
 } from '@listam/protocol'
 import type { ListEntry } from '@/app/components/_types'
 
 export type { MembershipMember, MembershipRoster } from '../store/devicesSlice'
-export type { JoinPhase } from '../store/syncSlice'
+export type { JoinPhase, NetworkStatus } from '../store/syncSlice'
 
 const GLOBAL_KEY = '__LISTAM_WORKLET_SINGLETON__' as const
 
@@ -68,6 +71,7 @@ type UseWorkletResult = {
     setIsJoining: (isJoining: boolean) => void
     isJoiningRef: MutableRefObject<boolean>
     joinPhase: JoinPhase
+    networkStatus: NetworkStatus
     membershipRoster: MembershipRoster | null
     ownerRecoveryCode: string | null
     clearOwnerRecoveryCode: () => void
@@ -100,6 +104,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         isWorkletReady,
         isJoining,
         joinPhase,
+        networkStatus,
     } = useAppSelector(selectSyncState)
     const [ownerRecoveryCode, setOwnerRecoveryCode] = useState<string | null>(null)
     const clearOwnerRecoveryCode = useCallback(() => setOwnerRecoveryCode(null), [])
@@ -202,6 +207,8 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                     if (payload.type === 'peer-count') {
                         const count = typeof payload.count === 'number' ? payload.count : 0
                         dispatch(syncActions.peerCountSet(count))
+                    } else if (payload.type === 'network-status') {
+                        dispatch(syncActions.networkStatusSet(payload.status))
                     } else if (payload.type === 'join-phase') {
                         dispatch(syncActions.joinPhaseSet(payload.phase || null))
                     } else if (payload.type === 'not-writable') {
@@ -232,6 +239,13 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                         else Alert.alert(i18nRef.current.t('backend.joinError.title'), msg)
                     } else if (payload.type === 'membership-roster') {
                         dispatch(devicesActions.rosterReceived(payload.roster ?? null))
+                    } else if (payload.type === 'board-config') {
+                        dispatch(boardConfigActions.boardConfigReceived({
+                            config: payload.config ?? null,
+                            canAdminister: !!payload.canAdminister,
+                        }))
+                    } else if (payload.type === 'config-denied') {
+                        if (notifyRef.current) notifyRef.current(i18nRef.current.t('board.configDenied'), 'error')
                     } else if (payload.type === 'owner-recovery-code') {
                         if (payload.code) {
                             setOwnerRecoveryCode(payload.code)
@@ -343,6 +357,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                     dispatch(listsActions.selectedListCleared())
                     dispatch(syncActions.autobaseInviteKeySet(''))
                     dispatch(devicesActions.rosterReceived(null))
+                    dispatch(boardConfigActions.boardConfigReset())
                     return
                 case 'sync-list':
                     if (Array.isArray(event.items)) {
@@ -418,6 +433,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         setIsJoining,
         isJoiningRef,
         joinPhase,
+        networkStatus,
         membershipRoster,
         ownerRecoveryCode,
         clearOwnerRecoveryCode,
@@ -439,4 +455,6 @@ export {
     RPC_CONTROL_PAIR,
     RPC_CONTROL_COMMAND,
     RPC_CONTROL_LIST,
+    RPC_GET_BOARD_CONFIG,
+    RPC_SET_BOARD_CONFIG,
 }
