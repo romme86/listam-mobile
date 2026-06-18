@@ -22,6 +22,7 @@
     "bundle:backend:android": "npx bare-pack --target android --linked backend/backend.mjs --encoding base64 --out app/assets/backend.android.bundle && node scripts/wrap-bare-bundle.mjs app/assets/backend.android.bundle app/assets/backend.android.bundle.mjs"
   },
   "dependencies": {
+    "@10play/tentap-editor": "^1.0.1",
     "@expo/vector-icons": "^15.0.0",
     "@inquirer/prompts": "^7.8.1",
     "@listam/backend": "file:../listam-packages/packages/backend",
@@ -80,6 +81,7 @@
     "react-native-safe-area-context": "5.6.2",
     "react-native-screens": "~4.16.0",
     "react-native-svg": "15.12.1",
+    "react-native-webview": "13.15.0",
     "react-native-worklets": "0.5.1",
     "react-redux": "^9.3.0",
     "sodium-universal": "^5.0.1",
