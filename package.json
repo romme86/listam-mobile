@@ -33,6 +33,7 @@
     "@listam/logging": "file:../listam-packages/packages/logging",
     "@listam/owner-control": "file:../listam-packages/packages/owner-control",
     "@listam/protocol": "file:../listam-packages/packages/protocol",
+    "@listam/provisioning": "file:../listam-packages/packages/provisioning",
     "@listam/secrets": "file:../listam-packages/packages/secrets",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-clipboard/clipboard": "1.16.3",
@@ -75,6 +76,7 @@
     "react-native": "0.81.5",
     "react-native-b4a": "0.0.4",
     "react-native-bare-kit": "0.11.5",
+    "react-native-ble-plx": "^3.5.1",
     "react-native-iap": "^14.7.7",
     "react-native-nitro-modules": "^0.35.0",
     "react-native-reanimated": "~4.1.1",
@@ -102,6 +104,7 @@
   },
   "overrides": {
     "@listam/protocol": "file:../listam-packages/packages/protocol",
+    "@listam/provisioning": "file:../listam-packages/packages/provisioning",
     "@listam/domain": "file:../listam-packages/packages/domain",
     "@listam/logging": "file:../listam-packages/packages/logging",
     "@listam/secrets": "file:../listam-packages/packages/secrets",

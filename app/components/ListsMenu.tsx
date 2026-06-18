@@ -48,6 +48,7 @@ type Props = {
     isJoining: boolean
     onManageMembers: () => void
     onManageOwnedDevices: () => void
+    onPairLeaf: () => void
     localeChoice: LocaleChoice
     onLocaleChoiceChange: (choice: LocaleChoice) => void
     themeChoice: ThemeChoice
@@ -89,7 +90,7 @@ export function ListsMenu(props: Props) {
     const {
         visible, groups, currentListId, defaultListId,
         onSelect, onSetDefault, onCreate, onCreateGroup, onRenameGroup, onMoveListToGroup, onClose,
-        peerCount, isWorkletReady, networkStatus, isJoining, onManageMembers, onManageOwnedDevices,
+        peerCount, isWorkletReady, networkStatus, isJoining, onManageMembers, onManageOwnedDevices, onPairLeaf,
         localeChoice, onLocaleChoiceChange, themeChoice, onThemeChoiceChange,
         boardEnabled, onToggleBoardEnabled, onChangeListView, onRenameList, onDeleteListItems,
         initialListSettingsId, loyaltyCards, onScanCard, onSelectCard,
@@ -367,6 +368,10 @@ export function ListsMenu(props: Props) {
                                 <TouchableOpacity style={styles.utilityBtn} onPress={() => { onManageOwnedDevices(); close() }}>
                                     <Ionicons name="hardware-chip-outline" size={20} color={t.colors.textSecondary} />
                                     <Text style={styles.utilityLabel}>{i18n.t('control.section')}</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.utilityBtn} onPress={() => { onPairLeaf(); close() }}>
+                                    <Ionicons name="bluetooth-outline" size={20} color={t.colors.textSecondary} />
+                                    <Text style={styles.utilityLabel}>{i18n.t('leaf.section')}</Text>
                                 </TouchableOpacity>
                             </View>
                         </>
