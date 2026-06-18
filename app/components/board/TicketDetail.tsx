@@ -8,6 +8,7 @@ import { useI18n } from '../../i18n'
 import type { ListEntry } from '../_types'
 import { Avatar, PriorityPill, StatusPill, TicketInlineMarkdown, stateById, formatDue, ticketInitials } from './TicketBits'
 import { BlockBody } from './BlockBody'
+import { RichMarkdownEditor } from './RichMarkdownEditor'
 
 type Props = {
     visible: boolean
@@ -170,10 +171,31 @@ function InlineEditable({ value, placeholder, textStyle, markdown, multiline, on
     onCommit: (v: string) => void
 }) {
     const t = useTheme()
+    const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
     const [editing, setEditing] = useState(false)
     const [draft, setDraft] = useState(value)
     if (editing) {
+        // Markdown fields edit as live WYSIWYG (TipTap-in-webview): the user sees
+        // only compiled markdown, never the raw syntax, while the stored value
+        // stays markdown via the shared markdown<->HTML bridge. The editor
+        // commits itself on unmount, so Save just leaves edit mode.
+        if (markdown) {
+            return (
+                <View>
+                    <RichMarkdownEditor
+                        initialMarkdown={value}
+                        mode="inline"
+                        minHeight={96}
+                        onCommit={(md) => { if (md !== value) onCommit(md) }}
+                    />
+                    <TouchableOpacity style={styles.richDone} accessibilityRole="button" onPress={() => setEditing(false)}>
+                        <Ionicons name="checkmark" size={16} color={t.colors.accent} />
+                        <Text style={styles.richDoneText}>{i18n.t('common.save')}</Text>
+                    </TouchableOpacity>
+                </View>
+            )
+        }
         return (
             <TextInput
                 style={[textStyle, styles.editing]}
@@ -208,6 +230,12 @@ function makeStyles(t: Theme) {
         addPriorityText: { fontSize: t.type.label.fontSize, color: t.colors.textTertiary, fontWeight: '600' },
         title: { fontSize: 26, fontWeight: '800', color: t.colors.text },
         editing: { backgroundColor: t.colors.surfaceAlt, borderRadius: t.radius.sm, paddingHorizontal: t.spacing.sm, paddingVertical: t.spacing.sm },
+        richDone: {
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: t.spacing.xs,
+            paddingVertical: t.spacing.sm, marginTop: t.spacing.xs, borderRadius: t.radius.sm,
+            backgroundColor: t.colors.surfaceAlt,
+        },
+        richDoneText: { fontSize: t.type.label.fontSize, fontWeight: '700', color: t.colors.accent },
         subline: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm },
         sublineText: { fontSize: t.type.body.fontSize, color: t.colors.textSecondary },
         stats: { backgroundColor: t.colors.surfaceAlt, borderRadius: t.radius.lg, paddingHorizontal: t.spacing.lg },

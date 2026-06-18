@@ -2,7 +2,7 @@
   "expo": {
     "name": "listam",
     "slug": "listam-expo",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "newArchEnabled": true,
     "orientation": "portrait",
     "scheme": "ch.saynode.listam",

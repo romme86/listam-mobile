@@ -8,6 +8,11 @@ import {
 import { useTheme, type Theme } from '../../theme'
 import { useI18n } from '../../i18n'
 import { TicketInlineMarkdown } from './TicketBits'
+import { RichMarkdownEditor } from './RichMarkdownEditor'
+
+// Markdown + callout blocks edit as live WYSIWYG (TipTap-in-webview); the rest
+// keep the lightweight raw-text editor.
+const RICH_TYPES = new Set(['markdown', 'callout'])
 
 type Props = {
     blocks: TicketBlock[] | undefined
@@ -41,13 +46,8 @@ export function BlockBody({ blocks, onChange }: Props) {
     const list = useMemo(() => normalizeBlocks(blocks), [blocks])
     const [editingId, setEditingId] = useState<string | null>(null)
     const [draft, setDraft] = useState('')
-    const [selection, setSelection] = useState({ start: 0, end: 0 })
     const [adding, setAdding] = useState(false)
     const inputRef = useRef<TextInput>(null)
-    // Tapping a toolbar button blurs the editor; this tells onBlur to keep the
-    // editor open (and refocus) rather than commit+close (RN fires onPressIn ->
-    // onBlur -> onPress when tapping a sibling button of a focused TextInput).
-    const keepFocus = useRef(false)
 
     const replaceBlocks = (next: TicketBlock[]) => onChange(next)
 
@@ -56,49 +56,17 @@ export function BlockBody({ blocks, onChange }: Props) {
     }
 
     const startEdit = (b: TicketBlock) => {
-        keepFocus.current = false
         setEditingId(b.id)
-        const text = blockToText(b)
-        setDraft(text)
-        setSelection({ start: text.length, end: text.length })
+        setDraft(blockToText(b))
     }
+    // Plain-text (non-rich) commit on blur. Rich blocks commit themselves when
+    // the editor unmounts (see the RichMarkdownEditor onCommit below).
     const commitEdit = (b: TicketBlock) => {
-        keepFocus.current = false
         patchBlock(b.id, blockFromText(b.type, draft))
         setEditingId(null)
         setDraft('')
     }
 
-    // --- markdown formatting toolbar (markdown block only) ---
-    const holdFocus = () => { keepFocus.current = true }
-    // Wrap the current selection (or the caret) in a marker like ** or *.
-    const applyWrap = (marker: string) => {
-        const start = Math.max(0, Math.min(selection.start, draft.length))
-        const end = Math.max(start, Math.min(selection.end, draft.length))
-        const mid = draft.slice(start, end)
-        const next = draft.slice(0, start) + marker + mid + marker + draft.slice(end)
-        setDraft(next)
-        const caret = mid ? end + marker.length * 2 : start + marker.length
-        setSelection({ start: caret, end: caret })
-        keepFocus.current = false
-    }
-    // Toggle a `#`-prefix heading on the line containing the caret.
-    const applyHeading = (level: 1 | 2 | 3) => {
-        const pos = Math.max(0, Math.min(selection.start, draft.length))
-        const lineStart = draft.lastIndexOf('\n', pos - 1) + 1
-        const rest = draft.slice(lineStart)
-        const existing = rest.match(/^(#{1,6})\s+/)
-        const prefix = '#'.repeat(level) + ' '
-        let body = rest
-        if (existing) body = rest.slice(existing[0].length)
-        const toggleOff = !!existing && existing[1].length === level
-        const next = draft.slice(0, lineStart) + (toggleOff ? body : prefix + body)
-        setDraft(next)
-        const delta = (toggleOff ? 0 : prefix.length) - (existing ? existing[0].length : 0)
-        const caret = Math.max(lineStart, pos + delta)
-        setSelection({ start: caret, end: caret })
-        keepFocus.current = false
-    }
     const deleteBlock = (id: string) => {
         if (editingId === id) setEditingId(null)
         replaceBlocks(list.filter((b) => b.id !== id))
@@ -145,42 +113,33 @@ export function BlockBody({ blocks, onChange }: Props) {
                     </View>
 
                     {editingId === b.id ? (
-                        <View style={styles.editWrap}>
-                            {b.type === 'markdown' ? (
-                                <View style={styles.toolbar}>
-                                    <FmtButton label="H1" onHold={holdFocus} onPress={() => applyHeading(1)} styles={styles} />
-                                    <FmtButton label="H2" onHold={holdFocus} onPress={() => applyHeading(2)} styles={styles} />
-                                    <FmtButton label="H3" onHold={holdFocus} onPress={() => applyHeading(3)} styles={styles} />
-                                    <View style={styles.toolSep} />
-                                    <FmtButton label="B" bold onHold={holdFocus} onPress={() => applyWrap('**')} styles={styles} />
-                                    <FmtButton label="I" italic onHold={holdFocus} onPress={() => applyWrap('*')} styles={styles} />
-                                </View>
-                            ) : null}
-                            <TextInput
-                                ref={inputRef}
-                                style={styles.editor}
-                                value={draft}
-                                onChangeText={setDraft}
-                                selection={selection}
-                                onSelectionChange={(e) => setSelection(e.nativeEvent.selection)}
-                                multiline
-                                autoFocus
-                                placeholder={i18n.t(`ticket.block.placeholder.${b.type}` as never)}
-                                placeholderTextColor={t.colors.placeholder}
-                                onBlur={() => {
-                                    if (keepFocus.current) {
-                                        keepFocus.current = false
-                                        // Persist on every blur so an interrupted toolbar tap (press-cancel,
-                                        // or a tap that doesn't refocus) can never silently drop the block's
-                                        // edits; keep the editor open and refocused.
-                                        patchBlock(b.id, blockFromText(b.type, draft))
-                                        inputRef.current?.focus()
-                                        return
-                                    }
-                                    commitEdit(b)
-                                }}
-                            />
-                        </View>
+                        RICH_TYPES.has(b.type) ? (
+                            <View style={styles.editWrap}>
+                                <RichMarkdownEditor
+                                    initialMarkdown={blockToText(b)}
+                                    mode={b.type === 'markdown' ? 'block' : 'inline'}
+                                    onCommit={(md) => patchBlock(b.id, blockFromText(b.type, md))}
+                                />
+                                <TouchableOpacity style={styles.richDone} onPress={() => setEditingId(null)} accessibilityRole="button">
+                                    <Ionicons name="checkmark" size={16} color={t.colors.accent} />
+                                    <Text style={styles.richDoneText}>{i18n.t('common.save')}</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ) : (
+                            <View style={styles.editWrap}>
+                                <TextInput
+                                    ref={inputRef}
+                                    style={styles.editor}
+                                    value={draft}
+                                    onChangeText={setDraft}
+                                    multiline
+                                    autoFocus
+                                    placeholder={i18n.t(`ticket.block.placeholder.${b.type}` as never)}
+                                    placeholderTextColor={t.colors.placeholder}
+                                    onBlur={() => commitEdit(b)}
+                                />
+                            </View>
+                        )
                     ) : (
                         <TouchableOpacity activeOpacity={0.7} onPress={() => startEdit(b)}>
                             <BlockView block={b} onToggleItem={(i) => toggleChecklistItem(b, i)} />
@@ -285,7 +244,7 @@ function BlockView({ block, onToggleItem }: { block: TicketBlock; onToggleItem: 
             return (
                 <View style={styles.mdBody}>
                     {lines.map((line, i) => {
-                        // Lenient like desktop renderMarkdownBlock + applyHeading: accept 1-6
+                        // Lenient like the shared markdownToHtml bridge: accept 1-6
                         // hashes, collapse 4-6 onto h3 (so desktop-authored deep headings
                         // don't show literal '#' on mobile).
                         const h = line.match(/^(#{1,6})\s+(.*)$/)
@@ -303,28 +262,6 @@ function BlockView({ block, onToggleItem }: { block: TicketBlock; onToggleItem: 
     }
 }
 
-function FmtButton({ label, bold, italic, onPress, onHold, styles }: {
-    label: string
-    bold?: boolean
-    italic?: boolean
-    onPress: () => void
-    onHold: () => void
-    styles: ReturnType<typeof makeStyles>
-}) {
-    return (
-        <TouchableOpacity
-            style={styles.toolBtn}
-            onPressIn={onHold}
-            onPress={onPress}
-            hitSlop={4}
-            accessibilityRole="button"
-            accessibilityLabel={label}
-        >
-            <Text style={[styles.toolBtnText, bold && styles.toolBold, italic && styles.toolItalic]}>{label}</Text>
-        </TouchableOpacity>
-    )
-}
-
 function makeStyles(t: Theme) {
     return StyleSheet.create({
         wrap: { gap: t.spacing.md },
@@ -340,16 +277,12 @@ function makeStyles(t: Theme) {
         },
         blockActions: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md },
         editWrap: { gap: t.spacing.sm },
-        toolbar: {
-            flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs,
-            backgroundColor: t.colors.surfaceAlt, borderRadius: t.radius.sm,
-            padding: t.spacing.xs, alignSelf: 'flex-start',
+        richDone: {
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: t.spacing.xs,
+            paddingVertical: t.spacing.sm, borderRadius: t.radius.sm,
+            backgroundColor: t.colors.surfaceAlt, alignSelf: 'stretch',
         },
-        toolBtn: { minWidth: 32, height: 30, paddingHorizontal: t.spacing.sm, borderRadius: t.radius.sm, alignItems: 'center', justifyContent: 'center' },
-        toolBtnText: { fontSize: t.type.label.fontSize, fontWeight: '700', color: t.colors.text },
-        toolBold: { fontWeight: '800' },
-        toolItalic: { fontStyle: 'italic', fontWeight: '600' },
-        toolSep: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', backgroundColor: t.colors.border, marginHorizontal: t.spacing.xs },
+        richDoneText: { fontSize: t.type.label.fontSize, fontWeight: '700', color: t.colors.accent },
         editor: {
             fontSize: t.type.body.fontSize, color: t.colors.text,
             backgroundColor: t.colors.surfaceAlt, borderRadius: t.radius.sm,
