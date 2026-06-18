@@ -51,6 +51,7 @@ import { Header } from './components/Header'
 import { JoinDialog } from './components/JoinDialog'
 import { MembersDialog } from './components/MembersDialog'
 import { OwnedDevicesDialog } from './components/OwnedDevicesDialog'
+import { LeafPairingDialog } from './components/LeafPairingDialog'
 import { JoiningOverlay, P2P_MESSAGE_KEYS } from './components/JoiningOverlay'
 import { Paywall } from './components/Paywall'
 import { LoyaltyCardScanner } from './components/LoyaltyCardScanner'
@@ -177,6 +178,7 @@ function AppInner() {
     const [joinKeyInput, setJoinKeyInput] = useState('')
     const [membersDialogVisible, setMembersDialogVisible] = useState(false)
     const [ownedDevicesVisible, setOwnedDevicesVisible] = useState(false)
+    const [leafPairingVisible, setLeafPairingVisible] = useState(false)
     const [recoverCodeInput, setRecoverCodeInput] = useState('')
     const [currentP2PMessage, setCurrentP2PMessage] = useState(0)
     const [scannerVisible, setScannerVisible] = useState(false)
@@ -797,6 +799,13 @@ function AppInner() {
         sendRPC(RPC_CONTROL_COMMAND, JSON.stringify({ serverPublicKeyHex, command: 'status' }))
     }, [sendRPC])
 
+    const handleOpenLeafPairing = useCallback(() => {
+        setLeafPairingVisible(true)
+        // Refresh the paired-hub list so the dialog can pick one to read the
+        // leaf bridge's control key + address from.
+        sendRPC(RPC_CONTROL_LIST)
+    }, [sendRPC])
+
     const handleJoinSubmit = useCallback(() => {
         if (!joinKeyInput.trim()) {
             snackbar.show(i18n.t('invite.notification.emptyManual'), 'error')
@@ -927,6 +936,12 @@ function AppInner() {
                 onCheckStatus={handleOwnedDeviceStatus}
                 onClose={() => setOwnedDevicesVisible(false)}
             />
+            <LeafPairingDialog
+                visible={leafPairingVisible}
+                ownerControl={ownerControl}
+                onFetchHubInfo={handleOwnedDeviceStatus}
+                onClose={() => setLeafPairingVisible(false)}
+            />
             <JoiningOverlay
                 visible={isJoining}
                 currentMessageIndex={currentP2PMessage}
@@ -951,6 +966,7 @@ function AppInner() {
                 isJoining={isJoining}
                 onManageMembers={handleManageMembers}
                 onManageOwnedDevices={handleOpenOwnedDevices}
+                onPairLeaf={handleOpenLeafPairing}
                 localeChoice={localeChoice}
                 onLocaleChoiceChange={handleLocaleChoiceChange}
                 themeChoice={themeChoice}
@@ -969,7 +985,7 @@ function AppInner() {
             />
 
             <ListSwipePager
-                canPage={!isAdding && !listsMenuVisible && !joinDialogVisible && !membersDialogVisible && !ownedDevicesVisible && !isJoining && boardTicketId === null && !createTicketVisible}
+                canPage={!isAdding && !listsMenuVisible && !joinDialogVisible && !membersDialogVisible && !ownedDevicesVisible && !leafPairingVisible && !isJoining && boardTicketId === null && !createTicketVisible}
                 reduceMotion={reduceMotion}
                 onCommit={commit}
             >

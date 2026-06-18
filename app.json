@@ -46,6 +46,14 @@
         {
           "cameraPermission": "This app uses the camera to scan loyalty card barcodes and QR codes."
         }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "neverForLocation": true,
+          "bluetoothAlwaysPermission": "listam uses Bluetooth to set up (pair) a nearby leaf device."
+        }
       ]
     ]
   }
