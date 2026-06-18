@@ -7,7 +7,7 @@ import { Worklet } from 'react-native-bare-kit'
 import RPC from 'bare-rpc'
 import backendBundleB64 from '../app.ios.bundle.mjs'
 // import backendBundleB64 from '../assets/backend.android.bundle.mjs'
-import { decodeBackendRequest } from '@listam/client'
+import { decodeBackendRequest, dataToString } from '@listam/client'
 import {
     prepareBackendSecretPayload,
     persistBackendSecretFromPayload,
@@ -39,6 +39,9 @@ import {
     RPC_CONTROL_LIST,
     RPC_GET_BOARD_CONFIG,
     RPC_SET_BOARD_CONFIG,
+    RPC_EXPORT_DATA,
+    RPC_EXPORT_SEED,
+    RPC_IMPORT,
 } from '@listam/protocol'
 import type { ListEntry } from '@/app/components/_types'
 
@@ -77,6 +80,7 @@ type UseWorkletResult = {
     clearOwnerRecoveryCode: () => void
     ownerControl: OwnerControlState
     sendRPC: (command: number, payload?: string) => void
+    sendRPCWithReply: (command: number, payload?: string) => Promise<string | null>
 }
 
 export type NotifyType = 'info' | 'success' | 'error'
@@ -138,6 +142,25 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         const req = rpcRef.current.request(command)
         if (payload !== undefined) {
             req.send(payload)
+        }
+    }, [])
+
+    // Request/response variant for commands that return a value (the encrypted
+    // backup file, or the import outcome). Mirrors how the backend awaits the
+    // persist-secret ack: send, then await the reply and decode it to a string.
+    const sendRPCWithReply = useCallback(async (command: number, payload?: string): Promise<string | null> => {
+        if (!rpcRef.current) {
+            appLogger.warn('RPC not ready, ignoring command', { command })
+            return null
+        }
+        const req = rpcRef.current.request(command)
+        req.send(payload ?? '')
+        try {
+            const raw = await req.reply()
+            return raw == null ? null : dataToString(raw)
+        } catch (e) {
+            appLogger.warn('RPC reply failed', { command, message: (e as Error)?.message })
+            return null
         }
     }, [])
 
@@ -439,6 +462,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         clearOwnerRecoveryCode,
         ownerControl,
         sendRPC,
+        sendRPCWithReply,
     }
 }
 
@@ -457,4 +481,7 @@ export {
     RPC_CONTROL_LIST,
     RPC_GET_BOARD_CONFIG,
     RPC_SET_BOARD_CONFIG,
+    RPC_EXPORT_DATA,
+    RPC_EXPORT_SEED,
+    RPC_IMPORT,
 }

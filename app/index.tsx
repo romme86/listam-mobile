@@ -153,6 +153,7 @@ function AppInner() {
         clearOwnerRecoveryCode,
         ownerControl,
         sendRPC,
+        sendRPCWithReply,
     } = useWorklet(notify)
 
     const subscription = useSubscription()
@@ -963,6 +964,8 @@ function AppInner() {
                 loyaltyCards={loyaltyCards}
                 onScanCard={() => setScannerVisible(true)}
                 onSelectCard={handleSelectCard}
+                sendRPCWithReply={sendRPCWithReply}
+                notify={notify}
             />
 
             <ListSwipePager

@@ -28,6 +28,7 @@ import {
     alignLabelKey,
     spacingLabelKey,
 } from './SegmentedSetting'
+import { BackupSettings } from './BackupSettings'
 
 type Props = {
     visible: boolean
@@ -63,6 +64,9 @@ type Props = {
     loyaltyCards: LoyaltyCardHandle[]
     onScanCard: () => void
     onSelectCard: (card: LoyaltyCardHandle) => void
+    // Encrypted backup / restore: request-with-reply RPC + a snackbar notifier.
+    sendRPCWithReply: (command: number, payload?: string) => Promise<string | null>
+    notify: (message: string, type?: 'info' | 'success' | 'error') => void
 }
 
 type ViewMode = 'list' | 'grid'
@@ -89,6 +93,7 @@ export function ListsMenu(props: Props) {
         localeChoice, onLocaleChoiceChange, themeChoice, onThemeChoiceChange,
         boardEnabled, onToggleBoardEnabled, onChangeListView, onRenameList, onDeleteListItems,
         initialListSettingsId, loyaltyCards, onScanCard, onSelectCard,
+        sendRPCWithReply, notify,
     } = props
 
     const t = useTheme()
@@ -416,6 +421,8 @@ export function ListsMenu(props: Props) {
                                         <Text style={styles.actionLabel}>{card.name}</Text>
                                     </TouchableOpacity>
                                 ))}
+
+                                <BackupSettings sendRPCWithReply={sendRPCWithReply} notify={notify} />
                             </ScrollView>
                         </>
                     ) : (
