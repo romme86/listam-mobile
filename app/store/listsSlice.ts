@@ -1,6 +1,7 @@
 import { createSelector, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { RootState } from './store'
 import type { ListEntry } from '../components/_types'
+import { isLabelItem } from '@listam/domain'
 import {
     DEFAULT_LIST_ID,
     DEFAULT_LIST_TYPE,
@@ -225,12 +226,16 @@ function replaceListItems(
 
     for (const itemId of list.itemIds) delete state.itemsById[itemId]
 
+    // Label meta-items (peer/surface names) ride the normal item pipeline but
+    // live in reserved buckets — never project them into a list row.
     const normalized = normalizeListEntries(
-        entries.map((entry) => ({
-            ...entry,
-            listId: entry.listId || listId,
-            listType: entry.listType || list.type || listType,
-        })),
+        entries
+            .filter((entry) => !isLabelItem(entry))
+            .map((entry) => ({
+                ...entry,
+                listId: entry.listId || listId,
+                listType: entry.listType || list.type || listType,
+            })),
     )
 
     const itemIds: string[] = []
@@ -248,6 +253,11 @@ function applyItemProjection(
     entry: ListEntry,
     operation: 'add' | 'update' | 'delete',
 ) {
+    // Label meta-items (peer/surface names) live in reserved buckets and must
+    // never spawn a phantom list or render as a row — drop them here so an
+    // un-updated peer tolerates desktop/headless writing labels.
+    if (isLabelItem(entry)) return
+
     const normalized = normalizeListEntries([entry])[0]
     if (!normalized) return
 

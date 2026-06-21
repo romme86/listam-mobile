@@ -8,6 +8,9 @@ import type { MembershipRoster } from '../store/devicesSlice'
 type MembersDialogProps = {
     visible: boolean
     roster: MembershipRoster | null
+    // writerKeyHex -> human device name (from synced peer labels). Falls back to
+    // the short key when a peer hasn't set a name.
+    peerLabels: Map<string, string>
     recoveryCode: string | null
     recoverCodeInput: string
     setRecoverCodeInput: (text: string) => void
@@ -26,6 +29,7 @@ function shortKey(writerKey: string): string {
 export function MembersDialog({
     visible,
     roster,
+    peerLabels,
     recoveryCode,
     recoverCodeInput,
     setRecoverCodeInput,
@@ -79,7 +83,7 @@ export function MembersDialog({
                             >
                                 <View style={{ flex: 1 }}>
                                     <Text style={{ color: t.colors.text, fontSize: 15, fontVariant: ['tabular-nums'] }}>
-                                        {shortKey(m.writerKey)}
+                                        {peerLabels.get(m.writerKey) || shortKey(m.writerKey)}
                                     </Text>
                                     <Text style={{ color: t.colors.placeholder, fontSize: 12, marginTop: 2 }}>
                                         {[m.isOwner ? i18n.t('members.role.owner') : null, m.isSelf ? i18n.t('members.role.self') : null]

@@ -24,6 +24,10 @@ export type PreferencesState = {
     // Per-device: whether the board feature is available (off by default). When
     // off, the "New board" create tile is hidden; existing boards stay visible.
     boardEnabled: boolean
+    // Per-device source of truth for THIS device's human name. Also re-asserted
+    // as a synced peer-label (keyed by this device's own writer key) so other
+    // peers can tell devices apart in the members screen. '' = unnamed.
+    deviceName: string
 }
 
 const initialState: PreferencesState = {
@@ -31,6 +35,7 @@ const initialState: PreferencesState = {
     themeChoice: 'system',
     defaultListId: null,
     boardEnabled: false,
+    deviceName: '',
 }
 
 const preferencesSlice = createSlice({
@@ -47,6 +52,7 @@ const preferencesSlice = createSlice({
                 state.defaultListId = next.defaultListId
             }
             if (typeof next.boardEnabled === 'boolean') state.boardEnabled = next.boardEnabled
+            if (typeof next.deviceName === 'string') state.deviceName = next.deviceName
         },
         localeChoiceSet(state, action: PayloadAction<LocaleChoice>) {
             state.localeChoice = isLocaleChoice(action.payload) ? action.payload : 'system'
@@ -59,6 +65,9 @@ const preferencesSlice = createSlice({
         },
         boardEnabledSet(state, action: PayloadAction<boolean>) {
             state.boardEnabled = !!action.payload
+        },
+        deviceNameSet(state, action: PayloadAction<string>) {
+            state.deviceName = typeof action.payload === 'string' ? action.payload : ''
         },
     },
 })
