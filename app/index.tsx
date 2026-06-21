@@ -74,8 +74,10 @@ import { CreateTicket, type TicketDraft } from './components/board/CreateTicket'
 import { useListPager } from './nav/useListPager'
 import { selectGroupedLists, selectCurrentListView, DEFAULT_VIEW } from './store/registrySelectors'
 import { selectBoardConfig } from './store/boardConfigSlice'
+import { selectPeerLabels } from './store/labelsSlice'
 import { buildListMetaItem, buildGroupMetaItem, type RegistryListView } from '@listam/domain/list-registry'
 import { UNGROUPED_GROUP_ID } from '@listam/domain/list-nav'
+import { buildPeerLabelItem, MAX_LABEL_NAME } from '@listam/domain'
 import { BOARD_WRITE_TYPE, isBoardType, buildStatusChange } from '@listam/domain/board'
 import { SnackbarProvider, useSnackbar } from './components/Snackbar'
 import { haptics } from './feedback'
@@ -105,6 +107,7 @@ const PREF_LOCALE_CHOICE = '@lista_locale_choice'
 const PREF_THEME_CHOICE = '@lista_theme_choice'
 const PREF_DEFAULT_LIST = '@lista_default_list'
 const PREF_BOARD_ENABLED = '@lista_board_enabled'
+const PREF_DEVICE_NAME = '@lista_device_name'
 
 // Max gap between the two taps of a double-tap-to-add gesture.
 const DOUBLE_TAP_MS = 300
@@ -116,7 +119,8 @@ function AppInner() {
     const snackbar = useSnackbar()
     const reduceMotion = useReduceMotion()
     const dispatch = useAppDispatch()
-    const { localeChoice, themeChoice, defaultListId, boardEnabled } = useAppSelector(selectPreferences)
+    const { localeChoice, themeChoice, defaultListId, boardEnabled, deviceName } = useAppSelector(selectPreferences)
+    const peerLabels = useAppSelector(selectPeerLabels)
     // List PRESENTATION settings are per-list and synced (registry meta-item),
     // not global — sourced from the currently-selected list.
     const {
@@ -301,12 +305,14 @@ function AppInner() {
             PREF_THEME_CHOICE,
             PREF_DEFAULT_LIST,
             PREF_BOARD_ENABLED,
-        ]).then(([[, localeChoice], [, themeChoice], [, defaultList], [, boardEnabled]]) => {
+            PREF_DEVICE_NAME,
+        ]).then(([[, localeChoice], [, themeChoice], [, defaultList], [, boardEnabled], [, deviceName]]) => {
             dispatch(preferencesActions.preferencesHydrated({
                 ...(isLocaleChoice(localeChoice) ? { localeChoice } : {}),
                 ...(isThemeChoice(themeChoice) ? { themeChoice } : {}),
                 ...(defaultList !== null ? { defaultListId: defaultList } : {}),
                 ...(boardEnabled === '1' || boardEnabled === '0' ? { boardEnabled: boardEnabled === '1' } : {}),
+                ...(deviceName !== null ? { deviceName } : {}),
             }))
         })
 
@@ -366,6 +372,44 @@ function AppInner() {
         dispatch(preferencesActions.boardEnabledSet(next))
         AsyncStorage.setItem(PREF_BOARD_ENABLED, next ? '1' : '0')
     }, [boardEnabled, dispatch])
+
+    // This device's own writer key, learned from the membership roster (unknown
+    // at boot — the roster arrives asynchronously once peers connect).
+    const selfWriterKey = useMemo(
+        () => membershipRoster?.writers.find((m) => m.isSelf)?.writerKey ?? null,
+        [membershipRoster],
+    )
+
+    // Write the synced peer-label for THIS device, keyed by our own writer key.
+    // No-op until the self writer key is known. Empty name clears the label.
+    const writePeerLabel = useCallback((name: string) => {
+        if (!selfWriterKey) return
+        const meta = buildPeerLabelItem({
+            writerKey: selfWriterKey,
+            name,
+            updatedAt: Date.now(),
+        })
+        sendRPC(RPC_UPDATE, JSON.stringify({ item: meta }))
+    }, [selfWriterKey, sendRPC])
+
+    // Device-name input commit: persist the device-local pref AND publish the
+    // synced peer-label. Trimmed + clamped to MAX_LABEL_NAME (mirrors desktop).
+    const handleDeviceNameChange = useCallback((raw: string) => {
+        const name = raw.trim().slice(0, MAX_LABEL_NAME)
+        if (name === deviceName) return
+        dispatch(preferencesActions.deviceNameSet(name))
+        AsyncStorage.setItem(PREF_DEVICE_NAME, name)
+        writePeerLabel(name)
+    }, [deviceName, dispatch, writePeerLabel])
+
+    // Re-assert the peer-label when the roster (and thus the self writer key)
+    // becomes known, since at name-set time the key may have been unavailable.
+    // Only when our stored name differs from what's already synced for us.
+    useEffect(() => {
+        if (!selfWriterKey || !deviceName) return
+        if (peerLabels.get(selfWriterKey) === deviceName) return
+        writePeerLabel(deviceName)
+    }, [selfWriterKey, deviceName, peerLabels, writePeerLabel])
 
     const handleLocaleChoiceChange = useCallback((choice: LocaleChoice) => {
         dispatch(preferencesActions.localeChoiceSet(choice))
@@ -920,6 +964,7 @@ function AppInner() {
             <MembersDialog
                 visible={membersDialogVisible}
                 roster={membershipRoster}
+                peerLabels={peerLabels}
                 recoveryCode={ownerRecoveryCode}
                 recoverCodeInput={recoverCodeInput}
                 setRecoverCodeInput={setRecoverCodeInput}
@@ -973,6 +1018,8 @@ function AppInner() {
                 onThemeChoiceChange={handleThemeChoiceChange}
                 boardEnabled={boardEnabled}
                 onToggleBoardEnabled={handleToggleBoardEnabled}
+                deviceName={deviceName}
+                onDeviceNameChange={handleDeviceNameChange}
                 onChangeListView={writeListView}
                 onRenameList={handleRenameList}
                 onDeleteListItems={handleDeleteListItems}

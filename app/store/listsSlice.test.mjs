@@ -18,6 +18,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import ts from 'typescript'
+import { buildPeerLabelItem, buildSurfaceLabelItem } from '@listam/domain'
 
 const STORE_DIR = path.dirname(fileURLToPath(import.meta.url))
 const APP_DIR = path.resolve(STORE_DIR, '..')
@@ -111,4 +112,29 @@ test('SYNC_LIST (bare array) folds into default and does not clobber the viewed 
     assert.deepEqual(texts(selectSelectedListItems(store.getState())), ['KeepMe'])
     // ...and the synced items land in the default bucket.
     assert.deepEqual(texts(selectItemsForList(store.getState(), 'default')), ['SyncedDefault'])
+})
+
+// Mesh-safety: peer/surface label meta-items (reserved '__peers__' /
+// '__surfacenames__' buckets) ride the normal item pipeline but must NEVER
+// project into a list — else a device name renders as a grocery row, or an
+// empty phantom "Unknown" list appears. Verifies the listsSlice skip-filters.
+test('a peer-label item added from the backend never enters a list bucket', () => {
+    const store = makeStore()
+    const label = buildPeerLabelItem({ writerKey: 'a1b2c3', name: "Fabio's MacBook", updatedAt: 1 })
+    store.dispatch(listItemAdded(label))
+    // No '__peers__' bucket forms, and the default/selected lists stay empty.
+    assert.deepEqual(selectItemsForList(store.getState(), '__peers__'), [])
+    assert.deepEqual(selectSelectedListItems(store.getState()), [])
+})
+
+test('label items in a SYNC_LIST snapshot are filtered, real items still land', () => {
+    const store = makeStore()
+    store.dispatch(selectedListItemsSynced([
+        makeEntry({ text: 'Milk', listId: 'default' }),
+        buildPeerLabelItem({ writerKey: 'k', name: 'Pi', updatedAt: 1 }),
+        buildSurfaceLabelItem({ listId: 'default', type: 'shopping', name: 'Spesa', updatedAt: 1 }),
+    ]))
+    // Only the genuine grocery item lands; neither label leaks into the list.
+    assert.deepEqual(texts(selectItemsForList(store.getState(), 'default')), ['Milk'])
+    assert.deepEqual(selectItemsForList(store.getState(), '__surfacenames__'), [])
 })

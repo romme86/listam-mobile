@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { haptics } from '../feedback'
 import { useTheme, cardColor, type Theme } from '../theme'
 import { useI18n, type LocaleChoice } from '../i18n'
+import { MAX_LABEL_NAME } from '@listam/domain'
 import { isBoardType, BOARD_WRITE_TYPE } from '@listam/domain/board'
 import { isTodoType, TODO_LIST_TYPE } from '@listam/domain/identity'
 import { UNGROUPED_GROUP_ID } from '@listam/domain/list-nav'
@@ -56,6 +57,10 @@ type Props = {
     // App-global board feature toggle (off by default).
     boardEnabled: boolean
     onToggleBoardEnabled: () => void
+    // This device's human name (synced as a peer-label so other peers can tell
+    // devices apart). Commit publishes the label; empty clears it.
+    deviceName: string
+    onDeviceNameChange: (name: string) => void
     // Per-board/list settings, addressed by listId so any list can be configured.
     onChangeListView: (listId: string, patch: Partial<RegistryListView>) => void
     onRenameList: (listId: string, name: string) => void
@@ -92,7 +97,8 @@ export function ListsMenu(props: Props) {
         onSelect, onSetDefault, onCreate, onCreateGroup, onRenameGroup, onMoveListToGroup, onClose,
         peerCount, isWorkletReady, networkStatus, isJoining, onManageMembers, onManageOwnedDevices, onPairLeaf,
         localeChoice, onLocaleChoiceChange, themeChoice, onThemeChoiceChange,
-        boardEnabled, onToggleBoardEnabled, onChangeListView, onRenameList, onDeleteListItems,
+        boardEnabled, onToggleBoardEnabled, deviceName, onDeviceNameChange,
+        onChangeListView, onRenameList, onDeleteListItems,
         initialListSettingsId, loyaltyCards, onScanCard, onSelectCard,
         sendRPCWithReply, notify,
     } = props
@@ -405,6 +411,19 @@ export function ListsMenu(props: Props) {
                                     onChange={onLocaleChoiceChange}
                                     labelFor={i18n.labelForLocaleChoice}
                                 />
+
+                                <Text style={styles.sectionLabel}>{i18n.t('desktop.settings.deviceName.label')}</Text>
+                                <TextInput
+                                    style={styles.nameInput}
+                                    defaultValue={deviceName}
+                                    placeholder={i18n.t('desktop.settings.deviceName.placeholder')}
+                                    placeholderTextColor={t.colors.placeholder}
+                                    returnKeyType="done"
+                                    maxLength={MAX_LABEL_NAME}
+                                    autoCapitalize="words"
+                                    onEndEditing={(e) => onDeviceNameChange(e.nativeEvent.text)}
+                                />
+                                <Text style={styles.sectionNote}>{i18n.t('desktop.settings.deviceName.help')}</Text>
 
                                 <Text style={styles.sectionLabel}>{i18n.t('lists.menu.boardFeature')}</Text>
                                 <View style={styles.switchRow}>

@@ -2,6 +2,7 @@ import { createSelector } from '@reduxjs/toolkit'
 import { reduceRegistry, REGISTRY_LIST_ID, REGISTRY_LIST_TYPE, type RegistryListView } from '@listam/domain/list-registry'
 import { toNavLibrary, type NavLibrary } from '@listam/domain/list-nav'
 import { isTodoType } from '@listam/domain/identity'
+import { PEER_LABEL_LIST_ID, SURFACE_LABEL_LIST_ID } from '@listam/domain'
 import type { RootState } from './store'
 
 // Defaults for a list's view settings, applied when a list carries no override.
@@ -40,8 +41,18 @@ export const selectNavLibrary = createSelector(
     selectDefaultListId,
     (lists, registry, defaultListId): NavLibrary => {
         const filed = new Set(registry.lists.map((l) => l.id))
+        // Reserved label buckets ('__peers__','__surfacenames__') must never
+        // surface as stray/phantom lists in the nav, even if a label item ever
+        // creates a list record on an un-updated build.
         const extraLists = Object.values(lists.listsById)
-            .filter((l) => l.id !== REGISTRY_LIST_ID && l.type !== REGISTRY_LIST_TYPE && !filed.has(l.id))
+            .filter(
+                (l) =>
+                    l.id !== REGISTRY_LIST_ID &&
+                    l.type !== REGISTRY_LIST_TYPE &&
+                    l.id !== PEER_LABEL_LIST_ID &&
+                    l.id !== SURFACE_LABEL_LIST_ID &&
+                    !filed.has(l.id),
+            )
             .map((l) => ({ id: l.id, name: l.name, type: l.type }))
         return toNavLibrary(registry, { extraLists, defaultListId })
     },

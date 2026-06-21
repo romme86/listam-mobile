@@ -22,6 +22,7 @@ import {
     type MembershipRoster,
 } from '../store/devicesSlice'
 import { boardConfigActions } from '../store/boardConfigSlice'
+import { labelsActions } from '../store/labelsSlice'
 import { useI18n } from '../i18n'
 import {
     RPC_UPDATE,
@@ -381,20 +382,30 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                     dispatch(syncActions.autobaseInviteKeySet(''))
                     dispatch(devicesActions.rosterReceived(null))
                     dispatch(boardConfigActions.boardConfigReset())
+                    dispatch(labelsActions.labelsCleared())
                     return
                 case 'sync-list':
                     if (Array.isArray(event.items)) {
+                        // Peer/surface name labels ride the same item stream; the
+                        // labels slice retains them while listsSlice filters them
+                        // out of list rows. SYNC_LIST is default-list-only, so labels
+                        // (reserved buckets) actually arrive via *-from-backend below
+                        // — fold any present here additively, never clearing.
                         dispatch(listsActions.selectedListItemsSynced(event.items as ListEntry[]))
+                        dispatch(labelsActions.labelsApplied(event.items as ListEntry[]))
                     }
                     return
                 case 'delete-from-backend':
                     dispatch(listsActions.listItemDeleted(event.item as ListEntry))
+                    dispatch(labelsActions.labelItemRemoved(event.item as ListEntry))
                     return
                 case 'update-from-backend':
                     dispatch(listsActions.listItemUpdated(event.item as ListEntry))
+                    dispatch(labelsActions.labelItemApplied(event.item as ListEntry))
                     return
                 case 'add-from-backend':
                     dispatch(listsActions.listItemAdded(event.item as ListEntry))
+                    dispatch(labelsActions.labelItemApplied(event.item as ListEntry))
                     return
                 case 'invite-key':
                     if (event.key != null) {
