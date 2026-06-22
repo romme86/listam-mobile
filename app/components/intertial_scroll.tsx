@@ -6,7 +6,7 @@ import {
     Text,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Ionicons } from '@expo/vector-icons'
+import { MaterialCommunityIcons } from '@expo/vector-icons'
 import type { ListAlignment, ListEntry, ListSpacing, SizeOption } from './_types'
 import { ListItem, ITEM_HEIGHT, SPACING } from './ListItem'
 import { groupByCategory } from './categoryGrouping'
@@ -126,10 +126,10 @@ export default function InertialElasticList({
 
     const renderItem = useCallback(({ item }: { item: FlatListItem }) => {
         if (item.type === 'header') {
-            const iconName = CATEGORY_ICONS[item.canonicalKey] || 'basket-outline'
+            const iconName = CATEGORY_ICONS[item.canonicalKey] || 'basket'
             return (
                 <View style={[styles.headerContainer, { height: totalItemHeight }, isCentered && styles.headerContainerCentered]}>
-                    <Ionicons name={iconName as any} size={16} color={t.colors.textSecondary} />
+                    <MaterialCommunityIcons name={iconName as any} size={16} color={t.colors.textSecondary} />
                     <Text style={[styles.headerTitle, { fontSize: 13 * textScaleFactor }]}>
                         {item.category.toUpperCase()}
                     </Text>
