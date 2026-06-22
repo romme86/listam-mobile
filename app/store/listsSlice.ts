@@ -1,7 +1,7 @@
 import { createSelector, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { RootState } from './store'
 import type { ListEntry } from '../components/_types'
-import { isLabelItem } from '@listam/domain'
+import { isLabelItem, sortByOrder } from '@listam/domain'
 import {
     DEFAULT_LIST_ID,
     DEFAULT_LIST_TYPE,
@@ -295,19 +295,25 @@ export const selectSelectedListId = createSelector(
 export const selectItemsForList = (state: RootState, listId: string): ListEntry[] => {
     const list = state.lists.listsById[listId]
     if (!list) return []
-    return list.itemIds
-        .map((itemId) => state.lists.itemsById[itemId])
-        .filter((item): item is ListEntry => Boolean(item))
+    return sortByOrder(
+        list.itemIds
+            .map((itemId) => state.lists.itemsById[itemId])
+            .filter((item): item is ListEntry => Boolean(item)),
+    )
 }
 
+// Items of the selected list in display order: insertion order with the user's
+// manual `order` (set by reordering) layered on top via sortByOrder.
 export const selectSelectedListItems = createSelector(
     selectListsState,
     (state) => {
         const list = state.listsById[state.selectedListId]
         if (!list) return []
-        return list.itemIds
-            .map((itemId) => state.itemsById[itemId])
-            .filter((item): item is ListEntry => Boolean(item))
+        return sortByOrder(
+            list.itemIds
+                .map((itemId) => state.itemsById[itemId])
+                .filter((item): item is ListEntry => Boolean(item)),
+        )
     },
 )
 

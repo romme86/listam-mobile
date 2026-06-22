@@ -19,6 +19,7 @@ import {
     RPC_UPDATE,
     RPC_DELETE,
     RPC_ADD,
+    RPC_MOVE,
     RPC_JOIN_KEY,
     RPC_REMOVE_MEMBER,
     RPC_GET_MEMBERS,
@@ -66,6 +67,7 @@ import { AddItemBar } from './components/AddItemBar'
 import { Fab } from './components/Fab'
 import { SummaryBar } from './components/SummaryBar'
 import { ListsMenu } from './components/ListsMenu'
+import { MoveItemSheet } from './components/MoveItemSheet'
 import { ListContextBar } from './components/ListContextBar'
 import { ListSwipePager } from './components/ListSwipePager'
 import { BoardView } from './components/board/BoardView'
@@ -78,7 +80,7 @@ import { selectPeerLabels } from './store/labelsSlice'
 import { buildListMetaItem, buildGroupMetaItem, type RegistryListView } from '@listam/domain/list-registry'
 import { UNGROUPED_GROUP_ID } from '@listam/domain/list-nav'
 import { buildPeerLabelItem, MAX_LABEL_NAME } from '@listam/domain'
-import { BOARD_WRITE_TYPE, isBoardType, buildStatusChange } from '@listam/domain/board'
+import { BOARD_WRITE_TYPE, isBoardType, buildStatusChange, validateTicketDraft } from '@listam/domain/board'
 import { SnackbarProvider, useSnackbar } from './components/Snackbar'
 import { haptics } from './feedback'
 import { I18nProvider, useI18n, type LocaleChoice } from './i18n'
@@ -193,6 +195,14 @@ function AppInner() {
     const [pendingListSettingsId, setPendingListSettingsId] = useState<string | null>(null)
     const [boardTicketId, setBoardTicketId] = useState<string | null>(null)
     const [createTicketVisible, setCreateTicketVisible] = useState(false)
+    // The item whose "move to another list" picker is open (null = closed).
+    const [moveTarget, setMoveTarget] = useState<ListEntry | null>(null)
+    // Description seeded into the create-ticket form (used when promoting an item
+    // into a rigor board via a move, so the user only fills the missing fields).
+    const [createTicketInitialDesc, setCreateTicketInitialDesc] = useState('')
+    // When set, the next create-ticket submit MOVES this source item into the
+    // target board (id preserved) instead of adding a brand-new ticket.
+    const pendingMoveRef = useRef<{ item: ListEntry; targetListId: string } | null>(null)
 
     // The board ticket currently open in the detail editor (live from the store,
     // so edits reflect immediately).
@@ -626,18 +636,67 @@ function AppInner() {
     // Board tickets are created with their rigor fields so the backend's gate
     // accepts them. The backend stamps id/createdBy/status and echoes the canonical
     // item back, which lands in the store via the add-from-backend path.
-    const handleCreateTicket = useCallback((draft: TicketDraft) => {
-        sendRPC(RPC_ADD, JSON.stringify({
-            text: draft.description,
-            listId: currentId,
-            listType: BOARD_WRITE_TYPE,
-            status: 'todo',
-            description: draft.description,
-            checklist: draft.checklist,
-            estimatedHours: draft.estimatedHours,
-            estimatedComplexity: draft.estimatedComplexity,
+    // Move the open item to a chosen destination (listId, type). The backend
+    // decomposes the move into add+delete (different listId) or a single in-place
+    // type flip (same listId), so the existing FROM_BACKEND echoes update the
+    // store with no new reducer. Promoting into a rigor board first collects the
+    // required ticket fields via the create form (see pendingMoveRef).
+    const handleMove = useCallback((targetListId: string, targetType: string) => {
+        const item = moveTarget
+        if (!item) return
+        setMoveTarget(null)
+        const sameSurface = item.listId === targetListId && (
+            isBoardType(item.listType) ? isBoardType(targetType)
+                : isTodoType(item.listType) ? isTodoType(targetType)
+                    : (!isBoardType(targetType) && !isTodoType(targetType))
+        )
+        if (sameSurface) return
+        if (isBoardType(targetType) && boardConfig.rigorOn && validateTicketDraft(item, boardConfig).missing.length > 0) {
+            pendingMoveRef.current = { item, targetListId }
+            setCreateTicketInitialDesc(item.text)
+            setCreateTicketVisible(true)
+            return
+        }
+        sendRPC(RPC_MOVE, JSON.stringify({
+            item,
+            targetListId,
+            targetListType: isBoardType(targetType) ? BOARD_WRITE_TYPE : targetType,
         }))
+        haptics.success()
+    }, [moveTarget, boardConfig, sendRPC])
+
+    const handleCreateTicket = useCallback((draft: TicketDraft) => {
+        const pending = pendingMoveRef.current
+        if (pending) {
+            // Promote-into-board move: relocate the existing item (id preserved)
+            // and supply the rigor fields the form collected.
+            pendingMoveRef.current = null
+            sendRPC(RPC_MOVE, JSON.stringify({
+                item: pending.item,
+                targetListId: pending.targetListId,
+                targetListType: BOARD_WRITE_TYPE,
+                fields: {
+                    status: 'todo',
+                    description: draft.description,
+                    checklist: draft.checklist,
+                    estimatedHours: draft.estimatedHours,
+                    estimatedComplexity: draft.estimatedComplexity,
+                },
+            }))
+        } else {
+            sendRPC(RPC_ADD, JSON.stringify({
+                text: draft.description,
+                listId: currentId,
+                listType: BOARD_WRITE_TYPE,
+                status: 'todo',
+                description: draft.description,
+                checklist: draft.checklist,
+                estimatedHours: draft.estimatedHours,
+                estimatedComplexity: draft.estimatedComplexity,
+            }))
+        }
         setCreateTicketVisible(false)
+        setCreateTicketInitialDesc('')
         haptics.success()
     }, [currentId, sendRPC])
 
@@ -1049,6 +1108,7 @@ function AppInner() {
                         data={displayList}
                         onToggleDone={handleToggleDone}
                         onDelete={handleDelete}
+                        onRequestMove={setMoveTarget}
                         onRequestAdd={handleRequestAdd}
                         categoriesEnabled={categoriesEnabled}
                         categoryHeadersVisible={categoryHeadersVisible}
@@ -1062,6 +1122,7 @@ function AppInner() {
                         onToggleDone={handleToggleDone}
                         onDelete={handleDelete}
                         onEdit={handleEditItem}
+                        onRequestMove={setMoveTarget}
                         onRequestAdd={handleRequestAdd}
                         categoriesEnabled={categoriesEnabled}
                         categoryHeadersVisible={categoryHeadersVisible}
@@ -1104,13 +1165,22 @@ function AppInner() {
                 listName={lib.listsById[currentId]?.name ?? currentId}
                 onUpdate={handleUpdateTicket}
                 onChangeStatus={handleChangeTicketStatus}
+                onRequestMove={(ticket) => { setBoardTicketId(null); setMoveTarget(ticket) }}
                 onClose={() => setBoardTicketId(null)}
             />
             <CreateTicket
                 visible={createTicketVisible}
                 config={boardConfig}
+                initialDescription={createTicketInitialDesc}
                 onCreate={handleCreateTicket}
-                onClose={() => setCreateTicketVisible(false)}
+                onClose={() => { setCreateTicketVisible(false); setCreateTicketInitialDesc(''); pendingMoveRef.current = null }}
+            />
+            <MoveItemSheet
+                visible={moveTarget !== null}
+                item={moveTarget}
+                groups={groupedLists}
+                onMove={handleMove}
+                onClose={() => setMoveTarget(null)}
             />
             </CategoryDragProvider>
         </View>

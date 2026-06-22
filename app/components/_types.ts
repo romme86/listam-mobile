@@ -17,6 +17,12 @@ export type ListEntry = {
      */
     categoryOverride?: string
     /**
+     * Manual sort key set when the user reorders items (shared
+     * `@listam/domain/ordering`). Optional and last-write-wins like every other
+     * field; items without one render in their natural (insertion) order.
+     */
+    order?: number
+    /**
      * Board-ticket fields. They ride through the store untouched (the reducers
      * spread items), so an item on a board list carries its status/blocks/etc.
      * `dueAt` is the one board field not in the shared `BoardFields` interface.

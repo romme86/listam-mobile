@@ -33,6 +33,7 @@ type Props = {
     data: ListEntry[]
     onToggleDone?: (index: number) => void
     onDelete?: (index: number) => void
+    onRequestMove?: (item: ListEntry) => void
     onRequestAdd?: () => void
     categoriesEnabled?: boolean
     categoryHeadersVisible?: boolean
@@ -45,6 +46,7 @@ export function VisualGridList({
     data,
     onToggleDone,
     onDelete,
+    onRequestMove,
     onRequestAdd,
     categoriesEnabled = true,
     categoryHeadersVisible = true,
@@ -81,6 +83,7 @@ export function VisualGridList({
             cardWidth={cardWidth}
             onToggleDone={onToggleDone}
             onDelete={onDelete}
+            onRequestMove={onRequestMove}
             itemIconVariant={itemIconVariant}
             categoryKey={canonicalKey}
             reduceMotion={reduceMotion}
