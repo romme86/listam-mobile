@@ -25,6 +25,7 @@ type GridCardProps = {
     cardWidth: number
     onToggleDone?: (index: number) => void
     onDelete?: (index: number) => void
+    onRequestMove?: (item: ListEntry) => void
     itemIconVariant?: ItemIconVariant
     /** Canonical key of the category this card currently sits in (for drag-to-move). */
     categoryKey?: string
@@ -37,6 +38,7 @@ export function GridCard({
     cardWidth,
     onToggleDone,
     onDelete,
+    onRequestMove,
     itemIconVariant = 'illustrated',
     categoryKey = '',
     reduceMotion = false,
@@ -169,6 +171,17 @@ export function GridCard({
                 ]}
             />
         </TouchableOpacity>
+        {onRequestMove ? (
+            <TouchableOpacity
+                style={styles.moveBtn}
+                onPress={() => { haptics.select(); onRequestMove(item) }}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={i18n.t('main.item.move')}
+            >
+                <Ionicons name="swap-horizontal" size={15} color={t.colors.textTertiary} />
+            </TouchableOpacity>
+        ) : null}
         </View>
     )
 }
@@ -191,6 +204,15 @@ function makeStyles(t: Theme) {
         cardDone: {
             backgroundColor: t.colors.surfaceAlt,
             opacity: 0.6,
+        },
+        moveBtn: {
+            position: 'absolute',
+            top: 2,
+            right: CARD_MARGIN + 2,
+            width: 26,
+            height: 26,
+            alignItems: 'center',
+            justifyContent: 'center',
         },
         iconContainer: {
             marginBottom: 2,

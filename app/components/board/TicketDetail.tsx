@@ -17,12 +17,13 @@ type Props = {
     listName: string
     onUpdate: (patch: Record<string, unknown>) => void
     onChangeStatus: (statusId: string) => void
+    onRequestMove?: (ticket: ListEntry) => void
     onClose: () => void
 }
 
 const PRIORITIES = ['', 'low', 'medium', 'high', 'urgent']
 
-export function TicketDetail({ visible, ticket, config, listName, onUpdate, onChangeStatus, onClose }: Props) {
+export function TicketDetail({ visible, ticket, config, listName, onUpdate, onChangeStatus, onRequestMove, onClose }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
@@ -48,9 +49,16 @@ export function TicketDetail({ visible, ticket, config, listName, onUpdate, onCh
                         <Ionicons name="chevron-back" size={26} color={t.colors.text} />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle} numberOfLines={1}>{listName}</Text>
-                    <TouchableOpacity onPress={onClose} hitSlop={10} accessibilityLabel={i18n.t('common.close')}>
-                        <Ionicons name="close" size={26} color={t.colors.text} />
-                    </TouchableOpacity>
+                    <View style={styles.headerActions}>
+                        {onRequestMove ? (
+                            <TouchableOpacity onPress={() => onRequestMove(ticket)} hitSlop={10} accessibilityLabel={i18n.t('main.item.move')}>
+                                <Ionicons name="swap-horizontal" size={24} color={t.colors.text} />
+                            </TouchableOpacity>
+                        ) : null}
+                        <TouchableOpacity onPress={onClose} hitSlop={10} accessibilityLabel={i18n.t('common.close')}>
+                            <Ionicons name="close" size={26} color={t.colors.text} />
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -222,6 +230,7 @@ function makeStyles(t: Theme) {
     return StyleSheet.create({
         safe: { flex: 1, backgroundColor: t.colors.bg },
         header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: t.spacing.lg, paddingVertical: t.spacing.sm },
+        headerActions: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md },
         headerTitle: { flex: 1, textAlign: 'center', fontSize: t.type.bodyStrong.fontSize, fontWeight: '700', color: t.colors.textSecondary },
         scroll: { flex: 1 },
         content: { paddingHorizontal: t.spacing.lg, paddingBottom: t.spacing.xxl, gap: t.spacing.lg },

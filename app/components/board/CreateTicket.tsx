@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Modal, View, Text, TextInput, ScrollView, TouchableOpacity, PanResponder, StyleSheet, type LayoutChangeEvent } from 'react-native'
 import { SafeAreaProvider, SafeAreaView, initialWindowMetrics } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -16,13 +16,15 @@ export type TicketDraft = {
 type Props = {
     visible: boolean
     config: BoardConfig
+    /** Seeds the description when the form opens (e.g. promoting an item into a board via a move). */
+    initialDescription?: string
     onCreate: (draft: TicketDraft) => void
     onClose: () => void
 }
 
 type Task = { text: string; done: boolean }
 
-export function CreateTicket({ visible, config, onCreate, onClose }: Props) {
+export function CreateTicket({ visible, config, initialDescription = '', onCreate, onClose }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
@@ -38,6 +40,18 @@ export function CreateTicket({ visible, config, onCreate, onClose }: Props) {
         setDescription(''); setTasks([{ text: '', done: false }]); setHours(''); setComplexity(50); setShowErrors(false)
     }
     const close = () => { reset(); onClose() }
+
+    // Seed the form when it opens. A normal "new ticket" opens with an empty
+    // description; a promote-into-board move opens pre-filled with the item text.
+    useEffect(() => {
+        if (visible) {
+            setDescription(initialDescription)
+            setTasks([{ text: '', done: false }])
+            setHours('')
+            setComplexity(50)
+            setShowErrors(false)
+        }
+    }, [visible, initialDescription])
 
     const draft = (): TicketDraft => ({
         description: description.trim(),

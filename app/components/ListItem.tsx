@@ -29,6 +29,8 @@ type ListItemProps = {
     onToggleDone?: (index: number) => void
     onDelete?: (index: number) => void
     onEdit?: (index: number, text: string) => void
+    /** Open the "move to another list" picker for this item. */
+    onRequestMove?: (item: ListEntry) => void
     textScaleFactor?: number
     listAlignment?: ListAlignment
     spacing?: number
@@ -46,6 +48,7 @@ export function ListItem({
     onToggleDone,
     onDelete,
     onEdit,
+    onRequestMove,
     textScaleFactor = 1,
     listAlignment = 'left',
     spacing = SPACING,
@@ -247,6 +250,17 @@ export function ListItem({
                         </Animated.Text>
                     </Animated.View>
                 </TouchableOpacity>
+                {onRequestMove ? (
+                    <TouchableOpacity
+                        style={styles.moveBtn}
+                        onPress={() => { haptics.select(); onRequestMove(item) }}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel={i18n.t('main.item.move')}
+                    >
+                        <Ionicons name="swap-horizontal" size={20} color={t.colors.textTertiary} />
+                    </TouchableOpacity>
+                ) : null}
             </Animated.View>
         </View>
     )
@@ -278,6 +292,15 @@ function makeStyles(t: Theme) {
         itemContainer: {
             backgroundColor: t.colors.bg,
             paddingLeft: 20,
+        },
+        moveBtn: {
+            position: 'absolute',
+            right: 12,
+            top: 0,
+            bottom: 0,
+            width: 40,
+            alignItems: 'center',
+            justifyContent: 'center',
         },
         item: {
             height: ITEM_HEIGHT,
