@@ -61,7 +61,8 @@ import type { LoyaltyCard } from './components/LoyaltyCardScanner'
 import InertialElasticList from './components/intertial_scroll'
 import { VisualGridList } from './components/VisualGridList'
 import { CategoryDragProvider } from './components/CategoryDrag'
-import { getDisplayCategoryName } from './components/categoryGrouping'
+import { getDisplayCategoryName, groupByCategory } from './components/categoryGrouping'
+import { computeReorder, sortByOrder } from '@listam/domain/ordering'
 import { identityKey, DEFAULT_LIST_TYPE, isTodoType } from './listProjection'
 import { AddItemBar } from './components/AddItemBar'
 import { Fab } from './components/Fab'
@@ -615,6 +616,35 @@ function AppInner() {
         haptics.delete()
     }, [animate, dataList, dispatch, sendRPC])
 
+    // Drag-to-reorder: dropping on the "move to top/bottom" zone re-ranks the item
+    // within its display group via the shared `order` field (computeReorder picks
+    // midpoints / renormalizes). With categories on, the group is the item's
+    // category section (groupByCategory reorders, so re-apply sortByOrder); else
+    // it's the whole list. Each changed item rides the normal LWW update path.
+    const handleReorderToEdge = useCallback((item: ListEntry, edge: 'top' | 'bottom') => {
+        const target = identityKey(item)
+        let group: ListEntry[]
+        if (categoriesEnabled) {
+            const section = groupByCategory(dataList, i18n.groceryLocale)
+                .find((s) => s.items.some((x) => identityKey(x.entry) === target))
+            group = sortByOrder(section ? section.items.map((x) => x.entry) : dataList)
+        } else {
+            group = dataList
+        }
+        const fromIndex = group.findIndex((entry) => identityKey(entry) === target)
+        if (fromIndex < 0) return
+        const { updates } = computeReorder(group, fromIndex, edge === 'top' ? 0 : group.length - 1)
+        if (updates.length === 0) return
+        animate()
+        const ts = Date.now()
+        for (const update of updates) {
+            const updatedItem = { ...update, updatedAt: ts }
+            dispatch(listsActions.listItemUpdated(updatedItem))
+            sendRPC(RPC_UPDATE, JSON.stringify({ item: updatedItem }))
+        }
+        haptics.success()
+    }, [animate, categoriesEnabled, dataList, dispatch, i18n, sendRPC])
+
     const handleClearCompleted = useCallback(() => {
         const done = dataList.filter((item) => item.isDone)
         if (done.length === 0) return
@@ -982,6 +1012,8 @@ function AppInner() {
                 groceryLocale={i18n.groceryLocale}
                 onAssign={handleAssignCategory}
                 onDelete={handleDeleteDragged}
+                reorderEnabled={!isBoard}
+                onReorder={handleReorderToEdge}
             >
             <Header
                 peerCount={peerCount}

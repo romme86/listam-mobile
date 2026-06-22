@@ -35,6 +35,9 @@ const GHOST_HEIGHT = 44
 
 /** Sentinel drop-target key for the trash zone. */
 const DELETE_KEY = '__delete__'
+/** Sentinel drop-target keys for the reorder zones. */
+const MOVE_TOP_KEY = '__move_top__'
+const MOVE_BOTTOM_KEY = '__move_bottom__'
 
 type DragTarget = { canonicalKey: string; label: string; icon: string }
 
@@ -73,6 +76,11 @@ type ProviderProps = {
     groceryLocale: Parameters<typeof getDisplayCategoryName>[1]
     onAssign: (item: ListEntry, canonicalKey: string) => void
     onDelete: (item: ListEntry) => void
+    // When set, the overlay also offers "move to top / bottom" reorder targets.
+    // Independent of `enabled` (categories) so a plain to-do list can reorder
+    // even though it has no category targets.
+    reorderEnabled?: boolean
+    onReorder?: (item: ListEntry, edge: 'top' | 'bottom') => void
     children: React.ReactNode
 }
 
@@ -82,6 +90,8 @@ export function CategoryDragProvider({
     groceryLocale,
     onAssign,
     onDelete,
+    reorderEnabled = false,
+    onReorder,
     children,
 }: ProviderProps) {
     const t = useTheme()
@@ -161,24 +171,30 @@ export function CategoryDragProvider({
         if (!commit || !item || !hovered) return
         if (hovered === DELETE_KEY) {
             onDelete(item)
+        } else if (hovered === MOVE_TOP_KEY) {
+            onReorder?.(item, 'top')
+        } else if (hovered === MOVE_BOTTOM_KEY) {
+            onReorder?.(item, 'bottom')
         } else if (hovered !== origin) {
             onAssign(item, hovered)
         }
-    }, [onAssign, onDelete])
+    }, [onAssign, onDelete, onReorder])
 
     const end = useCallback(() => finish(true), [finish])
     const cancel = useCallback(() => finish(false), [finish])
 
+    const reorderAvailable = reorderEnabled && Boolean(onReorder) && data.length > 1
     const controller = useMemo<DragController>(() => ({
-        // With a trash drop-zone always present, a long-press is useful as soon
-        // as there is anything on the list (move needs 2+ categories; delete doesn't).
-        enabled: enabled && targets.length > 0,
+        // A long-press is useful as soon as there is something to do: move
+        // between categories / delete (when categories are on) or reorder (needs
+        // 2+ items). The trash zone is always present while the overlay is up.
+        enabled: (enabled && data.length > 0) || reorderAvailable,
         draggingId,
         begin,
         move,
         end,
         cancel,
-    }), [enabled, targets.length, draggingId, begin, move, end, cancel])
+    }), [enabled, reorderAvailable, data.length, draggingId, begin, move, end, cancel])
 
     const dragging = draggingId !== null
 
@@ -190,6 +206,35 @@ export function CategoryDragProvider({
                     <View style={styles.backdrop} />
                     <Text style={styles.title}>{i18n.t('main.drag.title')}</Text>
                     <View style={styles.targets}>
+                        {reorderAvailable && [
+                            { key: MOVE_TOP_KEY, label: i18n.t('main.drag.toTop'), icon: 'arrow-up' },
+                            { key: MOVE_BOTTOM_KEY, label: i18n.t('main.drag.toBottom'), icon: 'arrow-down' },
+                        ].map((tgt) => {
+                            const isHovered = tgt.key === hoveredKey
+                            return (
+                                <View
+                                    key={tgt.key}
+                                    ref={(node) => {
+                                        if (node) rowRefs.current.set(tgt.key, node)
+                                        else rowRefs.current.delete(tgt.key)
+                                    }}
+                                    onLayout={() => measureRow(tgt.key)}
+                                    style={[styles.target, styles.reorderTarget, isHovered && styles.targetHovered]}
+                                >
+                                    <Ionicons
+                                        name={tgt.icon as any}
+                                        size={18}
+                                        color={isHovered ? t.colors.onAccent : t.colors.textSecondary}
+                                    />
+                                    <Text
+                                        style={[styles.targetLabel, isHovered && styles.targetLabelHovered]}
+                                        numberOfLines={1}
+                                    >
+                                        {tgt.label}
+                                    </Text>
+                                </View>
+                            )
+                        })}
                         {targets.map((target) => {
                             const isOrigin = target.canonicalKey === originKeyRef.current
                             const isHovered = target.canonicalKey === hoveredKey && !isOrigin
@@ -383,6 +428,9 @@ function makeStyles(t: Theme) {
             backgroundColor: t.colors.surface,
             borderWidth: 2,
             borderColor: t.colors.border,
+        },
+        reorderTarget: {
+            borderStyle: 'dashed',
         },
         targetOrigin: {
             opacity: 0.45,
