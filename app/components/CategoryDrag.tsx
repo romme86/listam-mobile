@@ -14,7 +14,7 @@ import {
     View,
     type GestureResponderEvent,
 } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons'
 import { haptics } from '../feedback'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
@@ -115,7 +115,7 @@ export function CategoryDragProvider({
         return groupByCategory(data, groceryLocale).map((section) => ({
             canonicalKey: section.canonicalKey,
             label: section.category,
-            icon: CATEGORY_ICONS[section.canonicalKey] || 'basket-outline',
+            icon: CATEGORY_ICONS[section.canonicalKey] || 'basket',
         }))
     }, [data, enabled, groceryLocale])
     const targetsRef = useRef(targets)
@@ -221,7 +221,7 @@ export function CategoryDragProvider({
                                     onLayout={() => measureRow(tgt.key)}
                                     style={[styles.target, styles.reorderTarget, isHovered && styles.targetHovered]}
                                 >
-                                    <Ionicons
+                                    <MaterialCommunityIcons
                                         name={tgt.icon as any}
                                         size={18}
                                         color={isHovered ? t.colors.onAccent : t.colors.textSecondary}
@@ -252,7 +252,7 @@ export function CategoryDragProvider({
                                         isHovered && styles.targetHovered,
                                     ]}
                                 >
-                                    <Ionicons
+                                    <MaterialCommunityIcons
                                         name={target.icon as any}
                                         size={18}
                                         color={isHovered ? t.colors.onAccent : t.colors.textSecondary}

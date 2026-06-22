@@ -7,7 +7,7 @@ import {
     Dimensions,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { Ionicons } from '@expo/vector-icons'
+import { MaterialCommunityIcons } from '@expo/vector-icons'
 import type { ListEntry, SizeOption } from './_types'
 import { groupByCategory, type IndexedEntry } from './categoryGrouping'
 import { CATEGORY_ICONS } from './categoryConstants'
@@ -128,8 +128,8 @@ export function VisualGridList({
                     <View key={section.category || '_flat'} style={styles.section}>
                         {categoryHeadersVisible && section.category !== '' && (
                             <View style={styles.categoryHeader}>
-                                <Ionicons
-                                    name={(CATEGORY_ICONS[section.canonicalKey] || 'basket-outline') as any}
+                                <MaterialCommunityIcons
+                                    name={(CATEGORY_ICONS[section.canonicalKey] || 'basket') as any}
                                     size={18}
                                     color={t.colors.textSecondary}
                                 />
