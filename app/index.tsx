@@ -33,7 +33,7 @@ import {
 } from './hooks/_useWorklet'
 import { store } from './store/store'
 import { useAppDispatch, useAppSelector } from './store/hooks'
-import { listsActions, selectItemsForList } from './store/listsSlice'
+import { listsActions, selectItemsForList, selectAllItems } from './store/listsSlice'
 import {
     preferencesActions,
     selectPreferences,
@@ -82,6 +82,17 @@ import { buildListMetaItem, buildGroupMetaItem, type RegistryListView } from '@l
 import { UNGROUPED_GROUP_ID } from '@listam/domain/list-nav'
 import { buildPeerLabelItem, MAX_LABEL_NAME } from '@listam/domain'
 import { BOARD_WRITE_TYPE, isBoardType, buildStatusChange, validateTicketDraft } from '@listam/domain/board'
+import {
+    reducePlan,
+    buildItemPlanEntry,
+    buildListPlanEntry,
+    buildPlanItem,
+    planItemKey,
+    planListKey,
+    toDateKey,
+} from '@listam/domain/plan'
+import { OverviewScreen } from './components/OverviewScreen'
+import { PlanSheet } from './components/PlanSheet'
 import { SnackbarProvider, useSnackbar } from './components/Snackbar'
 import { haptics } from './feedback'
 import { I18nProvider, useI18n, type LocaleChoice } from './i18n'
@@ -140,6 +151,9 @@ function AppInner() {
     const loyaltyCards = useAppSelector(selectLoyaltyCardHandles)
     const groupedLists = useAppSelector(selectGroupedLists)
     const boardConfig = useAppSelector(selectBoardConfig)
+    // Every materialized item (incl. the plan channel) — the Overview reduces the
+    // plan entries out of this and joins them to their source rows.
+    const allItems = useAppSelector(selectAllItems)
 
     const notify = useCallback(
         (message: string, type: NotifyType = 'info') => snackbar.show(message, type),
@@ -181,6 +195,10 @@ function AppInner() {
         [categoriesEnabled, applyLearnedCategories, dataList]
     )
 
+    // The set of live plan refs ('i:listId::itemId' / 'l:listId::type'), recomputed
+    // when items change so rows/headers can show their flag state.
+    const plannedRefs = useMemo(() => new Set([...reducePlan(allItems).keys()]), [allItems])
+
     const [joinDialogVisible, setJoinDialogVisible] = useState(false)
     const [joinKeyInput, setJoinKeyInput] = useState('')
     const [membersDialogVisible, setMembersDialogVisible] = useState(false)
@@ -193,6 +211,11 @@ function AppInner() {
     const [isAdding, setIsAdding] = useState(false)
     const [addText, setAddText] = useState('')
     const [listsMenuVisible, setListsMenuVisible] = useState(false)
+    // The Overview (day plan) is the home surface — shown on launch and toggled
+    // from the Header sun button.
+    const [overviewVisible, setOverviewVisible] = useState(true)
+    // The item whose plan sheet (edit / plan-for-a-day) is open (null = closed).
+    const [planSheetItem, setPlanSheetItem] = useState<ListEntry | null>(null)
     const [pendingListSettingsId, setPendingListSettingsId] = useState<string | null>(null)
     const [boardTicketId, setBoardTicketId] = useState<string | null>(null)
     const [createTicketVisible, setCreateTicketVisible] = useState(false)
@@ -584,6 +607,75 @@ function AppInner() {
         dispatch(listsActions.listItemUpdated(updatedItem))
         sendRPC(RPC_UPDATE, JSON.stringify({ item: updatedItem }))
     }, [animate, dataList, dispatch, i18n, sendRPC, snackbar])
+
+    // --- day plan (Overview) ------------------------------------------------
+    // Plan entries are synced meta-items keyed on a deterministic ref; every
+    // write upserts via RPC_UPDATE (an empty plannedFor clears the entry), with
+    // an optimistic listItemUpdated that the listsSlice files into itemsById.
+    const writePlan = useCallback((entry: ListEntry) => {
+        dispatch(listsActions.listItemUpdated(entry))
+        sendRPC(RPC_UPDATE, JSON.stringify({ item: entry }))
+    }, [dispatch, sendRPC])
+
+    const clearPlanRef = useCallback((ref: string) => {
+        const rec = reducePlan(allItems).get(ref)
+        if (!rec) return
+        writePlan(buildPlanItem({ id: ref, kind: rec.kind, refListId: rec.refListId, refItemId: rec.refItemId, refType: rec.refType, plannedFor: '', planOrder: rec.planOrder, updatedAt: Date.now() }) as unknown as ListEntry)
+    }, [allItems, writePlan])
+
+    const flagItemForDay = useCallback((item: ListEntry, dateKey: string) => {
+        if (!item.id || !item.listId) return
+        writePlan(buildItemPlanEntry({ listId: item.listId, itemId: item.id, plannedFor: dateKey, planOrder: Date.now(), updatedAt: Date.now() }) as unknown as ListEntry)
+    }, [writePlan])
+
+    const toggleItemPlan = useCallback((item: ListEntry) => {
+        const ref = planItemKey(item.listId ?? '', item.id ?? '')
+        if (plannedRefs.has(ref)) clearPlanRef(ref)
+        else flagItemForDay(item, toDateKey(Date.now()))
+    }, [plannedRefs, clearPlanRef, flagItemForDay])
+
+    const handleFlagToday = useCallback((index: number) => {
+        const item = dataList[index]
+        if (item) toggleItemPlan(item)
+    }, [dataList, toggleItemPlan])
+
+    const handlePlanFor = useCallback((item: ListEntry) => setPlanSheetItem(item), [])
+
+    const toggleListPlan = useCallback(() => {
+        const type = currentListType || DEFAULT_LIST_TYPE
+        const ref = planListKey(currentId, type)
+        if (plannedRefs.has(ref)) clearPlanRef(ref)
+        else writePlan(buildListPlanEntry({ listId: currentId, listType: type, plannedFor: toDateKey(Date.now()), planOrder: Date.now(), updatedAt: Date.now() }) as unknown as ListEntry)
+    }, [currentId, currentListType, plannedRefs, clearPlanRef, writePlan])
+
+    const isItemPlanned = useCallback(
+        (item: ListEntry) => plannedRefs.has(planItemKey(item.listId ?? '', item.id ?? '')),
+        [plannedRefs],
+    )
+
+    // Marking done / editing a row from the Overview writes through to the SOURCE.
+    const toggleSourceDone = useCallback((item: ListEntry) => {
+        const updated: ListEntry = { ...item, isDone: !item.isDone, timeOfCompletion: !item.isDone ? Date.now() : 0, updatedAt: Date.now() }
+        dispatch(listsActions.listItemUpdated(updated))
+        sendRPC(RPC_UPDATE, JSON.stringify({ item: updated }))
+    }, [dispatch, sendRPC])
+
+    const editPlanItemText = useCallback((item: ListEntry, text: string) => {
+        const trimmed = text.trim()
+        if (!trimmed || trimmed === item.text) return
+        const updated: ListEntry = { ...item, text: trimmed, updatedAt: Date.now() }
+        dispatch(listsActions.listItemUpdated(updated))
+        sendRPC(RPC_UPDATE, JSON.stringify({ item: updated }))
+    }, [dispatch, sendRPC])
+
+    const planListName = useCallback((listId: string) => lib.listsById[listId]?.name ?? listId, [lib])
+
+    const openListFromOverview = useCallback((listId: string) => {
+        setOverviewVisible(false)
+        dispatch(listsActions.selectedListChanged({ listId }))
+    }, [dispatch])
+
+    const planSheetRef = planSheetItem ? planItemKey(planSheetItem.listId ?? '', planSheetItem.id ?? '') : ''
 
     // Drag-to-category: pin the dragged item to the dropped-on category. The
     // override rides along the same update path as a rename, so it survives the
@@ -1023,20 +1115,36 @@ function AppInner() {
                 onShare={handleShare}
                 onJoin={handleJoin}
                 onMenuToggle={() => { setPendingListSettingsId(null); setListsMenuVisible(true) }}
+                onOverview={() => setOverviewVisible((v) => !v)}
+                overviewActive={overviewVisible}
                 trialDaysRemaining={subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
                 loyaltyCards={loyaltyCards}
                 onScanCard={() => setScannerVisible(true)}
                 onSelectCard={handleSelectCard}
             />
 
-            <ListContextBar
-                listName={lib.listsById[currentId]?.name ?? currentId}
-                isDefault={defaultListId === currentId}
-                onOpenMenu={() => { setPendingListSettingsId(null); setListsMenuVisible(true) }}
-                onOpenListSettings={() => { setPendingListSettingsId(currentId); setListsMenuVisible(true) }}
-            />
+            {overviewVisible && (
+                <OverviewScreen
+                    allItems={allItems}
+                    listName={planListName}
+                    onToggleSource={toggleSourceDone}
+                    onClearPlan={clearPlanRef}
+                    onOpenList={openListFromOverview}
+                />
+            )}
 
-            {isAdding && (
+            {!overviewVisible && (
+                <ListContextBar
+                    listName={lib.listsById[currentId]?.name ?? currentId}
+                    isDefault={defaultListId === currentId}
+                    onOpenMenu={() => { setPendingListSettingsId(null); setListsMenuVisible(true) }}
+                    onOpenListSettings={() => { setPendingListSettingsId(currentId); setListsMenuVisible(true) }}
+                    onFlagList={toggleListPlan}
+                    listPlanned={plannedRefs.has(planListKey(currentId, currentListType || DEFAULT_LIST_TYPE))}
+                />
+            )}
+
+            {!overviewVisible && isAdding && (
                 <AddItemBar
                     value={addText}
                     onChangeText={setAddText}
@@ -1089,7 +1197,7 @@ function AppInner() {
                 groups={groupedLists}
                 currentListId={currentId}
                 defaultListId={defaultListId}
-                onSelect={handleSelectList}
+                onSelect={(id: string, type: string) => { setOverviewVisible(false); handleSelectList(id, type) }}
                 onSetDefault={handleSetDefaultList}
                 onCreate={handleCreateList}
                 onCreateGroup={handleCreateGroup}
@@ -1122,6 +1230,7 @@ function AppInner() {
                 notify={notify}
             />
 
+            {!overviewVisible && (
             <ListSwipePager
                 canPage={!isAdding && !listsMenuVisible && !joinDialogVisible && !membersDialogVisible && !ownedDevicesVisible && !leafPairingVisible && !isJoining && boardTicketId === null && !createTicketVisible}
                 reduceMotion={reduceMotion}
@@ -1156,6 +1265,9 @@ function AppInner() {
                         onEdit={handleEditItem}
                         onRequestMove={setMoveTarget}
                         onRequestAdd={handleRequestAdd}
+                        onFlagToday={handleFlagToday}
+                        onPlanFor={handlePlanFor}
+                        isPlanned={isItemPlanned}
                         categoriesEnabled={categoriesEnabled}
                         categoryHeadersVisible={categoryHeadersVisible}
                         listTextSize={listTextSize}
@@ -1166,8 +1278,9 @@ function AppInner() {
                 )}
             </View>
             </ListSwipePager>
+            )}
 
-            {!isBoard && (
+            {!overviewVisible && !isBoard && (
                 <SummaryBar
                     remaining={remaining}
                     doneCount={doneCount}
@@ -1177,7 +1290,17 @@ function AppInner() {
                 />
             )}
 
-            {!isAdding && showFab && !isBoard && <Fab onPress={handleRequestAdd} bottomOffset={insets.bottom + 20} />}
+            {!overviewVisible && !isAdding && showFab && !isBoard && <Fab onPress={handleRequestAdd} bottomOffset={insets.bottom + 20} />}
+
+            <PlanSheet
+                visible={planSheetItem !== null}
+                item={planSheetItem}
+                planned={planSheetRef !== '' && plannedRefs.has(planSheetRef)}
+                onPickDay={(dateKey) => { if (planSheetItem) flagItemForDay(planSheetItem, dateKey); setPlanSheetItem(null) }}
+                onClear={() => { if (planSheetRef) clearPlanRef(planSheetRef); setPlanSheetItem(null) }}
+                onEdit={(text) => { if (planSheetItem) editPlanItemText(planSheetItem, text); setPlanSheetItem(null) }}
+                onClose={() => setPlanSheetItem(null)}
+            />
 
             <LoyaltyCardScanner
                 visible={scannerVisible}
