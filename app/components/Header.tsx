@@ -20,6 +20,8 @@ type HeaderProps = {
     onShare: () => void
     onJoin: () => void
     onMenuToggle: () => void
+    onOverview: () => void
+    overviewActive: boolean
     trialDaysRemaining?: number
     loyaltyCards: LoyaltyCardHandle[]
     onScanCard: () => void
@@ -35,6 +37,8 @@ export function Header(props: HeaderProps) {
         onShare,
         onJoin,
         onMenuToggle,
+        onOverview,
+        overviewActive,
         trialDaysRemaining,
         loyaltyCards,
         onScanCard,
@@ -93,6 +97,18 @@ export function Header(props: HeaderProps) {
                 </View>
 
                 <View style={styles.rightSection}>
+                    <AnimatedIconButton
+                        style={styles.iconButton}
+                        onPress={onOverview}
+                        accessibilityLabel={i18n.t('desktop.nav.overview')}
+                    >
+                        <Ionicons
+                            name={overviewActive ? 'sunny' : 'sunny-outline'}
+                            size={HEADER_ICON_SIZE}
+                            color={overviewActive ? t.colors.accent : t.colors.text}
+                        />
+                    </AnimatedIconButton>
+
                     <AnimatedIconButton
                         style={styles.iconButton}
                         onPress={() => (primaryLoyaltyCard ? onSelectCard(primaryLoyaltyCard) : onScanCard())}

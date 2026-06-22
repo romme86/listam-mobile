@@ -31,6 +31,12 @@ type ListItemProps = {
     onEdit?: (index: number, text: string) => void
     /** Open the "move to another list" picker for this item. */
     onRequestMove?: (item: ListEntry) => void
+    /** Swipe-right (quick): flag this item into today's plan. */
+    onFlagToday?: (index: number) => void
+    /** Long-press: open the plan sheet (edit / plan for a day) for this item. */
+    onPlanFor?: (item: ListEntry) => void
+    /** Whether this item is already in the day plan (drives the row indicator). */
+    planned?: boolean
     textScaleFactor?: number
     listAlignment?: ListAlignment
     spacing?: number
@@ -49,6 +55,9 @@ export function ListItem({
     onDelete,
     onEdit,
     onRequestMove,
+    onFlagToday,
+    onPlanFor,
+    planned = false,
     textScaleFactor = 1,
     listAlignment = 'left',
     spacing = SPACING,
@@ -117,11 +126,21 @@ export function ListItem({
             passedThreshold.current = false
         },
         onPanResponderMove: (_, gestureState) => {
-            // Swipe LEFT to reveal delete (iOS convention); horizontal swipe is
-            // otherwise owned by the list pager for list-to-list navigation.
-            if (gestureState.dx < 0 && !isDeleting.current) {
+            // Swipe LEFT reveals delete (iOS convention); swipe RIGHT reveals the
+            // "add to today" plan flag (the previously-unused direction). The
+            // pager only owns horizontal swipes that travel further, on the
+            // background — a row swipe past 8px is captured here.
+            if (isDeleting.current) return
+            if (gestureState.dx < 0) {
                 panX.setValue(gestureState.dx)
                 const past = gestureState.dx < -SWIPE_THRESHOLD
+                if (past !== passedThreshold.current) {
+                    passedThreshold.current = past
+                    if (past) haptics.select()
+                }
+            } else if (gestureState.dx > 0 && onFlagToday) {
+                panX.setValue(gestureState.dx)
+                const past = gestureState.dx > SWIPE_THRESHOLD
                 if (past !== passedThreshold.current) {
                     passedThreshold.current = past
                     if (past) haptics.select()
@@ -142,6 +161,10 @@ export function ListItem({
                     onDelete?.(index)
                 })
             } else {
+                if (gestureState.dx > SWIPE_THRESHOLD && onFlagToday) {
+                    haptics.toggleOn()
+                    onFlagToday(index)
+                }
                 Animated.spring(panX, {
                     toValue: 0,
                     useNativeDriver: true,
@@ -160,7 +183,7 @@ export function ListItem({
                 }).start()
             }
         },
-    }), [panX, onDelete, index])
+    }), [panX, onDelete, onFlagToday, index])
 
     const scrollIndex = visualIndex ?? index
     const inputRange = [
@@ -188,6 +211,12 @@ export function ListItem({
     const deleteOpacity = panX.interpolate({
         inputRange: [-SWIPE_THRESHOLD, 0],
         outputRange: [1, 0],
+        extrapolate: 'clamp',
+    })
+
+    const flagOpacity = panX.interpolate({
+        inputRange: [0, SWIPE_THRESHOLD],
+        outputRange: [0, 1],
         extrapolate: 'clamp',
     })
 
@@ -227,6 +256,12 @@ export function ListItem({
                 <Ionicons name="trash-outline" size={22} color={t.colors.onDanger} />
                 <Text style={styles.deleteLabel}>{i18n.t('main.item.delete')}</Text>
             </Animated.View>
+            {onFlagToday ? (
+                <Animated.View style={[styles.flagBg, { opacity: flagOpacity }]}>
+                    <Ionicons name={planned ? 'star' : 'star-outline'} size={22} color={t.colors.onAccent} />
+                    <Text style={styles.flagLabel}>{planned ? i18n.t('plan.inPlan') : i18n.t('plan.today')}</Text>
+                </Animated.View>
+            ) : null}
             <Animated.View
                 style={[
                     styles.itemContainer,
@@ -237,7 +272,7 @@ export function ListItem({
                 <TouchableOpacity
                     activeOpacity={0.7}
                     onPress={handleSingleTap}
-                    onLongPress={dragEnabled ? undefined : startEdit}
+                    onLongPress={dragEnabled ? undefined : (onPlanFor ? () => { haptics.select(); onPlanFor(item) } : startEdit)}
                     delayLongPress={350}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: item.isDone }}
@@ -286,6 +321,20 @@ function makeStyles(t: Theme) {
         },
         deleteLabel: {
             color: t.colors.onDanger,
+            fontSize: t.type.label.fontSize,
+            fontWeight: '700',
+        },
+        flagBg: {
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: t.colors.accent,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            paddingLeft: 24,
+            gap: 8,
+        },
+        flagLabel: {
+            color: t.colors.onAccent,
             fontSize: t.type.label.fontSize,
             fontWeight: '700',
         },

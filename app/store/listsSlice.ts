@@ -1,7 +1,7 @@
 import { createSelector, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { RootState } from './store'
 import type { ListEntry } from '../components/_types'
-import { isLabelItem, sortByOrder } from '@listam/domain'
+import { isLabelItem, isPlanItem, sortByOrder } from '@listam/domain'
 import {
     DEFAULT_LIST_ID,
     DEFAULT_LIST_TYPE,
@@ -226,11 +226,11 @@ function replaceListItems(
 
     for (const itemId of list.itemIds) delete state.itemsById[itemId]
 
-    // Label meta-items (peer/surface names) ride the normal item pipeline but
-    // live in reserved buckets — never project them into a list row.
+    // Label + plan meta-items ride the normal item pipeline but live in reserved
+    // buckets — never project them into a list row.
     const normalized = normalizeListEntries(
         entries
-            .filter((entry) => !isLabelItem(entry))
+            .filter((entry) => !isLabelItem(entry) && !isPlanItem(entry))
             .map((entry) => ({
                 ...entry,
                 listId: entry.listId || listId,
@@ -260,6 +260,16 @@ function applyItemProjection(
 
     const normalized = normalizeListEntries([entry])[0]
     if (!normalized) return
+
+    // Plan meta-items (the day-plan channel) also ride the item pipeline but are
+    // a cross-list overlay, not list rows: keep them in itemsById (so the
+    // Overview can read them) but never file them under a list bucket.
+    if (isPlanItem(normalized)) {
+        const planKey = identityKey(normalized)
+        if (operation === 'delete') delete state.itemsById[planKey]
+        else state.itemsById[planKey] = normalized
+        return
+    }
 
     const listId = normalized.listId || DEFAULT_LIST_ID
     const listType = normalized.listType || DEFAULT_LIST_TYPE
@@ -315,6 +325,14 @@ export const selectSelectedListItems = createSelector(
                 .filter((item): item is ListEntry => Boolean(item)),
         )
     },
+)
+
+// Every materialized item across every bucket (real rows + reserved meta-items
+// like the plan channel). The Overview reduces the plan entries out of this and
+// joins them back to their source rows.
+export const selectAllItems = createSelector(
+    selectListsState,
+    (state) => Object.values(state.itemsById),
 )
 
 export const selectListLibrary = createSelector(

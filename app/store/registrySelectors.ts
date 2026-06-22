@@ -2,7 +2,7 @@ import { createSelector } from '@reduxjs/toolkit'
 import { reduceRegistry, REGISTRY_LIST_ID, REGISTRY_LIST_TYPE, type RegistryListView } from '@listam/domain/list-registry'
 import { toNavLibrary, type NavLibrary } from '@listam/domain/list-nav'
 import { isTodoType } from '@listam/domain/identity'
-import { PEER_LABEL_LIST_ID, SURFACE_LABEL_LIST_ID } from '@listam/domain'
+import { PEER_LABEL_LIST_ID, SURFACE_LABEL_LIST_ID, PLAN_LIST_ID } from '@listam/domain'
 import type { RootState } from './store'
 
 // Defaults for a list's view settings, applied when a list carries no override.
@@ -51,6 +51,7 @@ export const selectNavLibrary = createSelector(
                     l.type !== REGISTRY_LIST_TYPE &&
                     l.id !== PEER_LABEL_LIST_ID &&
                     l.id !== SURFACE_LABEL_LIST_ID &&
+                    l.id !== PLAN_LIST_ID &&
                     !filed.has(l.id),
             )
             .map((l) => ({ id: l.id, name: l.name, type: l.type }))

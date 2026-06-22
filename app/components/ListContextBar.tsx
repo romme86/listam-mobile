@@ -9,13 +9,17 @@ type Props = {
     isDefault: boolean
     onOpenMenu: () => void
     onOpenListSettings: () => void
+    /** Toggle this whole list in/out of today's plan. */
+    onFlagList: () => void
+    /** Whether this list is currently flagged into the plan. */
+    listPlanned: boolean
 }
 
 // A borderless one-line title strip directly under the Header. Tapping the name
 // opens the unified menu (the list switcher + app settings); the gear opens the
 // current board/list's own settings. The star is a read-only glyph; setting the
 // default happens inside the menu.
-export function ListContextBar({ listName, isDefault, onOpenMenu, onOpenListSettings }: Props) {
+export function ListContextBar({ listName, isDefault, onOpenMenu, onOpenListSettings, onFlagList, listPlanned }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
@@ -31,6 +35,18 @@ export function ListContextBar({ listName, isDefault, onOpenMenu, onOpenListSett
                 <Text style={styles.name} numberOfLines={1}>{listName}</Text>
                 {isDefault && <Ionicons name="star" size={14} color={t.colors.text} />}
                 <Ionicons name="chevron-down" size={16} color={t.colors.textTertiary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+                onPress={onFlagList}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={i18n.t('plan.flagList')}
+            >
+                <Ionicons
+                    name={listPlanned ? 'star' : 'star-outline'}
+                    size={18}
+                    color={listPlanned ? t.colors.accent : t.colors.textTertiary}
+                />
             </TouchableOpacity>
             <TouchableOpacity
                 onPress={onOpenListSettings}
