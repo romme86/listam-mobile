@@ -215,9 +215,16 @@ function AppInner() {
     const [isAdding, setIsAdding] = useState(false)
     const [addText, setAddText] = useState('')
     const [listsMenuVisible, setListsMenuVisible] = useState(false)
-    // The Overview (day plan) is the home surface — shown on launch and toggled
-    // from the Header sun button.
-    const [overviewVisible, setOverviewVisible] = useState(true)
+    // The day-plan Overview is an OPT-IN organization capability, gated behind the
+    // same toggle as boards (preferences.boardEnabled). By default the app is just
+    // a grocery + to-do list app, so the Overview is off: the app launches straight
+    // onto the selected list and the Header's sun button is hidden. Enabling boards
+    // reveals the sun button and lets the user toggle the day plan on.
+    const [overviewVisible, setOverviewVisible] = useState(false)
+    // Effective Overview visibility: it can only ever show while boards are
+    // enabled, so disabling boards (or the default, boards-off state) always
+    // collapses back to the list — even if overviewVisible lingered true.
+    const overviewOpen = boardEnabled && overviewVisible
     // The item whose plan sheet (edit / plan-for-a-day) is open (null = closed).
     const [planSheetItem, setPlanSheetItem] = useState<ListEntry | null>(null)
     const [pendingListSettingsId, setPendingListSettingsId] = useState<string | null>(null)
@@ -1120,14 +1127,15 @@ function AppInner() {
                 onJoin={handleJoin}
                 onMenuToggle={() => { setPendingListSettingsId(null); setListsMenuVisible(true) }}
                 onOverview={() => setOverviewVisible((v) => !v)}
-                overviewActive={overviewVisible}
+                overviewActive={overviewOpen}
+                showOverview={boardEnabled}
                 trialDaysRemaining={subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
                 loyaltyCards={loyaltyCards}
                 onScanCard={() => setScannerVisible(true)}
                 onSelectCard={handleSelectCard}
             />
 
-            {overviewVisible && (
+            {overviewOpen && (
                 <OverviewScreen
                     allItems={allItems}
                     listName={planListName}
@@ -1137,7 +1145,7 @@ function AppInner() {
                 />
             )}
 
-            {!overviewVisible && (
+            {!overviewOpen && (
                 <ListContextBar
                     listName={lib.listsById[currentId]?.name ?? currentId}
                     isDefault={defaultListId === currentId}
@@ -1148,7 +1156,7 @@ function AppInner() {
                 />
             )}
 
-            {!overviewVisible && isAdding && (
+            {!overviewOpen && isAdding && (
                 <AddItemBar
                     value={addText}
                     onChangeText={setAddText}
@@ -1234,7 +1242,7 @@ function AppInner() {
                 notify={notify}
             />
 
-            {!overviewVisible && (
+            {!overviewOpen && (
             <ListSwipePager
                 canPage={!isAdding && !listsMenuVisible && !joinDialogVisible && !membersDialogVisible && !ownedDevicesVisible && !leafPairingVisible && !isJoining && boardTicketId === null && !createTicketVisible}
                 reduceMotion={reduceMotion}
@@ -1283,7 +1291,7 @@ function AppInner() {
             </ListSwipePager>
             )}
 
-            {!overviewVisible && !isBoard && (
+            {!overviewOpen && !isBoard && (
                 <SummaryBar
                     remaining={remaining}
                     doneCount={doneCount}
@@ -1293,7 +1301,7 @@ function AppInner() {
                 />
             )}
 
-            {!overviewVisible && !isAdding && showFab && !isBoard && <Fab onPress={handleRequestAdd} bottomOffset={insets.bottom + 20} />}
+            {!overviewOpen && !isAdding && showFab && !isBoard && <Fab onPress={handleRequestAdd} bottomOffset={insets.bottom + 20} />}
 
             <PlanSheet
                 visible={planSheetItem !== null}

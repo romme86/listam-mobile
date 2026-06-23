@@ -21,8 +21,11 @@ export type PreferencesState = {
     themeChoice: ThemeChoice
     // Per-device: which list the app opens to on launch (null = first list).
     defaultListId: string | null
-    // Per-device: whether the board feature is available (off by default). When
-    // off, the "New board" create tile is hidden; existing boards stay visible.
+    // Per-device master switch for the opt-in organization capabilities (off by
+    // default — the app is a grocery + to-do list app out of the box). When off,
+    // the "New board" create tile AND the day-plan Overview (the Header sun button)
+    // are hidden; existing boards stay visible. The user turns this on to unlock
+    // boards and the day plan.
     boardEnabled: boolean
     // Per-device source of truth for THIS device's human name. Also re-asserted
     // as a synced peer-label (keyed by this device's own writer key) so other
