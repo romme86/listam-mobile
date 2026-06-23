@@ -183,6 +183,10 @@ function AppInner() {
     const { lib, currentId, position, commit } = useListPager()
     const currentListType = lib.listsById[currentId]?.type
     const isBoard = isBoardType(currentListType)
+    // Grocery items are NOT movable to other lists — the "move to another list"
+    // affordance is offered only on to-do (and board) surfaces. A grocery list is
+    // neither a board nor a to-do, so the move icon is suppressed there.
+    const isTodo = isTodoType(currentListType)
 
     // The list as shown: entries without an explicit (dragged) category override
     // inherit one from what was learned for that item name. The raw `dataList`
@@ -1249,7 +1253,6 @@ function AppInner() {
                         data={displayList}
                         onToggleDone={handleToggleDone}
                         onDelete={handleDelete}
-                        onRequestMove={setMoveTarget}
                         onRequestAdd={handleRequestAdd}
                         categoriesEnabled={categoriesEnabled}
                         categoryHeadersVisible={categoryHeadersVisible}
@@ -1263,7 +1266,7 @@ function AppInner() {
                         onToggleDone={handleToggleDone}
                         onDelete={handleDelete}
                         onEdit={handleEditItem}
-                        onRequestMove={setMoveTarget}
+                        onRequestMove={isTodo ? setMoveTarget : undefined}
                         onRequestAdd={handleRequestAdd}
                         onFlagToday={handleFlagToday}
                         onPlanFor={handlePlanFor}
