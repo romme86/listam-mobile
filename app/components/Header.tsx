@@ -22,6 +22,9 @@ type HeaderProps = {
     onMenuToggle: () => void
     onOverview: () => void
     overviewActive: boolean
+    // The day-plan Overview is an opt-in organization capability (gated on
+    // boardEnabled). The sun button is only rendered once it's been activated.
+    showOverview: boolean
     trialDaysRemaining?: number
     loyaltyCards: LoyaltyCardHandle[]
     onScanCard: () => void
@@ -39,6 +42,7 @@ export function Header(props: HeaderProps) {
         onMenuToggle,
         onOverview,
         overviewActive,
+        showOverview,
         trialDaysRemaining,
         loyaltyCards,
         onScanCard,
@@ -97,23 +101,25 @@ export function Header(props: HeaderProps) {
                 </View>
 
                 <View style={styles.rightSection}>
-                    <AnimatedIconButton
-                        style={styles.iconButton}
-                        onPress={onOverview}
-                        accessibilityLabel={i18n.t('desktop.nav.overview')}
-                    >
-                        <Ionicons
-                            name={overviewActive ? 'sunny' : 'sunny-outline'}
-                            size={HEADER_ICON_SIZE}
-                            color={overviewActive ? t.colors.accent : t.colors.text}
-                        />
-                    </AnimatedIconButton>
+                    {showOverview && (
+                        <AnimatedIconButton
+                            style={styles.iconButton}
+                            onPress={onOverview}
+                            accessibilityLabel={i18n.t('desktop.nav.overview')}
+                        >
+                            <Ionicons
+                                name={overviewActive ? 'sunny' : 'sunny-outline'}
+                                size={HEADER_ICON_SIZE}
+                                color={overviewActive ? t.colors.accent : t.colors.text}
+                            />
+                        </AnimatedIconButton>
+                    )}
 
                     <AnimatedIconButton
                         style={styles.iconButton}
                         onPress={() => (primaryLoyaltyCard ? onSelectCard(primaryLoyaltyCard) : onScanCard())}
                     >
-                        <Ionicons name="card-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
+                        <Ionicons name="barcode-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
                     </AnimatedIconButton>
 
                     <View style={styles.iconWithBadge}>
