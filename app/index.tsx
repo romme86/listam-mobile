@@ -31,6 +31,7 @@ import {
     RPC_GET_BOARD_CONFIG,
     type NotifyType,
 } from './hooks/_useWorklet'
+import { RPC_LIST_BACKUPS } from '@listam/protocol'
 import { store } from './store/store'
 import { useAppDispatch, useAppSelector } from './store/hooks'
 import { listsActions, selectItemsForList, selectAllItems } from './store/listsSlice'
@@ -120,6 +121,7 @@ const PREF_THEME_CHOICE = '@lista_theme_choice'
 const PREF_DEFAULT_LIST = '@lista_default_list'
 const PREF_BOARD_ENABLED = '@lista_board_enabled'
 const PREF_DEVICE_NAME = '@lista_device_name'
+const PREF_BACKUP_PROMPTED = '@lista_backup_prompted'
 
 // Max gap between the two taps of a double-tap-to-add gesture.
 const DOUBLE_TAP_MS = 300
@@ -202,6 +204,9 @@ function AppInner() {
     const plannedRefs = useMemo(() => new Set([...reducePlan(allItems).keys()]), [allItems])
 
     const [joinDialogVisible, setJoinDialogVisible] = useState(false)
+    // Whether a backup password is set. Joins are gated on it so the pre-join
+    // auto-backup can always run. null = not yet queried.
+    const [backupPasswordSet, setBackupPasswordSet] = useState<boolean | null>(null)
     const [joinKeyInput, setJoinKeyInput] = useState('')
     const [membersDialogVisible, setMembersDialogVisible] = useState(false)
     const [ownedDevicesVisible, setOwnedDevicesVisible] = useState(false)
@@ -270,10 +275,32 @@ function AppInner() {
         }
     }, [reduceMotion])
 
+    // Query whether a backup password is set (gates joining).
+    const refreshBackupPasswordSet = useCallback(async () => {
+        try {
+            const reply = await sendRPCWithReply(RPC_LIST_BACKUPS)
+            const res = reply ? JSON.parse(reply) : null
+            if (res?.ok) setBackupPasswordSet(!!res.passwordSet)
+        } catch { /* leave as-is on failure */ }
+    }, [sendRPCWithReply])
+
     const beginJoinWithInvite = useCallback((rawInvite: string) => {
         const invite = extractInviteFromInput(rawInvite)
         if (!invite) {
             snackbar.show(i18n.t('invite.notification.invalid'), 'error')
+            return false
+        }
+        // Require a backup password before joining, so the current lists are
+        // backed up first. (null = not yet known → don't block.)
+        if (backupPasswordSet === false) {
+            Alert.alert(
+                i18n.t('backup.auto.setPassword'),
+                i18n.t('backup.auto.joinNeedsPassword'),
+                [
+                    { text: i18n.t('common.cancel'), style: 'cancel' },
+                    { text: i18n.t('lists.menu.title'), onPress: () => { setPendingListSettingsId(null); setListsMenuVisible(true) } },
+                ],
+            )
             return false
         }
         if (!isWorkletReady) {
@@ -285,7 +312,7 @@ function AppInner() {
         isJoiningRef.current = true
         sendRPC(RPC_JOIN_KEY, JSON.stringify({ key: invite }))
         return true
-    }, [i18n, isJoiningRef, isWorkletReady, sendRPC, setIsJoining, snackbar])
+    }, [backupPasswordSet, i18n, isJoiningRef, isWorkletReady, sendRPC, setIsJoining, snackbar])
 
     const presentJoinConfirmation = useCallback((request: JoinConfirmationRequest) => {
         if (request.status === 'invalid') {
@@ -538,6 +565,32 @@ function AppInner() {
         pendingConfirmedInviteRef.current = ''
         beginJoinWithInvite(invite)
     }, [beginJoinWithInvite, isWorkletReady])
+
+    // Learn whether a backup password is set once the worklet is up.
+    useEffect(() => {
+        if (!isWorkletReady) return
+        void refreshBackupPasswordSet()
+    }, [isWorkletReady, refreshBackupPasswordSet])
+
+    // Prompt once (ever) to set a backup password when none is set — it's
+    // required before joining a shared list, to protect the current lists.
+    const backupPromptShownRef = useRef(false)
+    useEffect(() => {
+        if (backupPasswordSet !== false || backupPromptShownRef.current) return
+        backupPromptShownRef.current = true
+        AsyncStorage.getItem(PREF_BACKUP_PROMPTED).then((seen) => {
+            if (seen === '1') return
+            void AsyncStorage.setItem(PREF_BACKUP_PROMPTED, '1')
+            Alert.alert(
+                i18n.t('backup.auto.setPassword'),
+                i18n.t('backup.auto.required'),
+                [
+                    { text: i18n.t('common.cancel'), style: 'cancel' },
+                    { text: i18n.t('lists.menu.title'), onPress: () => { setPendingListSettingsId(null); setListsMenuVisible(true) } },
+                ],
+            )
+        }).catch(() => { /* non-fatal */ })
+    }, [backupPasswordSet, i18n])
 
     // Open the user's default list once on launch (per-device preference).
     const defaultLaunchedRef = useRef(false)
@@ -1214,7 +1267,7 @@ function AppInner() {
                 onCreateGroup={handleCreateGroup}
                 onRenameGroup={handleRenameGroup}
                 onMoveListToGroup={handleMoveListToGroup}
-                onClose={() => { setListsMenuVisible(false); setPendingListSettingsId(null) }}
+                onClose={() => { setListsMenuVisible(false); setPendingListSettingsId(null); void refreshBackupPasswordSet() }}
                 peerCount={peerCount}
                 isWorkletReady={isWorkletReady}
                 networkStatus={networkStatus}
