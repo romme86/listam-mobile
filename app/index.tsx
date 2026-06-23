@@ -85,10 +85,8 @@ import { BOARD_WRITE_TYPE, isBoardType, buildStatusChange, validateTicketDraft }
 import {
     reducePlan,
     buildItemPlanEntry,
-    buildListPlanEntry,
     buildPlanItem,
     planItemKey,
-    planListKey,
     toDateKey,
 } from '@listam/domain/plan'
 import { OverviewScreen } from './components/OverviewScreen'
@@ -652,13 +650,6 @@ function AppInner() {
 
     const handlePlanFor = useCallback((item: ListEntry) => setPlanSheetItem(item), [])
 
-    const toggleListPlan = useCallback(() => {
-        const type = currentListType || DEFAULT_LIST_TYPE
-        const ref = planListKey(currentId, type)
-        if (plannedRefs.has(ref)) clearPlanRef(ref)
-        else writePlan(buildListPlanEntry({ listId: currentId, listType: type, plannedFor: toDateKey(Date.now()), planOrder: Date.now(), updatedAt: Date.now() }) as unknown as ListEntry)
-    }, [currentId, currentListType, plannedRefs, clearPlanRef, writePlan])
-
     const isItemPlanned = useCallback(
         (item: ListEntry) => plannedRefs.has(planItemKey(item.listId ?? '', item.id ?? '')),
         [plannedRefs],
@@ -874,6 +865,15 @@ function AppInner() {
         dispatch(preferencesActions.defaultListIdSet(listId))
         AsyncStorage.setItem(PREF_DEFAULT_LIST, listId)
     }, [dispatch])
+
+    // Context-bar star: make the current list the launch default, or clear it
+    // (back to "first list") if it already is.
+    const handleToggleDefaultList = useCallback(() => {
+        const next = defaultListId === currentId ? null : currentId
+        dispatch(preferencesActions.defaultListIdSet(next))
+        if (next === null) AsyncStorage.removeItem(PREF_DEFAULT_LIST)
+        else AsyncStorage.setItem(PREF_DEFAULT_LIST, next)
+    }, [defaultListId, currentId, dispatch])
 
     // A new list is a registry meta-item (synced via the normal item pipeline)
     // plus selecting it (which materializes its empty ListRecord).
@@ -1151,8 +1151,7 @@ function AppInner() {
                     isDefault={defaultListId === currentId}
                     onOpenMenu={() => { setPendingListSettingsId(null); setListsMenuVisible(true) }}
                     onOpenListSettings={() => { setPendingListSettingsId(currentId); setListsMenuVisible(true) }}
-                    onFlagList={toggleListPlan}
-                    listPlanned={plannedRefs.has(planListKey(currentId, currentListType || DEFAULT_LIST_TYPE))}
+                    onSetDefault={handleToggleDefaultList}
                 />
             )}
 
