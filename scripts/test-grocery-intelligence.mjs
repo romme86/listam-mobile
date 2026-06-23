@@ -146,6 +146,15 @@ function copyComponentSource(filename, transform = value => value) {
 }
 
 function sanitizeItemIconMapForTsc(source) {
+    // The grocery-intelligence test only exercises resolveIconKeyForItem on the
+    // 'illustrated'/'light' path, which never reads the dark-mode maps. Stub the
+    // ./itemIconMapDark import so tsc resolves the symbols without staging the
+    // large, dark-asset-heavy companion module into the temp transpile dir.
+    source = source.replace(
+        /import\s*\{[^}]*\}\s*from\s*'\.\/itemIconMapDark'/,
+        "const ITEM_ICONS_DARK: Record<string, any> = {}\nconst MINIMAL_ITEM_ICONS_DARK: Record<string, any> = {}",
+    )
+
     const start = source.indexOf('const MANUAL_TRANSLATIONS: Record<string, string> = {')
     const end = source.indexOf('\n}\n\n// Pre-compute', start)
     if (start === -1 || end === -1) return source
