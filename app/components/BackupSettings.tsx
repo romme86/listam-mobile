@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
     Modal, View, Text, TextInput, TouchableOpacity, Share, StyleSheet, ActivityIndicator,
 } from 'react-native'
@@ -6,13 +6,19 @@ import { Ionicons } from '@expo/vector-icons'
 import * as FileSystem from 'expo-file-system/legacy'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
-import { RPC_EXPORT_DATA, RPC_EXPORT_SEED, RPC_IMPORT } from '@listam/protocol'
+import {
+    RPC_EXPORT_DATA, RPC_EXPORT_SEED, RPC_IMPORT,
+    RPC_LIST_BACKUPS, RPC_RESTORE_BACKUP, RPC_SET_BACKUP_PASSWORD,
+} from '@listam/protocol'
 
 type SendReply = (command: number, payload?: string) => Promise<string | null>
 type Notify = (message: string, type?: 'info' | 'success' | 'error') => void
 
-type Mode = 'export-data' | 'export-seed' | 'import'
-type ModalState = { mode: Mode; fileText?: string; fileKind?: string }
+// 'set-password' covers both setting (first time) and changing (asks for the
+// current password too). 'restore' asks only for the password to open the file.
+type Mode = 'export-data' | 'export-seed' | 'import' | 'set-password' | 'restore'
+type ModalState = { mode: Mode; fileText?: string; fileKind?: string; file?: string }
+type AutoBackup = { file: string; createdAt: number }
 
 type Props = {
     sendRPCWithReply: SendReply
@@ -33,9 +39,23 @@ export function BackupSettings({ sendRPCWithReply, notify }: Props) {
     const styles = makeStyles(t)
     const [modal, setModal] = useState<ModalState | null>(null)
     const [password, setPassword] = useState('')
+    const [current, setCurrent] = useState('')
     const [confirm, setConfirm] = useState('')
     const [error, setError] = useState<string | null>(null)
     const [busy, setBusy] = useState(false)
+    // Automatic pre-join backups: whether a backup password is set, and the list.
+    const [passwordSet, setPasswordSet] = useState<boolean | null>(null)
+    const [autoBackups, setAutoBackups] = useState<AutoBackup[]>([])
+
+    const loadBackups = useCallback(async () => {
+        const res = parseReply(await sendRPCWithReply(RPC_LIST_BACKUPS))
+        if (res?.ok) {
+            setPasswordSet(!!res.passwordSet)
+            setAutoBackups(Array.isArray(res.backups) ? res.backups : [])
+        }
+    }, [sendRPCWithReply])
+
+    useEffect(() => { void loadBackups() }, [loadBackups])
 
     const errorMessage = (reason?: string | null) => {
         switch (reason) {
@@ -48,11 +68,11 @@ export function BackupSettings({ sendRPCWithReply, notify }: Props) {
     }
 
     const closeModal = () => {
-        setModal(null); setPassword(''); setConfirm(''); setError(null); setBusy(false)
+        setModal(null); setPassword(''); setCurrent(''); setConfirm(''); setError(null); setBusy(false)
     }
 
-    const openExport = (mode: Exclude<Mode, 'import'>) => {
-        setPassword(''); setConfirm(''); setError(null); setModal({ mode })
+    const openExport = (mode: 'export-data' | 'export-seed') => {
+        setPassword(''); setConfirm(''); setCurrent(''); setError(null); setModal({ mode })
     }
 
     const startImport = async () => {
@@ -101,6 +121,34 @@ export function BackupSettings({ sendRPCWithReply, notify }: Props) {
         if (res.applied?.boardConfigSkipped) notify(i18n.t('backup.boardConfigSkipped'), 'info')
     }
 
+    // Set OR change the backup password. When changing, the current password is
+    // also required (the backend verifies it and re-encrypts existing backups).
+    const runSetPassword = async () => {
+        if (password.length < 8) { setError(i18n.t('backup.password.tooShort')); return }
+        if (password !== confirm) { setError(i18n.t('backup.password.mismatch')); return }
+        setBusy(true); setError(null)
+        const payload: Record<string, string> = { next: password }
+        if (passwordSet) payload.current = current
+        const reply = await sendRPCWithReply(RPC_SET_BACKUP_PASSWORD, JSON.stringify(payload))
+        const res = parseReply(reply)
+        if (!res?.ok) { setError(errorMessage(res?.reason)); setBusy(false); return }
+        closeModal()
+        notify(i18n.t('backup.auto.passwordSaved'), 'success')
+        await loadBackups()
+    }
+
+    const runRestore = async (file: string) => {
+        if (!password) { setError(i18n.t('backup.password.tooShort')); return }
+        setBusy(true); setError(null)
+        const reply = await sendRPCWithReply(RPC_RESTORE_BACKUP, JSON.stringify({ file, password }))
+        const res = parseReply(reply)
+        if (!res?.ok) { setError(errorMessage(res?.reason)); setBusy(false); return }
+        closeModal()
+        notify(i18n.t('backup.auto.restored', { count: res.applied?.items ?? 0 }), 'success')
+        if (res.applied?.boardConfigSkipped) notify(i18n.t('backup.boardConfigSkipped'), 'info')
+        await loadBackups()
+    }
+
     const shareBackupFile = async (kind: string, file: string) => {
         const stamp = new Date().toISOString().slice(0, 10)
         const name = kind === 'seed' ? `listam-seed-${stamp}.listamseed` : `listam-backup-${stamp}.listam`
@@ -118,13 +166,33 @@ export function BackupSettings({ sendRPCWithReply, notify }: Props) {
 
     const mode = modal?.mode
     const isImport = mode === 'import'
+    const isRestore = mode === 'restore'
+    const isSetPassword = mode === 'set-password'
     const isSeedExport = mode === 'export-seed'
     const isSeedRestore = isImport && modal?.fileKind === 'seed'
-    const title = isImport ? i18n.t('backup.import') : isSeedExport ? i18n.t('backup.exportSeed') : i18n.t('backup.exportData')
-    const submitLabel = isImport ? i18n.t('backup.unlockImport') : i18n.t('backup.encryptExport')
+    // Whichever modes create/confirm a password show the confirm field.
+    const needsConfirm = isSetPassword || (!isImport && !isRestore)
+    // Only a password CHANGE needs the current password.
+    const needsCurrent = isSetPassword && passwordSet === true
+    // Single-field password entry: import + restore.
+    const passwordOnly = isImport || isRestore
+
+    const title = isRestore ? i18n.t('backup.auto.restore')
+        : isSetPassword ? (passwordSet ? i18n.t('backup.auto.changePassword') : i18n.t('backup.auto.setPassword'))
+            : isImport ? i18n.t('backup.import')
+                : isSeedExport ? i18n.t('backup.exportSeed') : i18n.t('backup.exportData')
+    const submitLabel = isSetPassword ? i18n.t('common.save')
+        : (isImport || isRestore) ? i18n.t('backup.unlockImport')
+            : i18n.t('backup.encryptExport')
+    const promptText = isRestore ? i18n.t('backup.auto.required')
+        : isSetPassword ? i18n.t('backup.password.create')
+            : passwordOnly ? i18n.t('backup.password.enter') : i18n.t('backup.password.create')
+
     const submit = () => {
         if (busy) return
-        if (isImport && modal?.fileText != null) runImport(modal.fileText)
+        if (isRestore && modal?.file) runRestore(modal.file)
+        else if (isSetPassword) runSetPassword()
+        else if (isImport && modal?.fileText != null) runImport(modal.fileText)
         else if (mode) runExport(mode)
     }
 
@@ -145,6 +213,41 @@ export function BackupSettings({ sendRPCWithReply, notify }: Props) {
             </TouchableOpacity>
             <Text style={styles.sectionNote}>{i18n.t('backup.exportSeed.desc')}</Text>
 
+            {/* Automatic pre-join backups */}
+            <Text style={styles.sectionLabel}>{i18n.t('backup.auto.section')}</Text>
+            <Text style={styles.sectionNote}>{i18n.t('backup.auto.desc')}</Text>
+            <TouchableOpacity
+                style={styles.actionRow}
+                onPress={() => { setPassword(''); setConfirm(''); setCurrent(''); setError(null); setModal({ mode: 'set-password' }) }}
+                activeOpacity={0.6}
+            >
+                <Ionicons name="lock-closed-outline" size={20} color={t.colors.text} />
+                <Text style={styles.actionLabel}>
+                    {passwordSet ? i18n.t('backup.auto.changePassword') : i18n.t('backup.auto.setPassword')}
+                </Text>
+            </TouchableOpacity>
+            {passwordSet === false ? (
+                <Text style={styles.sectionNote}>{i18n.t('backup.auto.required')}</Text>
+            ) : autoBackups.length === 0 ? (
+                <Text style={styles.sectionNote}>{i18n.t('backup.auto.empty')}</Text>
+            ) : (
+                autoBackups.map((b) => (
+                    <View key={b.file} style={styles.actionRow}>
+                        <Ionicons name="time-outline" size={20} color={t.colors.textSecondary} />
+                        <Text style={styles.backupDate} numberOfLines={1}>
+                            {new Date(b.createdAt).toLocaleString()}
+                        </Text>
+                        <TouchableOpacity
+                            onPress={() => { setPassword(''); setError(null); setModal({ mode: 'restore', file: b.file }) }}
+                            activeOpacity={0.6}
+                            accessibilityRole="button"
+                        >
+                            <Text style={styles.restoreLink}>{i18n.t('backup.auto.restore')}</Text>
+                        </TouchableOpacity>
+                    </View>
+                ))
+            )}
+
             <Modal visible={modal != null} transparent animationType="fade" onRequestClose={closeModal}>
                 <View style={styles.backdrop}>
                     <View style={styles.card}>
@@ -154,9 +257,19 @@ export function BackupSettings({ sendRPCWithReply, notify }: Props) {
                                 {isSeedRestore ? i18n.t('backup.seed.restoreWarn') : i18n.t('backup.seed.warn')}
                             </Text>
                         ) : null}
-                        <Text style={styles.prompt}>
-                            {isImport ? i18n.t('backup.password.enter') : i18n.t('backup.password.create')}
-                        </Text>
+                        <Text style={styles.prompt}>{promptText}</Text>
+                        {needsCurrent ? (
+                            <TextInput
+                                style={styles.input}
+                                secureTextEntry
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                placeholder={i18n.t('backup.auto.currentPassword')}
+                                placeholderTextColor={t.colors.textSecondary}
+                                value={current}
+                                onChangeText={(v) => { setCurrent(v); setError(null) }}
+                            />
+                        ) : null}
                         <TextInput
                             style={styles.input}
                             secureTextEntry
@@ -167,7 +280,7 @@ export function BackupSettings({ sendRPCWithReply, notify }: Props) {
                             value={password}
                             onChangeText={(v) => { setPassword(v); setError(null) }}
                         />
-                        {!isImport ? (
+                        {needsConfirm ? (
                             <TextInput
                                 style={styles.input}
                                 secureTextEntry
@@ -210,6 +323,8 @@ function makeStyles(t: Theme) {
         sectionNote: { fontSize: t.type.caption.fontSize, color: t.colors.textSecondary, marginTop: t.spacing.xs, fontStyle: 'italic' },
         actionRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md, paddingVertical: t.spacing.md, minHeight: 44 },
         actionLabel: { flex: 1, fontSize: t.type.bodyStrong.fontSize, color: t.colors.text },
+        backupDate: { flex: 1, fontSize: t.type.body.fontSize, color: t.colors.text },
+        restoreLink: { fontSize: t.type.bodyStrong.fontSize, fontWeight: '600', color: t.colors.primary },
         backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: t.spacing.xl },
         card: { backgroundColor: t.colors.surface, borderRadius: t.radius.lg, padding: t.spacing.xl, gap: t.spacing.md },
         cardTitle: { fontSize: t.type.title.fontSize, fontWeight: t.type.title.fontWeight, color: t.colors.text },
