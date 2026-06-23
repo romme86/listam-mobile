@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, Animated, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
@@ -64,6 +64,20 @@ export function Header(props: HeaderProps) {
         i18n,
     )
 
+    // The descriptive label is transient: it flashes whenever the connection
+    // status changes, then fades out — leaving the colored dot and the connection
+    // count, which stay permanent. Clamp to 10 chars so it can never overlap the
+    // right-hand header icons.
+    const shortLabel = status.label.length > 10 ? `${status.label.slice(0, 9)}…` : status.label
+    const [labelVisible, setLabelVisible] = useState(true)
+    const labelTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    useEffect(() => {
+        setLabelVisible(true)
+        if (labelTimer.current) clearTimeout(labelTimer.current)
+        labelTimer.current = setTimeout(() => setLabelVisible(false), 4000)
+        return () => { if (labelTimer.current) clearTimeout(labelTimer.current) }
+    }, [status.label])
+
     useEffect(() => {
         if (status.blinking && !reduceMotion) {
             const loop = Animated.loop(
@@ -90,9 +104,14 @@ export function Header(props: HeaderProps) {
                         importantForAccessibility="no"
                         accessibilityElementsHidden
                     />
-                    <Text style={styles.statusText} numberOfLines={1}>
-                        {status.label}
-                    </Text>
+                    {peerCount > 0 && (
+                        <Text style={styles.connCount} numberOfLines={1}>{peerCountLabel}</Text>
+                    )}
+                    {labelVisible && (
+                        <Text style={styles.statusText} numberOfLines={1}>
+                            {shortLabel}
+                        </Text>
+                    )}
                     {trialDaysRemaining !== undefined && trialDaysRemaining <= 7 && (
                         <Text style={styles.trialText} numberOfLines={1}>
                             {i18n.t('header.trialDaysLeft', { count: trialDaysRemaining })}
@@ -122,16 +141,9 @@ export function Header(props: HeaderProps) {
                         <Ionicons name="barcode-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
                     </AnimatedIconButton>
 
-                    <View style={styles.iconWithBadge}>
-                        <AnimatedIconButton style={styles.iconButton} onPress={onShare}>
-                            <Ionicons name="share-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
-                        </AnimatedIconButton>
-                        {peerCount > 0 && (
-                            <View style={styles.peerBadge}>
-                                <Text style={styles.peerBadgeText}>{peerCountLabel}</Text>
-                            </View>
-                        )}
-                    </View>
+                    <AnimatedIconButton style={styles.iconButton} onPress={onShare}>
+                        <Ionicons name="share-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
+                    </AnimatedIconButton>
 
                     <AnimatedIconButton style={styles.iconButton} onPress={onJoin}>
                         <Ionicons name="person-add-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
@@ -182,32 +194,17 @@ function makeStyles(t: Theme) {
             // yields width first when both share the row.
             flexShrink: 0,
         },
+        // The permanent connection count shown right after the dot.
+        connCount: {
+            fontSize: t.type.caption.fontSize,
+            fontWeight: '700',
+            color: t.colors.text,
+            flexShrink: 0,
+        },
         trialText: {
             fontSize: t.type.caption.fontSize,
             color: t.colors.textTertiary,
             flexShrink: 1,
-        },
-        iconWithBadge: {
-            position: 'relative',
-            justifyContent: 'center',
-            alignItems: 'center',
-        },
-        peerBadge: {
-            position: 'absolute',
-            top: -2,
-            right: -6,
-            minWidth: 16,
-            height: 16,
-            borderRadius: t.radius.pill,
-            backgroundColor: t.colors.accent,
-            justifyContent: 'center',
-            alignItems: 'center',
-            paddingHorizontal: 4,
-        },
-        peerBadgeText: {
-            color: t.colors.onAccent,
-            fontSize: 9,
-            fontWeight: '700',
         },
     })
 }
