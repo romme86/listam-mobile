@@ -28,6 +28,13 @@ export type ListEntry = {
      * `dueAt` is the one board field not in the shared `BoardFields` interface.
      */
     dueAt?: number
+    /**
+     * Hex key of the SHARED single-list base this item lives in (single-list
+     * sharing). Absent = the personal base. Tagged by the backend on a shared
+     * list's items; rides through the store (reducers spread items) so writes can
+     * be routed back to that base and the nav can mark the list as shared.
+     */
+    baseKey?: string
 } & Partial<BoardFields>
 
 /** A board ticket — a ListEntry on a board list, with its fields non-optional-ish for the UI. */

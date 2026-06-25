@@ -65,6 +65,10 @@ type Props = {
     onChangeListView: (listId: string, patch: Partial<RegistryListView>) => void
     onRenameList: (listId: string, name: string) => void
     onDeleteListItems: (listId: string) => void
+    // Single-list sharing: promote one list to its own shared base (shows a
+    // co-edit invite), and additively join one shared list via an invite.
+    onShareList: (listId: string) => void
+    onJoinList: () => void
     // When set as the menu opens, jump straight into that list's settings.
     initialListSettingsId?: string | null
     loyaltyCards: LoyaltyCardHandle[]
@@ -98,7 +102,7 @@ export function ListsMenu(props: Props) {
         peerCount, isWorkletReady, networkStatus, isJoining, onManageMembers, onManageOwnedDevices, onPairLeaf,
         localeChoice, onLocaleChoiceChange, themeChoice, onThemeChoiceChange,
         boardEnabled, onToggleBoardEnabled, deviceName, onDeviceNameChange,
-        onChangeListView, onRenameList, onDeleteListItems,
+        onChangeListView, onRenameList, onDeleteListItems, onShareList, onJoinList,
         initialListSettingsId, loyaltyCards, onScanCard, onSelectCard,
         sendRPCWithReply, notify,
     } = props
@@ -309,6 +313,9 @@ export function ListsMenu(props: Props) {
                                                                 <Ionicons name={typeIcon(list.type)} size={19} color={t.colors.textSecondary} />
                                                             </View>
                                                             <Text style={styles.rowName} numberOfLines={1}>{list.name || list.id}</Text>
+                                                            {list.baseKey ? (
+                                                                <Ionicons name="people" size={15} color={t.colors.textTertiary} accessibilityLabel={i18n.t('shareList.shared')} style={styles.rowShared} />
+                                                            ) : null}
                                                         </TouchableOpacity>
                                                         <View style={styles.rowActions}>
                                                             <TouchableOpacity
@@ -360,6 +367,10 @@ export function ListsMenu(props: Props) {
                             <TouchableOpacity style={styles.newGroupBtn} onPress={onCreateGroup} accessibilityRole="button">
                                 <Ionicons name="add" size={16} color={t.colors.textSecondary} />
                                 <Text style={styles.newGroupLabel}>{i18n.t('lists.menu.newGroup')}</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.newGroupBtn} onPress={() => { onJoinList(); close() }} accessibilityRole="button">
+                                <Ionicons name="enter-outline" size={16} color={t.colors.textSecondary} />
+                                <Text style={styles.newGroupLabel}>{i18n.t('joinList.button')}</Text>
                             </TouchableOpacity>
 
                             <View style={styles.utilityRow}>
@@ -583,6 +594,19 @@ export function ListsMenu(props: Props) {
                                         </>
                                     )}
 
+                                    <Text style={styles.sectionLabel}>{i18n.t('shareList.title')}</Text>
+                                    {settingsList.baseKey ? (
+                                        <View style={styles.actionRow}>
+                                            <Ionicons name="people" size={20} color={t.colors.textSecondary} />
+                                            <Text style={[styles.actionLabel, { color: t.colors.textSecondary }]}>{i18n.t('shareList.shared')}</Text>
+                                        </View>
+                                    ) : (
+                                        <TouchableOpacity style={styles.actionRow} onPress={() => onShareList(settingsList.id)} activeOpacity={0.6}>
+                                            <Ionicons name="share-social-outline" size={20} color={t.colors.text} />
+                                            <Text style={styles.actionLabel}>{i18n.t('shareList.button')}</Text>
+                                        </TouchableOpacity>
+                                    )}
+
                                     <Text style={styles.sectionLabel}>{i18n.t('header.section.dangerZone')}</Text>
                                     <TouchableOpacity style={[styles.actionRow, styles.dangerRow]} onPress={() => onDeleteListItems(settingsList.id)} activeOpacity={0.6}>
                                         <Ionicons name="trash-outline" size={20} color={t.colors.danger} />
@@ -658,6 +682,7 @@ function makeStyles(t: Theme) {
             alignItems: 'center', justifyContent: 'center',
         },
         rowName: { fontSize: t.type.body.fontSize, color: t.colors.text, flexShrink: 1 },
+        rowShared: { marginLeft: t.spacing.xs },
         createHeader: {
             fontSize: t.type.caption.fontSize, fontWeight: '700', color: t.colors.textTertiary,
             textTransform: 'uppercase', letterSpacing: 0.6,
