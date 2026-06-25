@@ -31,7 +31,7 @@ import {
     RPC_GET_BOARD_CONFIG,
     type NotifyType,
 } from './hooks/_useWorklet'
-import { RPC_LIST_BACKUPS } from '@listam/protocol'
+import { RPC_LIST_BACKUPS, RPC_SHARE_LIST, RPC_JOIN_LIST } from '@listam/protocol'
 import { store } from './store/store'
 import { useAppDispatch, useAppSelector } from './store/hooks'
 import { listsActions, selectItemsForList, selectAllItems } from './store/listsSlice'
@@ -204,6 +204,9 @@ function AppInner() {
     const plannedRefs = useMemo(() => new Set([...reducePlan(allItems).keys()]), [allItems])
 
     const [joinDialogVisible, setJoinDialogVisible] = useState(false)
+    // The join dialog is reused for both the destructive whole-project join
+    // ('project') and the additive single-list join ('list', RPC_JOIN_LIST).
+    const [joinMode, setJoinMode] = useState<'project' | 'list'>('project')
     // Whether a backup password is set. Joins are gated on it so the pre-join
     // auto-backup can always run. null = not yet queried.
     const [backupPasswordSet, setBackupPasswordSet] = useState<boolean | null>(null)
@@ -649,7 +652,10 @@ function AppInner() {
         // the backend files every item under DEFAULT_LIST_ID, so additions to any
         // other list silently land in (and only ever show up on) the default list.
         const listType = lib.listsById[currentId]?.type || DEFAULT_LIST_TYPE
-        sendRPC(RPC_ADD, JSON.stringify({ text, listId: currentId, listType }))
+        // A shared list's writes carry its baseKey so the backend routes them to
+        // that base (UPDATE/DELETE/MOVE already carry it on the item).
+        const baseKey = lib.listsById[currentId]?.baseKey || undefined
+        sendRPC(RPC_ADD, JSON.stringify({ text, listId: currentId, listType, baseKey }))
     }, [sendRPC, lib, currentId])
 
     const handleEditItem = useCallback((index: number, newText: string) => {
@@ -1042,7 +1048,56 @@ function AppInner() {
         }
     }, [autobaseInviteKey, i18n, isWorkletReady, snackbar])
 
+    // Promote ONE list to its own shared base and offer its co-edit invite via
+    // the OS share sheet. Others who join this invite get only this list.
+    const handleShareList = useCallback(async (listId: string) => {
+        let result: { ok?: boolean; invite?: string } | null = null
+        try {
+            const reply = await sendRPCWithReply(RPC_SHARE_LIST, JSON.stringify({ listId }))
+            result = reply ? JSON.parse(reply) : null
+        } catch { result = null }
+        if (!result || !result.ok || !result.invite) {
+            snackbar.show(i18n.t('shareList.failed'), 'error')
+            return
+        }
+        try {
+            await Share.share({
+                message: `${i18n.t('shareList.message')}\n\n${result.invite}`,
+                title: i18n.t('shareList.title'),
+            })
+        } catch {
+            snackbar.show(i18n.t('shareList.failed'), 'error')
+        }
+    }, [sendRPCWithReply, i18n, snackbar])
+
+    // Additively join ONE shared list via its invite (NOT the destructive
+    // whole-project join). The rest of your lists stay private.
+    const handleJoinList = useCallback(async (invite: string) => {
+        const value = (invite || '').trim().replace(/\s+/g, '')
+        if (!value) {
+            snackbar.show(i18n.t('invite.notification.emptyManual'), 'error')
+            return
+        }
+        let result: { ok?: boolean } | null = null
+        try {
+            const reply = await sendRPCWithReply(RPC_JOIN_LIST, JSON.stringify({ invite: value }))
+            result = reply ? JSON.parse(reply) : null
+        } catch { result = null }
+        snackbar.show(
+            result && result.ok ? i18n.t('joinList.joined') : i18n.t('joinList.failed'),
+            result && result.ok ? 'success' : 'error',
+        )
+    }, [sendRPCWithReply, i18n, snackbar])
+
     const handleJoin = useCallback(() => {
+        setJoinMode('project')
+        setJoinDialogVisible(true)
+    }, [])
+
+    // Open the same paste-an-invite dialog, but in single-list ('list') mode so
+    // submitting joins one shared list additively instead of replacing the base.
+    const handleOpenJoinList = useCallback(() => {
+        setJoinMode('list')
         setJoinDialogVisible(true)
     }, [])
 
@@ -1100,11 +1155,18 @@ function AppInner() {
             snackbar.show(i18n.t('invite.notification.emptyManual'), 'error')
             return
         }
+        if (joinMode === 'list') {
+            // Additive single-list join (no base swap → no confirmation/backup gate).
+            void handleJoinList(joinKeyInput)
+            setJoinDialogVisible(false)
+            setJoinKeyInput('')
+            return
+        }
         const didRequestJoin = requestJoinConfirmation(joinKeyInput, 'manual')
         if (!didRequestJoin) return
         setJoinDialogVisible(false)
         setJoinKeyInput('')
-    }, [i18n, joinKeyInput, requestJoinConfirmation, snackbar])
+    }, [i18n, joinKeyInput, joinMode, handleJoinList, requestJoinConfirmation, snackbar])
 
     const handleJoinCancel = useCallback(() => {
         setJoinDialogVisible(false)
@@ -1219,6 +1281,7 @@ function AppInner() {
 
             <JoinDialog
                 visible={joinDialogVisible}
+                mode={joinMode}
                 joinKeyInput={joinKeyInput}
                 setJoinKeyInput={setJoinKeyInput}
                 onSubmit={handleJoinSubmit}
@@ -1286,6 +1349,8 @@ function AppInner() {
                 onChangeListView={writeListView}
                 onRenameList={handleRenameList}
                 onDeleteListItems={handleDeleteListItems}
+                onShareList={handleShareList}
+                onJoinList={handleOpenJoinList}
                 initialListSettingsId={pendingListSettingsId}
                 loyaltyCards={loyaltyCards}
                 onScanCard={() => setScannerVisible(true)}

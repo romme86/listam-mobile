@@ -2,6 +2,7 @@ import { createSelector, createSlice, type PayloadAction } from '@reduxjs/toolki
 import type { RootState } from './store'
 import type { ListEntry } from '../components/_types'
 import { isLabelItem, isPlanItem, sortByOrder } from '@listam/domain'
+import { REGISTRY_LIST_TYPE } from '@listam/domain/list-registry'
 import {
     DEFAULT_LIST_ID,
     DEFAULT_LIST_TYPE,
@@ -208,6 +209,13 @@ function ensureList(
     return state.listsById[listId]
 }
 
+// A registry meta-item tagged with a top-level baseKey is a SHARED base's own
+// self-description (not the personal registry entry, which carries regBaseKey but
+// no top-level baseKey). The personal registry stays authoritative for the nav.
+function isSharedRegistryItem(entry: ListEntry): boolean {
+    return entry.listType === REGISTRY_LIST_TYPE && !!entry.baseKey
+}
+
 function entriesForList(state: ListsState, listId: string): ListEntry[] {
     const list = state.listsById[listId]
     if (!list) return []
@@ -230,7 +238,7 @@ function replaceListItems(
     // buckets — never project them into a list row.
     const normalized = normalizeListEntries(
         entries
-            .filter((entry) => !isLabelItem(entry) && !isPlanItem(entry))
+            .filter((entry) => !isLabelItem(entry) && !isPlanItem(entry) && !isSharedRegistryItem(entry))
             .map((entry) => ({
                 ...entry,
                 listId: entry.listId || listId,
@@ -257,6 +265,12 @@ function applyItemProjection(
     // never spawn a phantom list or render as a row — drop them here so an
     // un-updated peer tolerates desktop/headless writing labels.
     if (isLabelItem(entry)) return
+    // A SHARED single-list base seeds its OWN self-describing registry meta-item,
+    // which the backend pushes here tagged with a top-level baseKey. The personal
+    // registry is authoritative for the nav, so drop it — otherwise it collides
+    // by identityKey with the personal entry and clobbers its regBaseKey
+    // (→ writes mis-route to the personal base).
+    if (isSharedRegistryItem(entry)) return
 
     const normalized = normalizeListEntries([entry])[0]
     if (!normalized) return

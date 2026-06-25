@@ -59,6 +59,14 @@ export const selectNavLibrary = createSelector(
     },
 )
 
+// The shared-base key of the currently-selected list (null = personal base).
+// Threaded onto RPC writes so a shared list's mutations route to its own base.
+export const selectCurrentListBaseKey = createSelector(
+    selectNavLibrary,
+    selectCurrentListId,
+    (lib, currentId): string | null => lib.listsById[currentId]?.baseKey ?? null,
+)
+
 export type GroupedLists = Array<{
     group: NavLibrary['groups'][number]
     lists: NavLibrary['listsById'][string][]

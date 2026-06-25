@@ -6,6 +6,9 @@ import { useI18n } from '../i18n'
 
 type JoinDialogProps = {
     visible: boolean
+    // 'project' = the destructive whole-project join; 'list' = the additive
+    // single-list join (RPC_JOIN_LIST). Only the copy differs.
+    mode?: 'project' | 'list'
     joinKeyInput: string
     setJoinKeyInput: (text: string) => void
     onSubmit: () => void
@@ -14,6 +17,7 @@ type JoinDialogProps = {
 
 export function JoinDialog({
     visible,
+    mode = 'project',
     joinKeyInput,
     setJoinKeyInput,
     onSubmit,
@@ -22,6 +26,8 @@ export function JoinDialog({
     const t = useTheme()
     const i18n = useI18n()
     const dialogStyles = useMemo(() => makeDialogStyles(t), [t])
+    const title = mode === 'list' ? i18n.t('joinList.title') : i18n.t('invite.dialog.title')
+    const subtitle = mode === 'list' ? i18n.t('joinList.subtitle') : i18n.t('invite.dialog.subtitle')
 
     return (
         <Modal
@@ -32,8 +38,8 @@ export function JoinDialog({
         >
             <View style={dialogStyles.overlay}>
                 <View style={dialogStyles.dialog}>
-                    <Text style={dialogStyles.title}>{i18n.t('invite.dialog.title')}</Text>
-                    <Text style={dialogStyles.subtitle}>{i18n.t('invite.dialog.subtitle')}</Text>
+                    <Text style={dialogStyles.title}>{title}</Text>
+                    <Text style={dialogStyles.subtitle}>{subtitle}</Text>
 
                     <TextInput
                         style={dialogStyles.input}

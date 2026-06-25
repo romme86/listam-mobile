@@ -44,6 +44,8 @@ import {
     RPC_EXPORT_DATA,
     RPC_EXPORT_SEED,
     RPC_IMPORT,
+    RPC_SHARE_LIST,
+    RPC_JOIN_LIST,
 } from '@listam/protocol'
 import type { ListEntry } from '@/app/components/_types'
 
@@ -497,4 +499,6 @@ export {
     RPC_EXPORT_DATA,
     RPC_EXPORT_SEED,
     RPC_IMPORT,
+    RPC_SHARE_LIST,
+    RPC_JOIN_LIST,
 }
