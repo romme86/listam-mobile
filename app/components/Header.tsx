@@ -3,6 +3,7 @@ import { View, Text, Animated, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { AnimatedIconButton } from './AnimatedIconButton'
+import { PageDots } from './PageDots'
 import { useTheme, type Theme } from '../theme'
 import { useReduceMotion } from '../hooks/useReduceMotion'
 import { useI18n } from '../i18n'
@@ -23,6 +24,10 @@ type HeaderProps = {
     // boardEnabled). The sun button is only rendered once it's been activated.
     showOverview: boolean
     trialDaysRemaining?: number
+    // Swipe-pager position among the current group's sibling lists, shown as
+    // centered dots in the header. 0/1 = no dots.
+    positionCount?: number
+    positionIndex?: number
 }
 
 export function Header(props: HeaderProps) {
@@ -36,6 +41,8 @@ export function Header(props: HeaderProps) {
         overviewActive,
         showOverview,
         trialDaysRemaining,
+        positionCount = 0,
+        positionIndex = 0,
     } = props
 
     const t = useTheme()
@@ -107,6 +114,10 @@ export function Header(props: HeaderProps) {
                     )}
                 </View>
 
+                <View style={styles.centerSection} pointerEvents="none">
+                    {positionCount > 1 && <PageDots count={positionCount} index={positionIndex} />}
+                </View>
+
                 <View style={styles.rightSection}>
                     {showOverview && (
                         <AnimatedIconButton
@@ -134,7 +145,6 @@ function makeStyles(t: Theme) {
         },
         container: {
             flexDirection: 'row',
-            justifyContent: 'space-between',
             alignItems: 'center',
             backgroundColor: t.colors.bg,
             paddingHorizontal: t.spacing.sm,
@@ -151,6 +161,14 @@ function makeStyles(t: Theme) {
             flexDirection: 'row',
             alignItems: 'center',
             gap: t.spacing.md,
+        },
+        // A real flex column between left/right (not an overlay) so the dots
+        // reserve their own centered space and can't paint over the status label.
+        centerSection: {
+            flex: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: t.spacing.xs,
         },
         iconButton: {
             padding: t.spacing.sm,
