@@ -5,6 +5,7 @@ import {
     createI18n,
     type I18n,
     type LocaleChoice,
+    type MessageKey,
 } from '@listam/i18n'
 import { useAppSelector } from './store/hooks'
 import { selectPreferences } from './store/preferencesSlice'
@@ -49,4 +50,4 @@ function getSystemLocale(): string {
     }
 }
 
-export type { LocaleChoice }
+export type { LocaleChoice, MessageKey }

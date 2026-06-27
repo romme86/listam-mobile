@@ -3,6 +3,7 @@ import {
     View,
     Share,
     Alert,
+    AppState,
     StatusBar,
     LayoutAnimation,
     Platform,
@@ -31,7 +32,7 @@ import {
     RPC_GET_BOARD_CONFIG,
     type NotifyType,
 } from './hooks/_useWorklet'
-import { RPC_LIST_BACKUPS, RPC_SHARE_LIST, RPC_JOIN_LIST } from '@listam/protocol'
+import { RPC_LIST_BACKUPS, RPC_SET_BACKUP_SCHEDULE, RPC_SHARE_LIST, RPC_JOIN_LIST } from '@listam/protocol'
 import { store } from './store/store'
 import { useAppDispatch, useAppSelector } from './store/hooks'
 import { listsActions, selectItemsForList, selectAllItems } from './store/listsSlice'
@@ -238,6 +239,11 @@ function AppInner() {
     // Whether a backup password is set. Joins are gated on it so the pre-join
     // auto-backup can always run. null = not yet queried.
     const [backupPasswordSet, setBackupPasswordSet] = useState<boolean | null>(null)
+    // Latest known rolling-backup schedule.enabled (from RPC_LIST_BACKUPS). The
+    // foreground catch-up re-asserts this on background→active so the backend
+    // scheduler restarts and writes any tier that came due while suspended. The
+    // backend stays the source of truth; this is just the value to re-send.
+    const backupScheduleEnabledRef = useRef(true)
     const [joinKeyInput, setJoinKeyInput] = useState('')
     const [membersDialogVisible, setMembersDialogVisible] = useState(false)
     const [ownedDevicesVisible, setOwnedDevicesVisible] = useState(false)
@@ -309,12 +315,19 @@ function AppInner() {
         }
     }, [reduceMotion])
 
-    // Query whether a backup password is set (gates joining).
+    // Query whether a backup password is set (gates joining). Also captures the
+    // rolling-backup schedule.enabled so the foreground catch-up knows what to
+    // re-assert.
     const refreshBackupPasswordSet = useCallback(async () => {
         try {
             const reply = await sendRPCWithReply(RPC_LIST_BACKUPS)
             const res = reply ? JSON.parse(reply) : null
-            if (res?.ok) setBackupPasswordSet(!!res.passwordSet)
+            if (res?.ok) {
+                setBackupPasswordSet(!!res.passwordSet)
+                if (res.schedule && typeof res.schedule.enabled === 'boolean') {
+                    backupScheduleEnabledRef.current = res.schedule.enabled
+                }
+            }
         } catch { /* leave as-is on failure */ }
     }, [sendRPCWithReply])
 
@@ -625,6 +638,27 @@ function AppInner() {
         if (!isWorkletReady) return
         void refreshBackupPasswordSet()
     }, [isWorkletReady, refreshBackupPasswordSet])
+
+    // Foreground catch-up for rolling backups. A backend timer only fires while
+    // the worklet is alive; iOS suspends it in the background. On each
+    // background→active transition (only — not on every state change) we re-send
+    // RPC_SET_BACKUP_SCHEDULE with the current enabled flag, which restarts the
+    // backend scheduler; its catch-up pass writes any tier that came due while we
+    // were suspended. Cheap and idempotent: skipped while disabled or not ready.
+    const appStateRef = useRef(AppState.currentState)
+    useEffect(() => {
+        const sub = AppState.addEventListener('change', (next) => {
+            const prev = appStateRef.current
+            appStateRef.current = next
+            const cameToForeground = prev.match(/inactive|background/) && next === 'active'
+            if (!cameToForeground || !isWorkletReady) return
+            if (!backupScheduleEnabledRef.current) return
+            sendRPC(RPC_SET_BACKUP_SCHEDULE, JSON.stringify({ enabled: true }))
+            // Re-read so the ref (and any open Settings UI) reflects fresh lastAt.
+            void refreshBackupPasswordSet()
+        })
+        return () => sub.remove()
+    }, [isWorkletReady, sendRPC, refreshBackupPasswordSet])
 
     // Prompt once (ever) to set a backup password when none is set — it's
     // required before joining a shared list, to protect the current lists.
