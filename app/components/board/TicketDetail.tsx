@@ -9,6 +9,7 @@ import type { ListEntry } from '../_types'
 import { Avatar, PriorityPill, StatusPill, TicketInlineMarkdown, stateById, formatDue, ticketInitials } from './TicketBits'
 import { BlockBody } from './BlockBody'
 import { RichMarkdownEditor } from './RichMarkdownEditor'
+import { CloseDot } from '../CloseDot'
 
 type Props = {
     visible: boolean
@@ -55,9 +56,7 @@ export function TicketDetail({ visible, ticket, config, listName, onUpdate, onCh
                                 <Ionicons name="swap-horizontal" size={24} color={t.colors.text} />
                             </TouchableOpacity>
                         ) : null}
-                        <TouchableOpacity onPress={onClose} hitSlop={10} accessibilityLabel={i18n.t('common.close')}>
-                            <Ionicons name="close" size={26} color={t.colors.text} />
-                        </TouchableOpacity>
+                        <CloseDot onPress={onClose} color={t.colors.text} accessibilityLabel={i18n.t('common.close')} />
                     </View>
                 </View>
 

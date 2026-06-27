@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons'
 import Svg, { Rect } from 'react-native-svg'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
+import { CloseDot } from './CloseDot'
 import type { LoyaltyCard } from './LoyaltyCardScanner'
 
 const QRCode = require('qrcode-terminal/vendor/QRCode')
@@ -284,9 +285,7 @@ export function LoyaltyCardViewer({ visible, card, onClose, onDelete }: LoyaltyC
         <Modal visible={visible} animationType="fade" onRequestClose={onClose}>
             <View style={styles.container}>
                 <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-                    <TouchableOpacity style={styles.closeButton} onPress={onClose} accessibilityRole="button">
-                        <Ionicons name="close" size={28} color={t.colors.text} />
-                    </TouchableOpacity>
+                    <CloseDot onPress={onClose} style={styles.closeButton} color={t.colors.text} accessibilityLabel={i18n.t('common.close')} />
                     <TouchableOpacity style={styles.deleteButton} onPress={handleDelete} accessibilityRole="button">
                         <Ionicons name="trash-outline" size={22} color={t.colors.danger} />
                     </TouchableOpacity>

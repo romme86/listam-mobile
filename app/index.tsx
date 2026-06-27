@@ -967,12 +967,19 @@ function AppInner() {
     const handleCreateList = useCallback((type: string) => {
         const id = `list-${Date.now().toString(36)}`
         const now = Date.now()
+        const isGrocery = !isBoardType(type) && !isTodoType(type)
         const name = isBoardType(type)
             ? i18n.t('lists.menu.newBoard')
             : isTodoType(type)
                 ? i18n.t('lists.menu.newTodo')
                 : i18n.t('lists.menu.newGrocery')
-        const meta = buildListMetaItem({ id, name, type, groupId: null, order: now, updatedAt: now })
+        // New grocery lists ship lean: categories off by default (the user can
+        // re-enable per-list from list settings). User-created lists carry a real
+        // registry meta-item, so unlike the built-in surfaces this override sticks.
+        const meta = buildListMetaItem({
+            id, name, type, groupId: null, order: now, updatedAt: now,
+            ...(isGrocery ? { view: { ...DEFAULT_VIEW, categoriesEnabled: false } } : {}),
+        })
         sendRPC(RPC_UPDATE, JSON.stringify({ item: meta }))
         dispatch(listsActions.selectedListChanged({ listId: id, listType: type }))
         setListsMenuVisible(false)
