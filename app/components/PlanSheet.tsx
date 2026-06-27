@@ -13,13 +13,15 @@ type Props = {
     onPickDay: (dateKey: string) => void
     onClear: () => void
     onEdit: (text: string) => void
+    /** Move this item to another list. Omitted hides the action. */
+    onMove?: () => void
     onClose: () => void
 }
 
 // Bottom-sheet for the deliberate flag path: long-pressing a list row opens it
 // to edit the row text or plan it for a specific day (Today + the next six),
 // mirroring the desktop day-picker popover.
-export function PlanSheet({ visible, item, planned, onPickDay, onClear, onEdit, onClose }: Props) {
+export function PlanSheet({ visible, item, planned, onPickDay, onClear, onEdit, onMove, onClose }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
@@ -70,6 +72,13 @@ export function PlanSheet({ visible, item, planned, onPickDay, onClear, onEdit, 
                         ))}
                     </View>
 
+                    {onMove ? (
+                        <TouchableOpacity style={styles.moveRow} onPress={onMove}>
+                            <Ionicons name="swap-horizontal" size={18} color={t.colors.text} />
+                            <Text style={styles.moveText}>{i18n.t('main.item.move')}</Text>
+                        </TouchableOpacity>
+                    ) : null}
+
                     {planned ? (
                         <TouchableOpacity style={styles.clearBtn} onPress={onClear}>
                             <Ionicons name="close-circle-outline" size={18} color={t.colors.danger} />
@@ -119,6 +128,8 @@ function makeStyles(t: Theme) {
         },
         dayDow: { fontSize: t.type.caption.fontSize, color: t.colors.textSecondary, textTransform: 'uppercase' },
         dayNum: { fontSize: t.type.title.fontSize, fontWeight: '600', color: t.colors.text, marginTop: 2 },
+        moveRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm, paddingVertical: t.spacing.sm },
+        moveText: { color: t.colors.text, fontSize: t.type.body.fontSize },
         clearBtn: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm, paddingVertical: t.spacing.sm },
         clearText: { color: t.colors.danger, fontSize: t.type.body.fontSize },
     })

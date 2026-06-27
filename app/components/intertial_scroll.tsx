@@ -26,7 +26,6 @@ type Props = {
     onToggleDone?: (index: number) => void
     onDelete?: (index: number) => void
     onEdit?: (index: number, text: string) => void
-    onRequestMove?: (item: ListEntry) => void
     onRequestAdd?: () => void
     onFlagToday?: (index: number) => void
     onPlanFor?: (item: ListEntry) => void
@@ -58,7 +57,6 @@ export default function InertialElasticList({
     onToggleDone,
     onDelete,
     onEdit,
-    onRequestMove,
     onRequestAdd,
     onFlagToday,
     onPlanFor,
@@ -147,7 +145,6 @@ export default function InertialElasticList({
                 onToggleDone={onToggleDone}
                 onDelete={onDelete}
                 onEdit={onEdit}
-                onRequestMove={onRequestMove}
                 onFlagToday={onFlagToday}
                 onPlanFor={onPlanFor}
                 planned={isPlanned?.(item.entry) ?? false}
@@ -158,7 +155,7 @@ export default function InertialElasticList({
                 reduceMotion={reduceMotion}
             />
         )
-    }, [scrollY, totalItemHeight, spacing, onToggleDone, onDelete, onEdit, onRequestMove, onFlagToday, onPlanFor, isPlanned, textScaleFactor, listAlignment, isCentered, reduceMotion, styles, t])
+    }, [scrollY, totalItemHeight, spacing, onToggleDone, onDelete, onEdit, onFlagToday, onPlanFor, isPlanned, textScaleFactor, listAlignment, isCentered, reduceMotion, styles, t])
 
     const keyExtractor = useCallback((item: FlatListItem) => item.key, [])
 
