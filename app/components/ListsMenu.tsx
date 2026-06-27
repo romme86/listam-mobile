@@ -311,7 +311,6 @@ export function ListsMenu(props: Props) {
 
                                             {lists.map((list) => {
                                                 const isCurrent = list.id === currentListId
-                                                const isDefault = list.id === defaultListId
                                                 const isDragging = draggingId === list.id
                                                 return (
                                                     <View
@@ -342,13 +341,6 @@ export function ListsMenu(props: Props) {
                                                                 accessibilityLabel={i18n.t(isBoardType(list.type) ? 'lists.menu.boardSettings' : 'lists.menu.listSettings')}
                                                             >
                                                                 <Ionicons name="settings-outline" size={19} color={t.colors.textTertiary} />
-                                                            </TouchableOpacity>
-                                                            <TouchableOpacity
-                                                                onPress={() => { if (!armedRef.current) onSetDefault(list.id) }}
-                                                                hitSlop={10}
-                                                                accessibilityLabel={i18n.t(isDefault ? 'list.isDefault' : 'list.makeDefault')}
-                                                            >
-                                                                <Ionicons name={isDefault ? 'star' : 'star-outline'} size={20} color={isDefault ? t.colors.text : t.colors.textTertiary} />
                                                             </TouchableOpacity>
                                                         </View>
                                                     </View>
@@ -496,6 +488,12 @@ export function ListsMenu(props: Props) {
                                         returnKeyType="done"
                                         onEndEditing={(e) => onRenameList(settingsList.id, e.nativeEvent.text)}
                                     />
+
+                                    <View style={styles.switchRow}>
+                                        <Ionicons name={settingsList.id === defaultListId ? 'star' : 'star-outline'} size={20} color={t.colors.text} />
+                                        <Text style={styles.switchLabel}>{i18n.t('list.isDefault')}</Text>
+                                        <Switch value={settingsList.id === defaultListId} onValueChange={() => onSetDefault(settingsList.id)} trackColor={{ false: t.colors.border, true: t.colors.primary }} thumbColor={t.colors.surface} />
+                                    </View>
 
                                     {settingsIsBoard ? (
                                         <Text style={styles.sectionNote}>{i18n.t('lists.menu.boardSoon')}</Text>
