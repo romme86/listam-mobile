@@ -1342,8 +1342,12 @@ function AppInner() {
                 overviewActive={overviewOpen}
                 showOverview={boardEnabled}
                 trialDaysRemaining={subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
-                positionCount={position?.groupSize ?? 0}
-                positionIndex={position?.indexInGroup ?? 0}
+                groupCount={position?.groupCount ?? 0}
+                groupIndex={position?.groupIndex ?? 0}
+                groupSize={position?.groupSize ?? 0}
+                listIndex={position?.indexInGroup ?? 0}
+                groupName={position?.groupName ?? ''}
+                onOpenLists={() => { setMenuInitialView('lists'); setPendingListSettingsId(null); setListsMenuVisible(true) }}
             />
 
             {overviewOpen && (

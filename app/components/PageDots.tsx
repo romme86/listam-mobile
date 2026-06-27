@@ -2,28 +2,65 @@ import React, { useMemo } from 'react'
 import { View, Text, StyleSheet } from 'react-native'
 import { useTheme, type Theme } from '../theme'
 
-// The swipe-pager position indicator: one dot per sibling list in the current
-// group, the active one stretched into a pill. Collapses to "n / m" past 9 so it
-// never overruns the header. Display-only.
-export function PageDots({ count, index }: { count: number; index: number }) {
+type Props = {
+    // One dot per group; the group you're in expands to show its lists.
+    groupCount: number
+    groupIndex: number
+    groupSize: number // lists in the active group
+    listIndex: number // active list within the active group
+    groupName: string
+}
+
+// A you-are-here indicator across the whole list hierarchy: a row of group dots,
+// the active group expanded into its lists (with a subtle pill behind them ONLY
+// when it holds more than one). Past a handful of groups/lists it collapses to a
+// compact "Group · n/m" label so it never overruns the header.
+export function PageDots({ groupCount, groupIndex, groupSize, listIndex, groupName }: Props) {
     const t = useTheme()
     const styles = useMemo(() => makeStyles(t), [t])
-    if (count <= 1) return null
-    if (count > 9) return <Text style={styles.counter}>{index + 1} / {count}</Text>
+
+    // Collapse to a compact label before the dot row can grow wide enough to
+    // overrun the header — including the dense 5-6 groups WITH a wide active pill.
+    if (groupCount > 6 || groupSize > 9 || (groupCount >= 5 && groupSize > 4)) {
+        const pos = groupSize > 1 ? ` · ${listIndex + 1}/${groupSize}` : ''
+        return <Text style={styles.label} numberOfLines={1}>{groupName}{pos}</Text>
+    }
+
     return (
-        <View style={styles.dotRow}>
-            {Array.from({ length: count }).map((_, i) => (
-                <View key={i} style={[styles.dot, i === index && styles.dotActive]} />
-            ))}
+        <View style={styles.row}>
+            {Array.from({ length: groupCount }).map((_, gi) => {
+                if (gi !== groupIndex) {
+                    return <View key={gi} style={styles.groupDot} />
+                }
+                // The active group with a single list stays a plain (accented) dot —
+                // no pill — so the background only marks a group you can swipe within.
+                if (groupSize <= 1) {
+                    return <View key={gi} style={[styles.groupDot, styles.groupDotActive]} />
+                }
+                return (
+                    <View key={gi} style={styles.activeGroup}>
+                        {Array.from({ length: groupSize }).map((_, li) => (
+                            <View key={li} style={[styles.listDot, li === listIndex && styles.listDotActive]} />
+                        ))}
+                    </View>
+                )
+            })}
         </View>
     )
 }
 
 function makeStyles(t: Theme) {
     return StyleSheet.create({
-        dotRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-        dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: t.colors.border },
-        dotActive: { width: 16, borderRadius: 3, backgroundColor: t.colors.accent },
-        counter: { fontSize: t.type.label.fontSize, fontWeight: '600', color: t.colors.textSecondary },
+        row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
+        groupDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: t.colors.border },
+        groupDotActive: { backgroundColor: t.colors.accent },
+        activeGroup: {
+            flexDirection: 'row', alignItems: 'center', gap: 4,
+            backgroundColor: t.colors.surfaceAlt, borderRadius: 9,
+            paddingHorizontal: 7, paddingVertical: 3,
+        },
+        listDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: t.colors.textTertiary },
+        listDotActive: { width: 14, borderRadius: 3, backgroundColor: t.colors.accent },
+        label: { fontSize: t.type.label.fontSize, fontWeight: '600', color: t.colors.textSecondary },
     })
 }

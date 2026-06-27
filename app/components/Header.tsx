@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { View, Text, Animated, StyleSheet } from 'react-native'
+import { View, Text, TouchableOpacity, Animated, StyleSheet } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { AnimatedIconButton } from './AnimatedIconButton'
@@ -24,10 +24,14 @@ type HeaderProps = {
     // boardEnabled). The sun button is only rendered once it's been activated.
     showOverview: boolean
     trialDaysRemaining?: number
-    // Swipe-pager position among the current group's sibling lists, shown as
-    // centered dots in the header. 0/1 = no dots.
-    positionCount?: number
-    positionIndex?: number
+    // You-are-here across the list hierarchy, shown as centered dots: one per
+    // group, the active group expanded into its lists. Tapping opens the tray.
+    groupCount?: number
+    groupIndex?: number
+    groupSize?: number
+    listIndex?: number
+    groupName?: string
+    onOpenLists: () => void
 }
 
 export function Header(props: HeaderProps) {
@@ -41,8 +45,12 @@ export function Header(props: HeaderProps) {
         overviewActive,
         showOverview,
         trialDaysRemaining,
-        positionCount = 0,
-        positionIndex = 0,
+        groupCount = 0,
+        groupIndex = 0,
+        groupSize = 0,
+        listIndex = 0,
+        groupName = '',
+        onOpenLists,
     } = props
 
     const t = useTheme()
@@ -114,8 +122,19 @@ export function Header(props: HeaderProps) {
                     )}
                 </View>
 
-                <View style={styles.centerSection} pointerEvents="none">
-                    {positionCount > 1 && <PageDots count={positionCount} index={positionIndex} />}
+                <View style={styles.centerSection}>
+                    {(groupCount > 1 || groupSize > 1) && (
+                        <TouchableOpacity
+                            style={styles.listsButton}
+                            onPress={onOpenLists}
+                            hitSlop={12}
+                            accessibilityRole="button"
+                            accessibilityLabel={groupName ? `${i18n.t('lists.menu.title')}, ${groupName}` : i18n.t('lists.menu.title')}
+                            accessibilityValue={groupSize > 1 ? { min: 1, max: groupSize, now: listIndex + 1 } : undefined}
+                        >
+                            <PageDots groupCount={groupCount} groupIndex={groupIndex} groupSize={groupSize} listIndex={listIndex} groupName={groupName} />
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 <View style={styles.rightSection}>
@@ -164,11 +183,19 @@ function makeStyles(t: Theme) {
         },
         // A real flex column between left/right (not an overlay) so the dots
         // reserve their own centered space and can't paint over the status label.
+        // overflow:hidden clips any residual spill in extreme hierarchies.
         centerSection: {
             flex: 1,
             alignItems: 'center',
             justifyContent: 'center',
             paddingHorizontal: t.spacing.xs,
+            overflow: 'hidden',
+        },
+        // Guarantees a 44pt tap target even when the indicator is a lone 8px dot.
+        listsButton: {
+            minHeight: 44,
+            alignItems: 'center',
+            justifyContent: 'center',
         },
         iconButton: {
             padding: t.spacing.sm,
