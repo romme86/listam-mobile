@@ -1021,19 +1021,14 @@ function AppInner() {
         setListsMenuVisible(false)
     }, [dispatch])
 
+    // Toggle a list's launch-default flag (set it, or clear back to "first list"
+    // if it's already the default). This now lives only in each list's settings.
     const handleSetDefaultList = useCallback((listId: string) => {
-        dispatch(preferencesActions.defaultListIdSet(listId))
-        AsyncStorage.setItem(PREF_DEFAULT_LIST, listId)
-    }, [dispatch])
-
-    // Context-bar star: make the current list the launch default, or clear it
-    // (back to "first list") if it already is.
-    const handleToggleDefaultList = useCallback(() => {
-        const next = defaultListId === currentId ? null : currentId
+        const next = defaultListId === listId ? null : listId
         dispatch(preferencesActions.defaultListIdSet(next))
         if (next === null) AsyncStorage.removeItem(PREF_DEFAULT_LIST)
         else AsyncStorage.setItem(PREF_DEFAULT_LIST, next)
-    }, [defaultListId, currentId, dispatch])
+    }, [defaultListId, dispatch])
 
     // A new list is a registry meta-item (synced via the normal item pipeline)
     // plus selecting it (which materializes its empty ListRecord).
@@ -1363,12 +1358,10 @@ function AppInner() {
             {!overviewOpen && (
                 <ListContextBar
                     listName={currentListName}
-                    isDefault={defaultListId === currentId}
                     onOpenMenu={() => { setMenuInitialView('lists'); setPendingListSettingsId(null); setListsMenuVisible(true) }}
                     onBarcode={() => { const card = loyaltyCards[0]; if (card) { handleSelectCard(card) } else { setScannerVisible(true) } }}
                     showBarcode={!isTodo && !isBoard}
                     onOpenListSettings={() => { setPendingListSettingsId(currentId); setListsMenuVisible(true) }}
-                    onSetDefault={handleToggleDefaultList}
                 />
             )}
 
