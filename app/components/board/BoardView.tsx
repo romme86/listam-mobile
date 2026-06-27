@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet } from 'react-native'
-import { Ionicons } from '@expo/vector-icons'
 import { groupByStatus, type BoardConfig } from '@listam/domain/board'
 import { useTheme, type Theme } from '../../theme'
 import { useI18n } from '../../i18n'
@@ -11,13 +10,12 @@ type Props = {
     tickets: ListEntry[]
     config: BoardConfig
     onOpenTicket: (ticket: ListEntry) => void
-    onCreate: () => void
 }
 
 // The board surface: a horizontal status-chip filter over a vertical list of
 // ticket cards (one status at a time), per the phone design. Status names/colors
 // come from the board config, so custom boards work unchanged.
-export function BoardView({ tickets, config, onOpenTicket, onCreate }: Props) {
+export function BoardView({ tickets, config, onOpenTicket }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
@@ -56,9 +54,6 @@ export function BoardView({ tickets, config, onOpenTicket, onCreate }: Props) {
                         )
                     })}
                 </ScrollView>
-                <TouchableOpacity style={styles.addChip} onPress={onCreate} accessibilityRole="button" accessibilityLabel={i18n.t('board.newTicket')}>
-                    <Ionicons name="add" size={20} color={t.colors.onAccent} />
-                </TouchableOpacity>
             </View>
 
             <FlatList
@@ -87,11 +82,6 @@ function makeStyles(t: Theme) {
         chipActive: { backgroundColor: t.colors.surfaceSunken },
         chipText: { fontSize: t.type.label.fontSize, fontWeight: '600', color: t.colors.textSecondary },
         chipTextActive: { color: t.colors.success },
-        addChip: {
-            width: 36, height: 36, borderRadius: 18,
-            backgroundColor: t.colors.accent,
-            alignItems: 'center', justifyContent: 'center',
-        },
         listContent: { paddingHorizontal: t.spacing.lg, paddingTop: t.spacing.sm, paddingBottom: t.spacing.xxl },
         empty: { textAlign: 'center', color: t.colors.textTertiary, fontSize: t.type.body.fontSize, marginTop: t.spacing.xxl },
     })
