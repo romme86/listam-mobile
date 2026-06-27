@@ -182,11 +182,12 @@ function makeStyles(t: Theme) {
             gap: t.spacing.md,
         },
         // A real flex column between left/right (not an overlay) so the dots
-        // reserve their own centered space and can't paint over the status label.
-        // overflow:hidden clips any residual spill in extreme hierarchies.
+        // reserve their own space and can't paint over the status label. The dots
+        // are right-aligned (alignItems flex-end), sitting just before the right
+        // section; overflow:hidden clips any residual spill in extreme hierarchies.
         centerSection: {
             flex: 1,
-            alignItems: 'center',
+            alignItems: 'flex-end',
             justifyContent: 'center',
             paddingHorizontal: t.spacing.xs,
             overflow: 'hidden',
