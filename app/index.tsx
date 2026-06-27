@@ -1439,7 +1439,6 @@ function AppInner() {
                         onToggleDone={handleToggleDone}
                         onDelete={handleDelete}
                         onEdit={handleEditItem}
-                        onRequestMove={isTodo ? setMoveTarget : undefined}
                         onRequestAdd={handleRequestAdd}
                         onFlagToday={handleFlagToday}
                         onPlanFor={handlePlanFor}
@@ -1475,6 +1474,7 @@ function AppInner() {
                 onPickDay={(dateKey) => { if (planSheetItem) flagItemForDay(planSheetItem, dateKey); setPlanSheetItem(null) }}
                 onClear={() => { if (planSheetRef) clearPlanRef(planSheetRef); setPlanSheetItem(null) }}
                 onEdit={(text) => { if (planSheetItem) editPlanItemText(planSheetItem, text); setPlanSheetItem(null) }}
+                onMove={isTodo ? () => { setMoveTarget(planSheetItem); setPlanSheetItem(null) } : undefined}
                 onClose={() => setPlanSheetItem(null)}
             />
 
