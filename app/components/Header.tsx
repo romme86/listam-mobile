@@ -6,7 +6,6 @@ import { AnimatedIconButton } from './AnimatedIconButton'
 import { useTheme, type Theme } from '../theme'
 import { useReduceMotion } from '../hooks/useReduceMotion'
 import { useI18n } from '../i18n'
-import type { LoyaltyCardHandle } from '../store/loyaltyCardsSlice'
 import type { NetworkStatus } from '../store/syncSlice'
 import { deriveConnectionStatus } from './connectionStatus'
 
@@ -17,8 +16,6 @@ type HeaderProps = {
     isWorkletReady: boolean
     networkStatus: NetworkStatus
     isJoining: boolean
-    onShare: () => void
-    onJoin: () => void
     onMenuToggle: () => void
     onOverview: () => void
     overviewActive: boolean
@@ -26,9 +23,6 @@ type HeaderProps = {
     // boardEnabled). The sun button is only rendered once it's been activated.
     showOverview: boolean
     trialDaysRemaining?: number
-    loyaltyCards: LoyaltyCardHandle[]
-    onScanCard: () => void
-    onSelectCard: (card: LoyaltyCardHandle) => void
 }
 
 export function Header(props: HeaderProps) {
@@ -37,16 +31,11 @@ export function Header(props: HeaderProps) {
         isWorkletReady,
         networkStatus,
         isJoining,
-        onShare,
-        onJoin,
         onMenuToggle,
         onOverview,
         overviewActive,
         showOverview,
         trialDaysRemaining,
-        loyaltyCards,
-        onScanCard,
-        onSelectCard,
     } = props
 
     const t = useTheme()
@@ -55,7 +44,6 @@ export function Header(props: HeaderProps) {
     const styles = useMemo(() => makeStyles(t), [t])
 
     const peerCountLabel = peerCount > 99 ? '99+' : String(peerCount)
-    const primaryLoyaltyCard = loyaltyCards[0] ?? null
     const pulse = useRef(new Animated.Value(1)).current
 
     const status = deriveConnectionStatus(
@@ -133,21 +121,6 @@ export function Header(props: HeaderProps) {
                             />
                         </AnimatedIconButton>
                     )}
-
-                    <AnimatedIconButton
-                        style={styles.iconButton}
-                        onPress={() => (primaryLoyaltyCard ? onSelectCard(primaryLoyaltyCard) : onScanCard())}
-                    >
-                        <Ionicons name="barcode-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
-                    </AnimatedIconButton>
-
-                    <AnimatedIconButton style={styles.iconButton} onPress={onShare}>
-                        <Ionicons name="share-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
-                    </AnimatedIconButton>
-
-                    <AnimatedIconButton style={styles.iconButton} onPress={onJoin}>
-                        <Ionicons name="person-add-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
-                    </AnimatedIconButton>
                 </View>
             </View>
         </SafeAreaView>

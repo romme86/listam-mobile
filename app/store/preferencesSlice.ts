@@ -1,5 +1,6 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import { isLocaleChoice, type LocaleChoice } from '@listam/i18n'
+import type { RegistryListView } from '@listam/domain/list-registry'
 import type { RootState } from './store'
 import type { ListAlignment, ListSpacing, SizeOption } from '../components/_types'
 import type { ItemIconVariant } from '../components/itemIconMap'
@@ -31,6 +32,13 @@ export type PreferencesState = {
     // as a synced peer-label (keyed by this device's own writer key) so other
     // peers can tell devices apart in the members screen. '' = unnamed.
     deviceName: string
+    // Device-local view overrides for the BUILT-IN surfaces (Groceries / Board /
+    // Todo, which all share listId 'default'). They carry no registry meta-item,
+    // so their per-surface view can't ride the synced registry the way user lists
+    // do — we persist it per-device, keyed by composite surface id (e.g.
+    // 'default:shopping'). Partial: merged over DEFAULT_VIEW at read time. This is
+    // what lets the categories toggle actually work on the built-in Spesa surface.
+    builtinViews: Record<string, Partial<RegistryListView>>
 }
 
 const initialState: PreferencesState = {
@@ -39,6 +47,7 @@ const initialState: PreferencesState = {
     defaultListId: null,
     boardEnabled: false,
     deviceName: '',
+    builtinViews: {},
 }
 
 const preferencesSlice = createSlice({
@@ -56,6 +65,9 @@ const preferencesSlice = createSlice({
             }
             if (typeof next.boardEnabled === 'boolean') state.boardEnabled = next.boardEnabled
             if (typeof next.deviceName === 'string') state.deviceName = next.deviceName
+            if (next.builtinViews && typeof next.builtinViews === 'object') {
+                state.builtinViews = next.builtinViews
+            }
         },
         localeChoiceSet(state, action: PayloadAction<LocaleChoice>) {
             state.localeChoice = isLocaleChoice(action.payload) ? action.payload : 'system'
@@ -71,6 +83,12 @@ const preferencesSlice = createSlice({
         },
         deviceNameSet(state, action: PayloadAction<string>) {
             state.deviceName = typeof action.payload === 'string' ? action.payload : ''
+        },
+        // Merge a partial view patch onto one built-in surface's device-local view.
+        builtinViewPatched(state, action: PayloadAction<{ surfaceId: string; patch: Partial<RegistryListView> }>) {
+            const { surfaceId, patch } = action.payload
+            if (!surfaceId || !patch || typeof patch !== 'object') return
+            state.builtinViews[surfaceId] = { ...(state.builtinViews[surfaceId] ?? {}), ...patch }
         },
     },
 })

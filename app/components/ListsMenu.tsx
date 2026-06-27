@@ -69,9 +69,13 @@ type Props = {
     // Single-list sharing: promote one list to its own shared base (shows a
     // co-edit invite), and additively join one shared list via an invite.
     onShareList: (listId: string) => void
+    // The whole-project (BlindPairing) join — replaces the local base.
+    onJoin: () => void
     onJoinList: () => void
     // When set as the menu opens, jump straight into that list's settings.
     initialListSettingsId?: string | null
+    // When the menu opens via the burger, jump straight to the settings view.
+    initialView?: 'lists' | 'settings'
     loyaltyCards: LoyaltyCardHandle[]
     onScanCard: () => void
     onSelectCard: (card: LoyaltyCardHandle) => void
@@ -103,8 +107,8 @@ export function ListsMenu(props: Props) {
         peerCount, isWorkletReady, networkStatus, isJoining, onManageMembers, onManageOwnedDevices, onPairLeaf,
         localeChoice, onLocaleChoiceChange, themeChoice, onThemeChoiceChange,
         boardEnabled, onToggleBoardEnabled, deviceName, onDeviceNameChange,
-        onChangeListView, onRenameList, onDeleteListItems, onShareList, onJoinList,
-        initialListSettingsId, loyaltyCards, onScanCard, onSelectCard,
+        onChangeListView, onRenameList, onDeleteListItems, onShareList, onJoin, onJoinList,
+        initialListSettingsId, initialView, loyaltyCards, onScanCard, onSelectCard,
         sendRPCWithReply, notify,
     } = props
 
@@ -143,8 +147,10 @@ export function ListsMenu(props: Props) {
         if (initialListSettingsId) {
             setSettingsListId(initialListSettingsId)
             setMenuView('listSettings')
+        } else if (initialView === 'settings') {
+            setMenuView('settings')
         }
-    }, [visible, initialListSettingsId])
+    }, [visible, initialListSettingsId, initialView])
 
     const status = deriveConnectionStatus(
         { networkStatus, isWorkletReady, isJoining, peerCount },
@@ -351,33 +357,24 @@ export function ListsMenu(props: Props) {
                                 })}
                             </ScrollView>
 
-                            <TouchableOpacity style={styles.newGroupBtn} onPress={onCreateGroup} accessibilityRole="button">
-                                <Ionicons name="add" size={16} color={t.colors.textSecondary} />
-                                <Text style={styles.newGroupLabel}>{i18n.t('lists.menu.newGroup')}</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.newGroupBtn} onPress={() => { onJoinList(); close() }} accessibilityRole="button">
-                                <Ionicons name="enter-outline" size={16} color={t.colors.textSecondary} />
-                                <Text style={styles.newGroupLabel}>{i18n.t('joinList.button')}</Text>
-                            </TouchableOpacity>
-
                             <View style={styles.utilityRow}>
                                 <TouchableOpacity style={styles.utilityBtn} onPress={() => onCreate('shopping')} accessibilityRole="button">
                                     <Ionicons name="cart-outline" size={20} color={t.colors.textSecondary} />
-                                    <Text style={styles.utilityLabel}>{i18n.t('lists.menu.newGrocery')}</Text>
+                                    <Text style={styles.utilityLabel} numberOfLines={2}>{i18n.t('lists.menu.createGrocery')}</Text>
                                 </TouchableOpacity>
                                 <TouchableOpacity style={styles.utilityBtn} onPress={() => onCreate(TODO_LIST_TYPE)} accessibilityRole="button">
                                     <Ionicons name="checkbox-outline" size={20} color={t.colors.textSecondary} />
-                                    <Text style={styles.utilityLabel}>{i18n.t('lists.menu.newTodo')}</Text>
+                                    <Text style={styles.utilityLabel} numberOfLines={2}>{i18n.t('lists.menu.createTodo')}</Text>
                                 </TouchableOpacity>
                                 {boardEnabled && (
                                     <TouchableOpacity style={styles.utilityBtn} onPress={() => onCreate(BOARD_WRITE_TYPE)} accessibilityRole="button">
                                         <Ionicons name="grid-outline" size={20} color={t.colors.textSecondary} />
-                                        <Text style={styles.utilityLabel}>{i18n.t('lists.menu.newBoard')}</Text>
+                                        <Text style={styles.utilityLabel} numberOfLines={2}>{i18n.t('lists.menu.createBoard')}</Text>
                                     </TouchableOpacity>
                                 )}
-                                <TouchableOpacity style={styles.utilityBtn} onPress={() => setMenuView('settings')} accessibilityRole="button">
-                                    <Ionicons name="settings-outline" size={20} color={t.colors.textSecondary} />
-                                    <Text style={styles.utilityLabel}>{i18n.t('lists.menu.settings')}</Text>
+                                <TouchableOpacity style={styles.utilityBtn} onPress={onCreateGroup} accessibilityRole="button">
+                                    <Ionicons name="add" size={20} color={t.colors.textSecondary} />
+                                    <Text style={styles.utilityLabel} numberOfLines={2}>{i18n.t('lists.menu.newGroup')}</Text>
                                 </TouchableOpacity>
                             </View>
                         </>
@@ -407,6 +404,16 @@ export function ListsMenu(props: Props) {
                                 <TouchableOpacity style={styles.actionRow} onPress={() => { onPairLeaf(); close() }} activeOpacity={0.6}>
                                     <Ionicons name="bluetooth-outline" size={20} color={t.colors.text} />
                                     <Text style={styles.actionLabel}>{i18n.t('leaf.section')}</Text>
+                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.actionRow} onPress={() => { onJoin(); close() }} activeOpacity={0.6}>
+                                    <Ionicons name="person-add-outline" size={20} color={t.colors.text} />
+                                    <Text style={styles.actionLabel}>{i18n.t('joinProject.button')}</Text>
+                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.actionRow} onPress={() => { onJoinList(); close() }} activeOpacity={0.6}>
+                                    <Ionicons name="enter-outline" size={20} color={t.colors.text} />
+                                    <Text style={styles.actionLabel}>{i18n.t('joinList.button')}</Text>
                                     <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
                                 </TouchableOpacity>
 
@@ -496,11 +503,6 @@ export function ListsMenu(props: Props) {
                                         // controls that make sense for a flat list.
                                         <>
                                             <Text style={styles.sectionLabel}>{i18n.t('lists.menu.sectionItems')}</Text>
-                                            <View style={styles.switchRow}>
-                                                <Ionicons name="add-circle-outline" size={20} color={t.colors.text} />
-                                                <Text style={styles.switchLabel}>{i18n.t('header.setting.showFab')}</Text>
-                                                <Switch value={listView.showFab} onValueChange={(v) => patchListView({ showFab: v })} trackColor={{ false: t.colors.border, true: t.colors.primary }} thumbColor={t.colors.surface} />
-                                            </View>
                                             <SegmentedSetting
                                                 title={i18n.t('header.setting.listTextSize')}
                                                 options={SIZE_OPTIONS}
@@ -550,11 +552,6 @@ export function ListsMenu(props: Props) {
                                             )}
 
                                             <Text style={styles.sectionLabel}>{i18n.t('lists.menu.sectionItems')}</Text>
-                                            <View style={styles.switchRow}>
-                                                <Ionicons name="add-circle-outline" size={20} color={t.colors.text} />
-                                                <Text style={styles.switchLabel}>{i18n.t('header.setting.showFab')}</Text>
-                                                <Switch value={listView.showFab} onValueChange={(v) => patchListView({ showFab: v })} trackColor={{ false: t.colors.border, true: t.colors.primary }} thumbColor={t.colors.surface} />
-                                            </View>
                                             <View style={styles.switchRow}>
                                                 <Ionicons name="pricetags-outline" size={20} color={t.colors.text} />
                                                 <Text style={styles.switchLabel}>{i18n.t('header.setting.categories')}</Text>
@@ -669,7 +666,9 @@ function makeStyles(t: Theme) {
         settingsContent: { paddingHorizontal: t.spacing.lg, paddingBottom: t.spacing.lg },
         group: { marginTop: t.spacing.sm, borderRadius: t.radius.md, borderWidth: 1, borderColor: 'transparent' },
         groupDropHover: { borderColor: t.colors.accent, backgroundColor: t.colors.surfaceAlt },
-        groupHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs, paddingHorizontal: t.spacing.lg, paddingVertical: t.spacing.xs },
+        // No padding of its own — the inner groupLabel supplies it, so an editable
+        // group header lines up at the same indent as the plain "Ungrouped" label.
+        groupHeaderRow: { flexDirection: 'row', alignItems: 'center' },
         groupLabel: {
             fontSize: t.type.caption.fontSize, fontWeight: '700', color: t.colors.textTertiary,
             textTransform: 'uppercase', letterSpacing: 0.6,
@@ -690,13 +689,6 @@ function makeStyles(t: Theme) {
         },
         rowName: { fontSize: t.type.body.fontSize, color: t.colors.text, flexShrink: 1 },
         rowShared: { marginLeft: t.spacing.xs },
-        newGroupBtn: {
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: t.spacing.xs,
-            marginHorizontal: t.spacing.lg, marginTop: t.spacing.sm, paddingVertical: t.spacing.sm,
-            borderRadius: t.radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: t.colors.border,
-            borderStyle: 'dashed',
-        },
-        newGroupLabel: { fontSize: t.type.label.fontSize, fontWeight: '600', color: t.colors.textSecondary },
         utilityRow: {
             flexDirection: 'row', marginTop: t.spacing.md, paddingTop: t.spacing.md,
             paddingHorizontal: t.spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.colors.border,

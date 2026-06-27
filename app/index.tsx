@@ -122,6 +122,27 @@ const PREF_DEFAULT_LIST = '@lista_default_list'
 const PREF_BOARD_ENABLED = '@lista_board_enabled'
 const PREF_DEVICE_NAME = '@lista_device_name'
 const PREF_BACKUP_PROMPTED = '@lista_backup_prompted'
+const PREF_BUILTIN_VIEWS = '@lista_builtin_views'
+
+// Parse the persisted built-in-surface view map; tolerate absent/corrupt JSON.
+// Keep only well-formed per-surface entries so one corrupt value can't shadow a
+// surface's real override.
+function parseBuiltinViews(raw: string | null): Record<string, Partial<RegistryListView>> | null {
+    if (!raw) return null
+    try {
+        const value = JSON.parse(raw)
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+        const clean: Record<string, Partial<RegistryListView>> = {}
+        for (const [id, view] of Object.entries(value)) {
+            if (view && typeof view === 'object' && !Array.isArray(view)) {
+                clean[id] = view as Partial<RegistryListView>
+            }
+        }
+        return clean
+    } catch {
+        return null
+    }
+}
 
 // Max gap between the two taps of a double-tap-to-add gesture.
 const DOUBLE_TAP_MS = 300
@@ -133,7 +154,7 @@ function AppInner() {
     const snackbar = useSnackbar()
     const reduceMotion = useReduceMotion()
     const dispatch = useAppDispatch()
-    const { localeChoice, themeChoice, defaultListId, boardEnabled, deviceName } = useAppSelector(selectPreferences)
+    const { localeChoice, themeChoice, defaultListId, boardEnabled, deviceName, builtinViews } = useAppSelector(selectPreferences)
     const peerLabels = useAppSelector(selectPeerLabels)
     // List PRESENTATION settings are per-list and synced (registry meta-item),
     // not global — sourced from the currently-selected list.
@@ -162,7 +183,6 @@ function AppInner() {
 
     const {
         dataList,
-        autobaseInviteKey,
         peerCount,
         isWorkletReady,
         isJoining,
@@ -229,6 +249,9 @@ function AppInner() {
     const [isAdding, setIsAdding] = useState(false)
     const [addText, setAddText] = useState('')
     const [listsMenuVisible, setListsMenuVisible] = useState(false)
+    // Which sub-view the lists menu opens in: the burger jumps to 'settings',
+    // the list-name strip opens the 'lists' switcher.
+    const [menuInitialView, setMenuInitialView] = useState<'lists' | 'settings'>('lists')
     // The day-plan Overview is an OPT-IN organization capability, gated behind the
     // same toggle as boards (preferences.boardEnabled). By default the app is just
     // a grocery + to-do list app, so the Overview is off: the app launches straight
@@ -309,7 +332,7 @@ function AppInner() {
                 i18n.t('backup.auto.joinNeedsPassword'),
                 [
                     { text: i18n.t('common.cancel'), style: 'cancel' },
-                    { text: i18n.t('lists.menu.title'), onPress: () => { setPendingListSettingsId(null); setListsMenuVisible(true) } },
+                    { text: i18n.t('lists.menu.title'), onPress: () => { setMenuInitialView('lists'); setPendingListSettingsId(null); setListsMenuVisible(true) } },
                 ],
             )
             return false
@@ -387,13 +410,16 @@ function AppInner() {
             PREF_DEFAULT_LIST,
             PREF_BOARD_ENABLED,
             PREF_DEVICE_NAME,
-        ]).then(([[, localeChoice], [, themeChoice], [, defaultList], [, boardEnabled], [, deviceName]]) => {
+            PREF_BUILTIN_VIEWS,
+        ]).then(([[, localeChoice], [, themeChoice], [, defaultList], [, boardEnabled], [, deviceName], [, builtinViewsRaw]]) => {
+            const parsedBuiltinViews = parseBuiltinViews(builtinViewsRaw)
             dispatch(preferencesActions.preferencesHydrated({
                 ...(isLocaleChoice(localeChoice) ? { localeChoice } : {}),
                 ...(isThemeChoice(themeChoice) ? { themeChoice } : {}),
                 ...(defaultList !== null ? { defaultListId: defaultList } : {}),
                 ...(boardEnabled === '1' || boardEnabled === '0' ? { boardEnabled: boardEnabled === '1' } : {}),
                 ...(deviceName !== null ? { deviceName } : {}),
+                ...(parsedBuiltinViews ? { builtinViews: parsedBuiltinViews } : {}),
             }))
         })
 
@@ -415,10 +441,16 @@ function AppInner() {
     const writeListView = useCallback((listId: string, patch: Partial<RegistryListView>) => {
         const rec = lib.listsById[listId]
         if (!rec) return
-        // Built-in surfaces have no registry meta-item to carry per-list view
-        // overrides; they use the default view on mobile. Skip to avoid writing a
-        // phantom registry list under the composite id.
-        if (isBuiltinSurfaceId(rec.id)) return
+        // Built-in surfaces share listId 'default' and have no registry meta-item,
+        // so their view can't ride the synced registry (writing one would surface a
+        // phantom list under the composite id). Persist it per-device instead, so
+        // toggles like categories actually work on the built-in Spesa surface.
+        if (isBuiltinSurfaceId(rec.id)) {
+            const next = { ...builtinViews, [rec.id]: { ...(builtinViews[rec.id] ?? {}), ...patch } }
+            dispatch(preferencesActions.builtinViewPatched({ surfaceId: rec.id, patch }))
+            void AsyncStorage.setItem(PREF_BUILTIN_VIEWS, JSON.stringify(next))
+            return
+        }
         const now = Date.now()
         const view = { ...DEFAULT_VIEW, ...(rec.view ?? {}), ...patch }
         const meta = buildListMetaItem({
@@ -431,7 +463,7 @@ function AppInner() {
             updatedAt: now,
         })
         sendRPC(RPC_UPDATE, JSON.stringify({ item: meta }))
-    }, [lib, sendRPC])
+    }, [lib, sendRPC, builtinViews, dispatch])
 
     // Rename a list/board: re-emit its meta-item with a new name (mirrors
     // handleRenameGroup). Preserves type/group/order/view.
@@ -608,7 +640,7 @@ function AppInner() {
                 i18n.t('backup.auto.required'),
                 [
                     { text: i18n.t('common.cancel'), style: 'cancel' },
-                    { text: i18n.t('lists.menu.title'), onPress: () => { setPendingListSettingsId(null); setListsMenuVisible(true) } },
+                    { text: i18n.t('lists.menu.title'), onPress: () => { setMenuInitialView('lists'); setPendingListSettingsId(null); setListsMenuVisible(true) } },
                 ],
             )
         }).catch(() => { /* non-fatal */ })
@@ -1071,25 +1103,6 @@ function AppInner() {
         return false
     }, [isAdding, handleRequestAdd])
 
-    const handleShare = useCallback(async () => {
-        if (!autobaseInviteKey) {
-            snackbar.show(isWorkletReady ? i18n.t('invite.share.ownerOnly') : i18n.t('invite.share.notReady'))
-            return
-        }
-        try {
-            const inviteLink = `https://listam.ch/join?invite=${encodeURIComponent(autobaseInviteKey)}`
-            await Share.share({
-                message: i18n.t('invite.share.message', {
-                    inviteLink,
-                    inviteKey: autobaseInviteKey,
-                }),
-                title: i18n.t('invite.share.title'),
-            })
-        } catch {
-            snackbar.show(i18n.t('invite.share.failed'), 'error')
-        }
-    }, [autobaseInviteKey, i18n, isWorkletReady, snackbar])
-
     // Promote ONE list to its own shared base and offer its co-edit invite via
     // the OS share sheet. Others who join this invite get only this list.
     const handleShareList = useCallback(async (listId: string) => {
@@ -1286,16 +1299,11 @@ function AppInner() {
                 isWorkletReady={isWorkletReady}
                 networkStatus={networkStatus}
                 isJoining={isJoining}
-                onShare={handleShare}
-                onJoin={handleJoin}
-                onMenuToggle={() => { setPendingListSettingsId(null); setListsMenuVisible(true) }}
+                onMenuToggle={() => { setMenuInitialView('settings'); setPendingListSettingsId(null); setListsMenuVisible(true) }}
                 onOverview={() => setOverviewVisible((v) => !v)}
                 overviewActive={overviewOpen}
                 showOverview={boardEnabled}
                 trialDaysRemaining={subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
-                loyaltyCards={loyaltyCards}
-                onScanCard={() => setScannerVisible(true)}
-                onSelectCard={handleSelectCard}
             />
 
             {overviewOpen && (
@@ -1312,7 +1320,8 @@ function AppInner() {
                 <ListContextBar
                     listName={currentListName}
                     isDefault={defaultListId === currentId}
-                    onOpenMenu={() => { setPendingListSettingsId(null); setListsMenuVisible(true) }}
+                    onOpenMenu={() => { setMenuInitialView('lists'); setPendingListSettingsId(null); setListsMenuVisible(true) }}
+                    onBarcode={() => { const card = loyaltyCards[0]; if (card) { handleSelectCard(card) } else { setScannerVisible(true) } }}
                     onOpenListSettings={() => { setPendingListSettingsId(currentId); setListsMenuVisible(true) }}
                     onSetDefault={handleToggleDefaultList}
                 />
@@ -1398,8 +1407,10 @@ function AppInner() {
                 onRenameList={handleRenameList}
                 onDeleteListItems={handleDeleteListItems}
                 onShareList={handleShareList}
+                onJoin={handleJoin}
                 onJoinList={handleOpenJoinList}
                 initialListSettingsId={pendingListSettingsId}
+                initialView={menuInitialView}
                 loyaltyCards={loyaltyCards}
                 onScanCard={() => setScannerVisible(true)}
                 onSelectCard={handleSelectCard}

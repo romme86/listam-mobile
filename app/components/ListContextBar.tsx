@@ -8,6 +8,8 @@ type Props = {
     listName: string
     isDefault: boolean
     onOpenMenu: () => void
+    /** Scan a loyalty card, or open the primary saved card if there is one. */
+    onBarcode: () => void
     onOpenListSettings: () => void
     /** Set this list as the launch default — or clear it if it already is. */
     onSetDefault: () => void
@@ -17,7 +19,7 @@ type Props = {
 // opens the unified menu (the list switcher + app settings); the gear opens the
 // current board/list's own settings. The single star marks (and toggles) the
 // launch default: filled when this list is the default, outline otherwise.
-export function ListContextBar({ listName, isDefault, onOpenMenu, onOpenListSettings, onSetDefault }: Props) {
+export function ListContextBar({ listName, isDefault, onOpenMenu, onBarcode, onOpenListSettings, onSetDefault }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
@@ -31,7 +33,14 @@ export function ListContextBar({ listName, isDefault, onOpenMenu, onOpenListSett
                 accessibilityLabel={i18n.t('lists.menu.title')}
             >
                 <Text style={styles.name} numberOfLines={1}>{listName}</Text>
-                <Ionicons name="chevron-down" size={16} color={t.colors.textTertiary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+                onPress={onBarcode}
+                hitSlop={12}
+                accessibilityRole="button"
+                accessibilityLabel={i18n.t('header.section.loyaltyCards')}
+            >
+                <Ionicons name="barcode-outline" size={18} color={t.colors.textTertiary} />
             </TouchableOpacity>
             <TouchableOpacity
                 onPress={onSetDefault}
