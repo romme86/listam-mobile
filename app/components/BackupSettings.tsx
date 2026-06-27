@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import {
-    Modal, View, Text, TextInput, TouchableOpacity, Share, StyleSheet, ActivityIndicator,
+    Modal, View, Text, TextInput, TouchableOpacity, Share, StyleSheet, ActivityIndicator, Switch,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import * as FileSystem from 'expo-file-system/legacy'
 import { useTheme, type Theme } from '../theme'
-import { useI18n } from '../i18n'
+import { useI18n, type MessageKey } from '../i18n'
 import {
     RPC_EXPORT_DATA, RPC_EXPORT_SEED, RPC_IMPORT,
     RPC_LIST_BACKUPS, RPC_RESTORE_BACKUP, RPC_SET_BACKUP_PASSWORD,
+    RPC_SET_BACKUP_SCHEDULE,
 } from '@listam/protocol'
 
 type SendReply = (command: number, payload?: string) => Promise<string | null>
@@ -20,6 +21,19 @@ type Mode = 'export-data' | 'export-seed' | 'import' | 'set-password' | 'restore
 type ModalState = { mode: Mode; fileText?: string; fileKind?: string; file?: string }
 type AutoBackup = { file: string; createdAt: number }
 
+// The rolling-backup schedule mirrored from RPC_LIST_BACKUPS. The backend owns
+// the cadences and the persisted enabled flag; this is the render source of truth.
+type ScheduleTier = { reason: string; label: string; intervalMs: number; lastAt: number | null }
+type BackupSchedule = { enabled: boolean; passwordSet: boolean; tiers: ScheduleTier[] }
+
+// Localized label per fixed cadence (the backend's English `label` is ignored in
+// favour of these so the row reads in the user's locale).
+const TIER_LABEL_KEY: Record<string, MessageKey> = {
+    'scheduled-15m': 'backup.schedule.tier.15m',
+    'scheduled-1d': 'backup.schedule.tier.1d',
+    'scheduled-1w': 'backup.schedule.tier.1w',
+}
+
 type Props = {
     sendRPCWithReply: SendReply
     notify: Notify
@@ -28,6 +42,20 @@ type Props = {
 function parseReply(reply: string | null): any {
     if (!reply) return null
     try { return JSON.parse(reply) } catch { return null }
+}
+
+// Compact elapsed-time string for the "{time} ago" tier label (e.g. "5m", "2h",
+// "3d"). Kept locale-neutral on purpose — only the surrounding sentence ("Last
+// backup: … ago") is translated.
+function elapsedShort(sinceMs: number): string {
+    const secs = Math.max(0, Math.round((Date.now() - sinceMs) / 1000))
+    if (secs < 60) return `${secs}s`
+    const mins = Math.round(secs / 60)
+    if (mins < 60) return `${mins}m`
+    const hours = Math.round(mins / 60)
+    if (hours < 24) return `${hours}h`
+    const days = Math.round(hours / 24)
+    return `${days}d`
 }
 
 // Encrypted backup / restore rows for the global settings menu. All crypto and
@@ -46,14 +74,37 @@ export function BackupSettings({ sendRPCWithReply, notify }: Props) {
     // Automatic pre-join backups: whether a backup password is set, and the list.
     const [passwordSet, setPasswordSet] = useState<boolean | null>(null)
     const [autoBackups, setAutoBackups] = useState<AutoBackup[]>([])
+    // The rolling-backup schedule, mirrored from RPC_LIST_BACKUPS (backend is the
+    // source of truth). null until the first load.
+    const [schedule, setSchedule] = useState<BackupSchedule | null>(null)
+    const [scheduleBusy, setScheduleBusy] = useState(false)
 
     const loadBackups = useCallback(async () => {
         const res = parseReply(await sendRPCWithReply(RPC_LIST_BACKUPS))
         if (res?.ok) {
             setPasswordSet(!!res.passwordSet)
             setAutoBackups(Array.isArray(res.backups) ? res.backups : [])
+            const s = res.schedule
+            if (s && typeof s === 'object') {
+                setSchedule({
+                    enabled: !!s.enabled,
+                    passwordSet: !!s.passwordSet,
+                    tiers: Array.isArray(s.tiers) ? (s.tiers as ScheduleTier[]) : [],
+                })
+            }
         }
     }, [sendRPCWithReply])
+
+    // Toggle the whole rolling schedule on/off. The backend persists the choice
+    // (device-local) and (re)starts/stops its scheduler; we re-read to reflect it.
+    const setScheduleEnabled = useCallback(async (enabled: boolean) => {
+        // Optimistic flip so the Switch tracks the press; loadBackups reconciles.
+        setSchedule((prev) => (prev ? { ...prev, enabled } : prev))
+        setScheduleBusy(true)
+        await sendRPCWithReply(RPC_SET_BACKUP_SCHEDULE, JSON.stringify({ enabled }))
+        await loadBackups()
+        setScheduleBusy(false)
+    }, [sendRPCWithReply, loadBackups])
 
     useEffect(() => { void loadBackups() }, [loadBackups])
 
@@ -248,6 +299,47 @@ export function BackupSettings({ sendRPCWithReply, notify }: Props) {
                 ))
             )}
 
+            {/* Scheduled (rolling) backups: three fixed cadences, on/off toggle.
+                Encryption reuses the same backup password, so this is gated on a
+                password being set, exactly like the pre-join auto-backups above. */}
+            <Text style={styles.sectionLabel}>{i18n.t('backup.schedule.section')}</Text>
+            <Text style={styles.sectionNote}>{i18n.t('backup.schedule.desc')}</Text>
+            {passwordSet === false ? (
+                <Text style={styles.sectionNote}>{i18n.t('backup.schedule.required')}</Text>
+            ) : (
+                <>
+                    <View style={styles.switchRow}>
+                        <Ionicons name="repeat-outline" size={20} color={t.colors.text} />
+                        <Text style={styles.switchLabel}>{i18n.t('backup.schedule.section')}</Text>
+                        <Switch
+                            value={!!schedule?.enabled}
+                            onValueChange={(v) => { void setScheduleEnabled(v) }}
+                            disabled={scheduleBusy || schedule == null}
+                            trackColor={{ false: t.colors.border, true: t.colors.primary }}
+                            thumbColor={t.colors.surface}
+                        />
+                    </View>
+                    {(schedule?.tiers ?? []).map((tier) => {
+                        const labelKey = TIER_LABEL_KEY[tier.reason]
+                        return (
+                            <View key={tier.reason} style={styles.actionRow}>
+                                <Ionicons name="time-outline" size={20} color={t.colors.textSecondary} />
+                                <View style={styles.tierText}>
+                                    <Text style={styles.tierLabel} numberOfLines={1}>
+                                        {labelKey ? i18n.t(labelKey) : tier.label}
+                                    </Text>
+                                    <Text style={styles.tierStatus} numberOfLines={1}>
+                                        {tier.lastAt
+                                            ? i18n.t('backup.schedule.tier.last', { time: elapsedShort(tier.lastAt) })
+                                            : i18n.t('backup.schedule.tier.never')}
+                                    </Text>
+                                </View>
+                            </View>
+                        )
+                    })}
+                </>
+            )}
+
             <Modal visible={modal != null} transparent animationType="fade" onRequestClose={closeModal}>
                 <View style={styles.backdrop}>
                     <View style={styles.card}>
@@ -325,6 +417,11 @@ function makeStyles(t: Theme) {
         actionLabel: { flex: 1, fontSize: t.type.bodyStrong.fontSize, color: t.colors.text },
         backupDate: { flex: 1, fontSize: t.type.body.fontSize, color: t.colors.text },
         restoreLink: { fontSize: t.type.bodyStrong.fontSize, fontWeight: '600', color: t.colors.primary },
+        switchRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md, paddingVertical: t.spacing.sm, minHeight: 44 },
+        switchLabel: { flex: 1, fontSize: t.type.bodyStrong.fontSize, color: t.colors.text },
+        tierText: { flex: 1, gap: 2 },
+        tierLabel: { fontSize: t.type.body.fontSize, color: t.colors.text },
+        tierStatus: { fontSize: t.type.caption.fontSize, color: t.colors.textSecondary },
         backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: t.spacing.xl },
         card: { backgroundColor: t.colors.surface, borderRadius: t.radius.lg, padding: t.spacing.xl, gap: t.spacing.md },
         cardTitle: { fontSize: t.type.title.fontSize, fontWeight: t.type.title.fontWeight, color: t.colors.text },
