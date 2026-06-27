@@ -1469,7 +1469,6 @@ function AppInner() {
                         tickets={dataList}
                         config={boardConfig}
                         onOpenTicket={handleOpenTicket}
-                        onCreate={() => setCreateTicketVisible(true)}
                     />
                 ) : isGridView ? (
                     <VisualGridList
