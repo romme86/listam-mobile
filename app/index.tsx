@@ -68,7 +68,6 @@ import { computeReorder, sortByOrder } from '@listam/domain/ordering'
 import { identityKey, DEFAULT_LIST_TYPE, DEFAULT_LIST_ID, decodeSurface, isTodoType } from './listProjection'
 import { AddItemBar } from './components/AddItemBar'
 import { Fab } from './components/Fab'
-import { SummaryBar } from './components/SummaryBar'
 import { ListsMenu } from './components/ListsMenu'
 import { MoveItemSheet } from './components/MoveItemSheet'
 import { ListContextBar } from './components/ListContextBar'
@@ -892,14 +891,22 @@ function AppInner() {
         haptics.success()
     }, [animate, categoriesEnabled, dataList, dispatch, i18n, sendRPC])
 
-    const handleClearCompleted = useCallback(() => {
-        const done = dataList.filter((item) => item.isDone)
+    // Clear the completed items from a specific list (the action now lives in
+    // that list's settings rather than a bottom bar, so it must target listId,
+    // not the visible list — mirrors handleDeleteListItems).
+    const handleClearListCompleted = useCallback((listId: string) => {
+        const items = selectItemsForList(store.getState(), listId)
+        const done = items.filter((item) => item.isDone)
         if (done.length === 0) return
         animate()
-        dispatch(listsActions.selectedListItemsReplaced(dataList.filter((item) => !item.isDone)))
         done.forEach((item) => sendRPC(RPC_DELETE, JSON.stringify({ item })))
+        dispatch(listsActions.selectedListItemsReplaced({
+            listId,
+            listType: lib.listsById[listId]?.type,
+            items: items.filter((item) => !item.isDone),
+        }))
         haptics.success()
-    }, [animate, dataList, dispatch, sendRPC])
+    }, [animate, dispatch, lib, sendRPC])
 
     // When a board list opens, fetch its owner-signed config (rigor mode + states).
     useEffect(() => {
@@ -1299,9 +1306,6 @@ function AppInner() {
         )
     }, [animate, dispatch, i18n, lib, sendRPC])
 
-    const remaining = dataList.reduce((acc, item) => acc + (item.isDone ? 0 : 1), 0)
-    const doneCount = dataList.length - remaining
-
     // Show paywall if trial expired and not subscribed
     if (subscription.shouldShowPaywall) {
         return (
@@ -1338,6 +1342,8 @@ function AppInner() {
                 overviewActive={overviewOpen}
                 showOverview={boardEnabled}
                 trialDaysRemaining={subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
+                positionCount={position?.groupSize ?? 0}
+                positionIndex={position?.indexInGroup ?? 0}
             />
 
             {overviewOpen && (
@@ -1356,6 +1362,7 @@ function AppInner() {
                     isDefault={defaultListId === currentId}
                     onOpenMenu={() => { setMenuInitialView('lists'); setPendingListSettingsId(null); setListsMenuVisible(true) }}
                     onBarcode={() => { const card = loyaltyCards[0]; if (card) { handleSelectCard(card) } else { setScannerVisible(true) } }}
+                    showBarcode={!isTodo && !isBoard}
                     onOpenListSettings={() => { setPendingListSettingsId(currentId); setListsMenuVisible(true) }}
                     onSetDefault={handleToggleDefaultList}
                 />
@@ -1440,6 +1447,7 @@ function AppInner() {
                 onChangeListView={writeListView}
                 onRenameList={handleRenameList}
                 onDeleteListItems={handleDeleteListItems}
+                onClearDone={handleClearListCompleted}
                 onShareList={handleShareList}
                 onJoin={handleJoin}
                 onJoinList={handleOpenJoinList}
@@ -1498,16 +1506,6 @@ function AppInner() {
                 )}
             </View>
             </ListSwipePager>
-            )}
-
-            {!overviewOpen && !isBoard && (
-                <SummaryBar
-                    remaining={remaining}
-                    doneCount={doneCount}
-                    onClearCompleted={handleClearCompleted}
-                    positionCount={position?.groupSize ?? 0}
-                    positionIndex={position?.indexInGroup ?? 0}
-                />
             )}
 
             {!overviewOpen && !isAdding && showFab && !isBoard && <Fab onPress={handleRequestAdd} bottomOffset={insets.bottom + 20} />}

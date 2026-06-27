@@ -66,6 +66,8 @@ type Props = {
     onChangeListView: (listId: string, patch: Partial<RegistryListView>) => void
     onRenameList: (listId: string, name: string) => void
     onDeleteListItems: (listId: string) => void
+    // Clear the completed items from one list (moved out of the bottom summary).
+    onClearDone: (listId: string) => void
     // Single-list sharing: promote one list to its own shared base (shows a
     // co-edit invite), and additively join one shared list via an invite.
     onShareList: (listId: string) => void
@@ -107,7 +109,7 @@ export function ListsMenu(props: Props) {
         peerCount, isWorkletReady, networkStatus, isJoining, onManageMembers, onManageOwnedDevices, onPairLeaf,
         localeChoice, onLocaleChoiceChange, themeChoice, onThemeChoiceChange,
         boardEnabled, onToggleBoardEnabled, deviceName, onDeviceNameChange,
-        onChangeListView, onRenameList, onDeleteListItems, onShareList, onJoin, onJoinList,
+        onChangeListView, onRenameList, onDeleteListItems, onClearDone, onShareList, onJoin, onJoinList,
         initialListSettingsId, initialView, loyaltyCards, onScanCard, onSelectCard,
         sendRPCWithReply, notify,
     } = props
@@ -609,6 +611,13 @@ export function ListsMenu(props: Props) {
                                                 </TouchableOpacity>
                                             )}
                                         </>
+                                    )}
+
+                                    {!settingsIsBoard && (
+                                        <TouchableOpacity style={styles.actionRow} onPress={() => onClearDone(settingsList.id)} activeOpacity={0.6}>
+                                            <Ionicons name="checkmark-done-outline" size={20} color={t.colors.text} />
+                                            <Text style={styles.actionLabel}>{i18n.t('main.summary.clearDone')}</Text>
+                                        </TouchableOpacity>
                                     )}
 
                                     <Text style={styles.sectionLabel}>{i18n.t('header.section.dangerZone')}</Text>
