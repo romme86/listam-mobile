@@ -3,8 +3,10 @@ import {
     isLabelItem,
     isPeerLabelItem,
     isSurfaceLabelItem,
+    isBuiltinGroupItem,
     reducePeerLabels,
     reduceSurfaceLabels,
+    reduceBuiltinGroups,
 } from '@listam/domain'
 import type { RootState } from './store'
 import type { ListEntry } from '../components/_types'
@@ -68,4 +70,11 @@ export const selectPeerLabels = createSelector(selectLabelItems, (items) =>
 // surfaceKey ('listId:type') -> human name
 export const selectSurfaceLabels = createSelector(selectLabelItems, (items) =>
     reduceSurfaceLabels(items.filter(isSurfaceLabelItem)),
+)
+
+// surfaceKey ('listId:type') -> groupId: which group each built-in surface is
+// filed into. Synced (desktop drag / migration) so a joined device shows the
+// built-ins in the same group as desktop instead of Ungrouped.
+export const selectBuiltinGroups = createSelector(selectLabelItems, (items) =>
+    reduceBuiltinGroups(items.filter(isBuiltinGroupItem)),
 )

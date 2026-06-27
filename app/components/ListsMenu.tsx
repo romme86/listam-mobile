@@ -13,7 +13,7 @@ import { isTodoType, TODO_LIST_TYPE } from '@listam/domain/identity'
 import { UNGROUPED_GROUP_ID } from '@listam/domain/list-nav'
 import type { RegistryListView } from '@listam/domain/list-registry'
 import type { GroupedLists } from '../store/registrySelectors'
-import { DEFAULT_VIEW } from '../store/registrySelectors'
+import { DEFAULT_VIEW, isBuiltinSurfaceId, builtinSurfaceNameKey } from '../store/registrySelectors'
 import type { LoyaltyCardHandle } from '../store/loyaltyCardsSlice'
 import type { NetworkStatus } from '../store/syncSlice'
 import { deriveConnectionStatus } from './connectionStatus'
@@ -110,6 +110,11 @@ export function ListsMenu(props: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
+
+    // A list's display name: its (synced) name, else — for an un-renamed built-in
+    // surface — the localized fallback, else the raw id.
+    const surfaceName = (list: { id: string; name: string; type: string }) =>
+        list.name || (isBuiltinSurfaceId(list.id) ? i18n.t(builtinSurfaceNameKey(list.type)) : list.id)
     const [menuView, setMenuView] = useState<'lists' | 'settings' | 'listSettings'>('lists')
     const [settingsListId, setSettingsListId] = useState<string | null>(null)
     const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
@@ -299,7 +304,7 @@ export function ListsMenu(props: Props) {
                                                     <View
                                                         key={list.id}
                                                         style={[styles.row, isCurrent && styles.rowCurrent, isDragging && styles.rowDragging]}
-                                                        onTouchStart={rowTouchStart(list)}
+                                                        onTouchStart={rowTouchStart({ ...list, name: surfaceName(list) })}
                                                         onTouchMove={rowTouchMove}
                                                         onTouchEnd={rowTouchEnd}
                                                         onTouchCancel={rowTouchCancel}
@@ -312,7 +317,7 @@ export function ListsMenu(props: Props) {
                                                             <View style={styles.rowIcon}>
                                                                 <Ionicons name={typeIcon(list.type)} size={19} color={t.colors.textSecondary} />
                                                             </View>
-                                                            <Text style={styles.rowName} numberOfLines={1}>{list.name || list.id}</Text>
+                                                            <Text style={styles.rowName} numberOfLines={1}>{surfaceName(list)}</Text>
                                                             {list.baseKey ? (
                                                                 <Ionicons name="people" size={15} color={t.colors.textTertiary} accessibilityLabel={i18n.t('shareList.shared')} style={styles.rowShared} />
                                                             ) : null}
@@ -480,7 +485,7 @@ export function ListsMenu(props: Props) {
                                     <TextInput
                                         key={settingsList.id}
                                         style={styles.nameInput}
-                                        defaultValue={settingsList.name}
+                                        defaultValue={surfaceName(settingsList)}
                                         placeholder={i18n.t(settingsIsBoard ? 'lists.menu.boardNamePlaceholder' : 'lists.menu.listNamePlaceholder')}
                                         placeholderTextColor={t.colors.placeholder}
                                         returnKeyType="done"
@@ -594,17 +599,23 @@ export function ListsMenu(props: Props) {
                                         </>
                                     )}
 
-                                    <Text style={styles.sectionLabel}>{i18n.t('shareList.title')}</Text>
-                                    {settingsList.baseKey ? (
-                                        <View style={styles.actionRow}>
-                                            <Ionicons name="people" size={20} color={t.colors.textSecondary} />
-                                            <Text style={[styles.actionLabel, { color: t.colors.textSecondary }]}>{i18n.t('shareList.shared')}</Text>
-                                        </View>
-                                    ) : (
-                                        <TouchableOpacity style={styles.actionRow} onPress={() => onShareList(settingsList.id)} activeOpacity={0.6}>
-                                            <Ionicons name="share-social-outline" size={20} color={t.colors.text} />
-                                            <Text style={styles.actionLabel}>{i18n.t('shareList.button')}</Text>
-                                        </TouchableOpacity>
+                                    {/* Built-in surfaces share the 'default' base and can't be promoted
+                                        to their own shared base, so the share affordance is hidden for them. */}
+                                    {!isBuiltinSurfaceId(settingsList.id) && (
+                                        <>
+                                            <Text style={styles.sectionLabel}>{i18n.t('shareList.title')}</Text>
+                                            {settingsList.baseKey ? (
+                                                <View style={styles.actionRow}>
+                                                    <Ionicons name="people" size={20} color={t.colors.textSecondary} />
+                                                    <Text style={[styles.actionLabel, { color: t.colors.textSecondary }]}>{i18n.t('shareList.shared')}</Text>
+                                                </View>
+                                            ) : (
+                                                <TouchableOpacity style={styles.actionRow} onPress={() => onShareList(settingsList.id)} activeOpacity={0.6}>
+                                                    <Ionicons name="share-social-outline" size={20} color={t.colors.text} />
+                                                    <Text style={styles.actionLabel}>{i18n.t('shareList.button')}</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </>
                                     )}
 
                                     <Text style={styles.sectionLabel}>{i18n.t('header.section.dangerZone')}</Text>

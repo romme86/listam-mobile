@@ -57,7 +57,7 @@ try {
 after(() => fs.rmSync(buildDir, { recursive: true, force: true }))
 
 const { default: reducer, listsActions, selectSelectedListItems, selectItemsForList } = slice
-const { selectedListChanged, listItemAdded, selectedListItemsSynced } = listsActions
+const { selectedListChanged, listItemAdded, selectedListItemsSynced, selectedListItemsReplaced } = listsActions
 
 let seq = 0
 function makeEntry(over = {}) {
@@ -137,4 +137,47 @@ test('label items in a SYNC_LIST snapshot are filtered, real items still land', 
     // Only the genuine grocery item lands; neither label leaks into the list.
     assert.deepEqual(texts(selectItemsForList(store.getState(), 'default')), ['Milk'])
     assert.deepEqual(selectItemsForList(store.getState(), '__surfacenames__'), [])
+})
+
+// The built-in surfaces (Groceries/Board/Todo) all live on the shared 'default'
+// bucket and are selected via composite nav ids ('default:type'). The selectors
+// must split that bucket by surface type so the three never bleed together.
+test('a built-in surface selection splits the shared default bucket by type', () => {
+    const store = makeStore()
+    store.dispatch(listItemAdded(makeEntry({ text: 'Milk', listId: 'default', listType: 'shopping' })))
+    store.dispatch(listItemAdded(makeEntry({ text: 'Buy gift', listId: 'default', listType: 'todo' })))
+    store.dispatch(listItemAdded(makeEntry({ text: 'Ticket', listId: 'default', listType: 'kanban' })))
+
+    store.dispatch(selectedListChanged({ listId: 'default:shopping', listType: 'shopping' }))
+    assert.deepEqual(texts(selectSelectedListItems(store.getState())), ['Milk'])
+    store.dispatch(selectedListChanged({ listId: 'default:todo', listType: 'todo' }))
+    assert.deepEqual(texts(selectSelectedListItems(store.getState())), ['Buy gift'])
+    // Board is written with the legacy wire type 'kanban'; the canonical surface
+    // type 'board' must still match it (isBoardType dual-reads).
+    store.dispatch(selectedListChanged({ listId: 'default:board', listType: 'board' }))
+    assert.deepEqual(texts(selectSelectedListItems(store.getState())), ['Ticket'])
+})
+
+// Optimistic list replacements (toggle-done reorder, clear-completed) operate on
+// the visible, type-filtered surface. Surface-scoping the replace must keep the
+// OTHER surfaces' items, which share the 'default' bucket.
+test('replacing one built-in surface keeps the other surfaces intact', () => {
+    const store = makeStore()
+    store.dispatch(listItemAdded(makeEntry({ text: 'Milk', listId: 'default', listType: 'shopping' })))
+    store.dispatch(listItemAdded(makeEntry({ text: 'Buy gift', listId: 'default', listType: 'todo' })))
+
+    store.dispatch(selectedListChanged({ listId: 'default:shopping', listType: 'shopping' }))
+    store.dispatch(selectedListItemsReplaced([])) // e.g. clear-completed on groceries
+    assert.deepEqual(texts(selectSelectedListItems(store.getState())), [])
+    // The to-do surface's item survives the grocery replace.
+    store.dispatch(selectedListChanged({ listId: 'default:todo', listType: 'todo' }))
+    assert.deepEqual(texts(selectSelectedListItems(store.getState())), ['Buy gift'])
+})
+
+test('selectItemsForList resolves a composite surface id to its typed items', () => {
+    const store = makeStore()
+    store.dispatch(listItemAdded(makeEntry({ text: 'Milk', listId: 'default', listType: 'shopping' })))
+    store.dispatch(listItemAdded(makeEntry({ text: 'Buy gift', listId: 'default', listType: 'todo' })))
+    assert.deepEqual(texts(selectItemsForList(store.getState(), 'default:todo')), ['Buy gift'])
+    assert.deepEqual(texts(selectItemsForList(store.getState(), 'default:shopping')), ['Milk'])
 })
