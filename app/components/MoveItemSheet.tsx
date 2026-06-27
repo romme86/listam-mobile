@@ -8,6 +8,7 @@ import { isBoardType } from '@listam/domain/board'
 import { isTodoType } from '@listam/domain/identity'
 import type { GroupedLists } from '../store/registrySelectors'
 import type { ListEntry } from './_types'
+import { CloseDot } from './CloseDot'
 
 // The surface a (listId, type) renders as — board ('kanban'/'board'), todo, or
 // grocery. Used to exclude the source surface (built-ins share one listId, so
@@ -57,9 +58,7 @@ export function MoveItemSheet({ visible, item, groups, onMove, onClose }: Props)
                 <View style={styles.sheet}>
                     <View style={styles.header}>
                         <Text style={styles.title}>{i18n.t('move.title')}</Text>
-                        <TouchableOpacity onPress={onClose} hitSlop={10} accessibilityLabel={i18n.t('common.close')}>
-                            <Ionicons name="close" size={24} color={t.colors.text} />
-                        </TouchableOpacity>
+                        <CloseDot onPress={onClose} color={t.colors.text} accessibilityLabel={i18n.t('common.close')} />
                     </View>
                     {item ? <Text style={styles.subtitle}>{i18n.t('move.subtitle', { text: item.text })}</Text> : null}
 

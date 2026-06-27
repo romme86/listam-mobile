@@ -15,6 +15,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
+import { CloseDot } from './CloseDot'
 
 export type LoyaltyCard = {
     id: string
@@ -113,13 +114,13 @@ export function LoyaltyCardScanner({ visible, onClose, onCardScanned }: LoyaltyC
                     onBarcodeScanned={scannedData ? undefined : handleBarcodeScanned}
                 />
 
-                <TouchableOpacity
-                    style={[styles.closeButton, { top: insets.top + 12 }]}
+                <CloseDot
                     onPress={resetAndClose}
-                    accessibilityRole="button"
-                >
-                    <Ionicons name="close" size={28} color="#fff" />
-                </TouchableOpacity>
+                    style={[styles.closeButton, { top: insets.top + 12 }]}
+                    color="#fff"
+                    size={13}
+                    accessibilityLabel={i18n.t('common.close')}
+                />
 
                 {!scannedData && (
                     <View style={styles.hintContainer}>
