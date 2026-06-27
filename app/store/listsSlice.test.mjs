@@ -181,3 +181,13 @@ test('selectItemsForList resolves a composite surface id to its typed items', ()
     assert.deepEqual(texts(selectItemsForList(store.getState(), 'default:todo')), ['Buy gift'])
     assert.deepEqual(texts(selectItemsForList(store.getState(), 'default:shopping')), ['Milk'])
 })
+
+// A user-created list (registry meta id 'list-<base36>', no colon) must accept
+// items: select it, add an item carrying that listId, see it in the list.
+test('a freshly created non-default list accepts items', () => {
+    const store = makeStore()
+    store.dispatch(selectedListChanged({ listId: 'list-new1', listType: 'todo' }))
+    store.dispatch(listItemAdded(makeEntry({ text: 'First task', listId: 'list-new1', listType: 'todo' })))
+    assert.deepEqual(texts(selectSelectedListItems(store.getState())), ['First task'])
+    assert.deepEqual(texts(selectItemsForList(store.getState(), 'list-new1')), ['First task'])
+})
