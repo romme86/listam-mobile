@@ -1,13 +1,15 @@
 import { createSelector, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import type { RootState } from './store'
 import type { ListEntry } from '../components/_types'
-import { isLabelItem, isPlanItem, sortByOrder } from '@listam/domain'
+import { isLabelItem, isPlanItem, sortByOrder, surfaceLabelKey } from '@listam/domain'
 import { REGISTRY_LIST_TYPE } from '@listam/domain/list-registry'
 import {
     DEFAULT_LIST_ID,
     DEFAULT_LIST_TYPE,
+    decodeSurface,
     deleteListEntry,
     identityKey,
+    matchesSurfaceType,
     normalizeListEntries,
     updateListEntry,
     upsertListEntry,
@@ -15,6 +17,11 @@ import {
 
 export const DEFAULT_PROJECT_ID = 'personal'
 export const DEFAULT_FOLDER_ID = 'personal-root'
+
+// The grocery built-in surface's composite nav id — the default selection until
+// the launch effect applies the user's per-device default. (Items still live in
+// the real DEFAULT_LIST_ID bucket; only the nav id is composite.)
+export const DEFAULT_SURFACE_ID = surfaceLabelKey(DEFAULT_LIST_ID, DEFAULT_LIST_TYPE)
 
 export type ProjectRecord = {
     id: string
@@ -53,7 +60,7 @@ export type ListsState = {
 
 const initialState: ListsState = {
     selectedProjectId: DEFAULT_PROJECT_ID,
-    selectedListId: DEFAULT_LIST_ID,
+    selectedListId: DEFAULT_SURFACE_ID,
     projectIds: [DEFAULT_PROJECT_ID],
     projectsById: {
         [DEFAULT_PROJECT_ID]: {
@@ -101,11 +108,15 @@ const listsSlice = createSlice({
             action: PayloadAction<{ projectId?: string; listId: string; listType?: string }>,
         ) {
             const projectId = action.payload.projectId || state.selectedProjectId
-            const listId = action.payload.listId || DEFAULT_LIST_ID
+            const navId = action.payload.listId || DEFAULT_SURFACE_ID
+            // A built-in surface's nav id is composite ('default:type'); the real
+            // backend bucket is 'default'. Materialize the REAL bucket but remember
+            // the composite as the selection so the pager/menu highlight it.
+            const { listId } = decodeSurface(navId)
             ensureProject(state, projectId)
             ensureList(state, listId, action.payload.listType || DEFAULT_LIST_TYPE, projectId)
             state.selectedProjectId = projectId
-            state.selectedListId = listId
+            state.selectedListId = navId
         },
         selectedListItemsSynced(state, action: PayloadAction<ListEntry[] | ReplaceListItemsPayload>) {
             const payload = Array.isArray(action.payload)
@@ -127,11 +138,16 @@ const listsSlice = createSlice({
             const payload = Array.isArray(action.payload)
                 ? { items: action.payload }
                 : action.payload
+            // The payload is one surface's items (the visible, type-filtered list).
+            // Decode to the REAL bucket and surface-scope the replace, so replacing
+            // the grocery view never wipes the board/todo items in 'default'.
+            const { listId, listType } = decodeSurface(payload.listId || state.selectedListId)
             replaceListItems(
                 state,
-                payload.listId || state.selectedListId,
-                payload.listType || DEFAULT_LIST_TYPE,
+                listId,
+                payload.listType || listType || DEFAULT_LIST_TYPE,
                 payload.items,
+                listId === DEFAULT_LIST_ID ? listType : undefined,
             )
         },
         listItemAdded(state, action: PayloadAction<ListEntry>) {
@@ -144,7 +160,14 @@ const listsSlice = createSlice({
             applyItemProjection(state, action.payload, 'delete')
         },
         selectedListCleared(state) {
-            replaceListItems(state, state.selectedListId, DEFAULT_LIST_TYPE, [])
+            const { listId, listType } = decodeSurface(state.selectedListId)
+            replaceListItems(
+                state,
+                listId,
+                listType || DEFAULT_LIST_TYPE,
+                [],
+                listId === DEFAULT_LIST_ID ? listType : undefined,
+            )
         },
     },
 })
@@ -229,10 +252,22 @@ function replaceListItems(
     listId: string,
     listType: string,
     entries: ListEntry[],
+    // When set (only for the shared 'default' bucket), replace ONLY this surface's
+    // items and KEEP the other built-in surfaces' items, which share the bucket.
+    scopeType?: string,
 ) {
     const list = ensureList(state, listId, listType)
 
-    for (const itemId of list.itemIds) delete state.itemsById[itemId]
+    const scoped = listId === DEFAULT_LIST_ID && scopeType !== undefined
+    const keptIds: string[] = []
+    for (const itemId of list.itemIds) {
+        const existing = state.itemsById[itemId]
+        if (scoped && existing && !matchesSurfaceType(scopeType, existing)) {
+            keptIds.push(itemId) // a different built-in surface — leave it untouched
+        } else {
+            delete state.itemsById[itemId]
+        }
+    }
 
     // Label + plan meta-items ride the normal item pipeline but live in reserved
     // buckets — never project them into a list row.
@@ -246,7 +281,7 @@ function replaceListItems(
             })),
     )
 
-    const itemIds: string[] = []
+    const itemIds: string[] = [...keptIds]
     for (const item of normalized) {
         const itemId = identityKey(item)
         state.itemsById[itemId] = item
@@ -315,15 +350,19 @@ export const selectSelectedListId = createSelector(
 )
 
 // Items belonging to an arbitrary list (not just the selected one) — used by the
-// per-board/list settings screen's "delete all" action.
-export const selectItemsForList = (state: RootState, listId: string): ListEntry[] => {
+// per-board/list settings screen's "delete all" action. A built-in surface's
+// composite id resolves to the real 'default' bucket, filtered to that surface.
+export const selectItemsForList = (state: RootState, navId: string): ListEntry[] => {
+    const { listId, listType } = decodeSurface(navId)
     const list = state.lists.listsById[listId]
     if (!list) return []
-    return sortByOrder(
-        list.itemIds
-            .map((itemId) => state.lists.itemsById[itemId])
-            .filter((item): item is ListEntry => Boolean(item)),
-    )
+    const items = list.itemIds
+        .map((itemId) => state.lists.itemsById[itemId])
+        .filter((item): item is ListEntry => Boolean(item))
+    const scoped = listId === DEFAULT_LIST_ID
+        ? items.filter((item) => matchesSurfaceType(listType, item))
+        : items
+    return sortByOrder(scoped)
 }
 
 // Items of the selected list in display order: insertion order with the user's
@@ -331,13 +370,19 @@ export const selectItemsForList = (state: RootState, listId: string): ListEntry[
 export const selectSelectedListItems = createSelector(
     selectListsState,
     (state) => {
-        const list = state.listsById[state.selectedListId]
+        // For a built-in surface the selection is a composite id over the shared
+        // 'default' bucket — read the real bucket and keep only this surface's
+        // typed items so grocery/board/todo never bleed into one another.
+        const { listId, listType } = decodeSurface(state.selectedListId)
+        const list = state.listsById[listId]
         if (!list) return []
-        return sortByOrder(
-            list.itemIds
-                .map((itemId) => state.itemsById[itemId])
-                .filter((item): item is ListEntry => Boolean(item)),
-        )
+        const items = list.itemIds
+            .map((itemId) => state.itemsById[itemId])
+            .filter((item): item is ListEntry => Boolean(item))
+        const scoped = listId === DEFAULT_LIST_ID
+            ? items.filter((item) => matchesSurfaceType(listType, item))
+            : items
+        return sortByOrder(scoped)
     },
 )
 

@@ -64,7 +64,7 @@ import { VisualGridList } from './components/VisualGridList'
 import { CategoryDragProvider } from './components/CategoryDrag'
 import { getDisplayCategoryName, groupByCategory } from './components/categoryGrouping'
 import { computeReorder, sortByOrder } from '@listam/domain/ordering'
-import { identityKey, DEFAULT_LIST_TYPE, isTodoType } from './listProjection'
+import { identityKey, DEFAULT_LIST_TYPE, DEFAULT_LIST_ID, decodeSurface, isTodoType } from './listProjection'
 import { AddItemBar } from './components/AddItemBar'
 import { Fab } from './components/Fab'
 import { SummaryBar } from './components/SummaryBar'
@@ -76,12 +76,12 @@ import { BoardView } from './components/board/BoardView'
 import { TicketDetail } from './components/board/TicketDetail'
 import { CreateTicket, type TicketDraft } from './components/board/CreateTicket'
 import { useListPager } from './nav/useListPager'
-import { selectGroupedLists, selectCurrentListView, DEFAULT_VIEW } from './store/registrySelectors'
+import { selectGroupedLists, selectCurrentListView, DEFAULT_VIEW, isBuiltinSurfaceId, builtinSurfaceNameKey } from './store/registrySelectors'
 import { selectBoardConfig } from './store/boardConfigSlice'
 import { selectPeerLabels } from './store/labelsSlice'
 import { buildListMetaItem, buildGroupMetaItem, type RegistryListView } from '@listam/domain/list-registry'
 import { UNGROUPED_GROUP_ID } from '@listam/domain/list-nav'
-import { buildPeerLabelItem, MAX_LABEL_NAME } from '@listam/domain'
+import { buildPeerLabelItem, buildSurfaceLabelItem, buildBuiltinGroupItem, MAX_LABEL_NAME } from '@listam/domain'
 import { BOARD_WRITE_TYPE, isBoardType, buildStatusChange, validateTicketDraft } from '@listam/domain/board'
 import {
     reducePlan,
@@ -182,6 +182,14 @@ function AppInner() {
     const { apply: applyLearnedCategories, learn: learnCategory } = useLearnedCategories()
     const { lib, currentId, position, commit } = useListPager()
     const currentListType = lib.listsById[currentId]?.type
+    // The current surface's display name: its synced rename, else the localized
+    // built-in fallback (a fresh, un-renamed built-in), else the raw id.
+    const currentListName = useMemo(() => {
+        const rec = lib.listsById[currentId]
+        if (rec?.name) return rec.name
+        if (isBuiltinSurfaceId(currentId)) return i18n.t(builtinSurfaceNameKey(decodeSurface(currentId).listType))
+        return currentId
+    }, [lib, currentId, i18n])
     const isBoard = isBoardType(currentListType)
     // Grocery items are NOT movable to other lists — the "move to another list"
     // affordance is offered only on to-do (and board) surfaces. A grocery list is
@@ -407,6 +415,10 @@ function AppInner() {
     const writeListView = useCallback((listId: string, patch: Partial<RegistryListView>) => {
         const rec = lib.listsById[listId]
         if (!rec) return
+        // Built-in surfaces have no registry meta-item to carry per-list view
+        // overrides; they use the default view on mobile. Skip to avoid writing a
+        // phantom registry list under the composite id.
+        if (isBuiltinSurfaceId(rec.id)) return
         const now = Date.now()
         const view = { ...DEFAULT_VIEW, ...(rec.view ?? {}), ...patch }
         const meta = buildListMetaItem({
@@ -428,6 +440,13 @@ function AppInner() {
         const trimmed = name.trim()
         if (!rec || !trimmed || trimmed === rec.name) return
         const now = Date.now()
+        // A built-in surface has no registry meta-item; its rename syncs via the
+        // surface-name label channel (keyed by the real listId+type), like desktop.
+        if (isBuiltinSurfaceId(rec.id)) {
+            const { listId: realId, listType } = decodeSurface(rec.id)
+            sendRPC(RPC_UPDATE, JSON.stringify({ item: buildSurfaceLabelItem({ listId: realId, type: listType, name: trimmed, updatedAt: now }) }))
+            return
+        }
         const meta = buildListMetaItem({
             id: rec.id,
             name: trimmed,
@@ -595,14 +614,19 @@ function AppInner() {
         }).catch(() => { /* non-fatal */ })
     }, [backupPasswordSet, i18n])
 
-    // Open the user's default list once on launch (per-device preference).
+    // Open the user's default list once on launch (per-device preference). A
+    // legacy bare 'default' maps to the grocery built-in surface's composite id so
+    // it resolves in the split nav (the three surfaces replaced raw 'default').
     const defaultLaunchedRef = useRef(false)
     useEffect(() => {
         if (!isWorkletReady || defaultLaunchedRef.current || !defaultListId) return
         defaultLaunchedRef.current = true
+        const launchId = defaultListId === DEFAULT_LIST_ID
+            ? `${DEFAULT_LIST_ID}:${DEFAULT_LIST_TYPE}`
+            : defaultListId
         dispatch(listsActions.selectedListChanged({
-            listId: defaultListId,
-            listType: lib.listsById[defaultListId]?.type,
+            listId: launchId,
+            listType: lib.listsById[launchId]?.type,
         }))
     }, [isWorkletReady, defaultListId, lib, dispatch])
 
@@ -655,7 +679,11 @@ function AppInner() {
         // A shared list's writes carry its baseKey so the backend routes them to
         // that base (UPDATE/DELETE/MOVE already carry it on the item).
         const baseKey = lib.listsById[currentId]?.baseKey || undefined
-        sendRPC(RPC_ADD, JSON.stringify({ text, listId: currentId, listType, baseKey }))
+        // A built-in surface's nav id is composite ('default:type'); the item must
+        // be written to the REAL 'default' bucket (with the surface's listType),
+        // never to a 'default:type' listId.
+        const listId = decodeSurface(currentId).listId
+        sendRPC(RPC_ADD, JSON.stringify({ text, listId, listType, baseKey }))
     }, [sendRPC, lib, currentId])
 
     const handleEditItem = useCallback((index: number, newText: string) => {
@@ -974,6 +1002,13 @@ function AppInner() {
         const moving = lib.listsById[listId]
         if (!moving) return
         if ((moving.groupId ?? null) === groupId) return
+        // A built-in surface's group placement syncs via the BUILTIN-GROUP channel
+        // (empty groupId = back to Ungrouped/general), not a registry meta-item.
+        if (isBuiltinSurfaceId(moving.id)) {
+            const { listId: realId, listType } = decodeSurface(moving.id)
+            sendRPC(RPC_UPDATE, JSON.stringify({ item: buildBuiltinGroupItem({ listId: realId, type: listType, groupId: groupId ?? '', updatedAt: Date.now() }) }))
+            return
+        }
         const destId = groupId ?? UNGROUPED_GROUP_ID
         const dest = groupedLists.find((x) => x.group.id === destId)
         const maxOrder = Math.max(0, ...(dest?.lists.map((l) => l.order ?? 0) ?? []))
@@ -1051,6 +1086,12 @@ function AppInner() {
     // Promote ONE list to its own shared base and offer its co-edit invite via
     // the OS share sheet. Others who join this invite get only this list.
     const handleShareList = useCallback(async (listId: string) => {
+        // The built-in surfaces share the 'default' base and can't be promoted to
+        // their own shared base (desktop blocks this too).
+        if (decodeSurface(listId).listId === DEFAULT_LIST_ID) {
+            snackbar.show(i18n.t('shareList.failed'), 'error')
+            return
+        }
         let result: { ok?: boolean; invite?: string } | null = null
         try {
             const reply = await sendRPCWithReply(RPC_SHARE_LIST, JSON.stringify({ listId }))
@@ -1262,7 +1303,7 @@ function AppInner() {
 
             {!overviewOpen && (
                 <ListContextBar
-                    listName={lib.listsById[currentId]?.name ?? currentId}
+                    listName={currentListName}
                     isDefault={defaultListId === currentId}
                     onOpenMenu={() => { setPendingListSettingsId(null); setListsMenuVisible(true) }}
                     onOpenListSettings={() => { setPendingListSettingsId(currentId); setListsMenuVisible(true) }}
@@ -1445,7 +1486,7 @@ function AppInner() {
                 visible={boardTicketId !== null && selectedTicket !== null}
                 ticket={selectedTicket}
                 config={boardConfig}
-                listName={lib.listsById[currentId]?.name ?? currentId}
+                listName={currentListName}
                 onUpdate={handleUpdateTicket}
                 onChangeStatus={handleChangeTicketStatus}
                 onRequestMove={(ticket) => { setBoardTicketId(null); setMoveTarget(ticket) }}
