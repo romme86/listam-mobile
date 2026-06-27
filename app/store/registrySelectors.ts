@@ -30,6 +30,9 @@ const selectListsState = (state: RootState) => state.lists
 const selectDefaultListId = (state: RootState) => state.preferences.defaultListId
 const selectBoardEnabled = (state: RootState) => state.preferences.boardEnabled
 const selectCurrentListId = (state: RootState) => state.lists.selectedListId
+// Device-local per-surface view overrides for the built-in surfaces (they can't
+// carry a synced registry meta-item, so this is where their view lives).
+const selectBuiltinViews = (state: RootState) => state.preferences.builtinViews
 
 export const selectRegistry = createSelector(selectListsState, (lists) => {
     const metaItems = Object.values(lists.itemsById).filter((it) => it.listType === REGISTRY_LIST_TYPE)
@@ -65,7 +68,8 @@ export const selectNavLibrary = createSelector(
     selectSurfaceLabels,
     selectBuiltinGroups,
     selectBoardEnabled,
-    (lists, registry, defaultListId, surfaceLabels, builtinGroups, boardEnabled): NavLibrary => {
+    selectBuiltinViews,
+    (lists, registry, defaultListId, surfaceLabels, builtinGroups, boardEnabled, builtinViews): NavLibrary => {
         const items = Object.values(lists.itemsById)
         const hasBoardOnDefault = items.some((it) => it.listId === DEFAULT_LIST_ID && isBoardType(it.listType))
         const builtinLists = BUILTIN_SURFACE_TYPES.filter(
@@ -80,6 +84,9 @@ export const selectNavLibrary = createSelector(
                 groupId: builtinGroups.get(key) || null,
                 order: i,
                 baseKey: null,
+                // Device-local view override (built-ins can't sync one); undefined
+                // when unset, so it falls through to DEFAULT_VIEW at read time.
+                view: builtinViews[key],
             }
         })
 
