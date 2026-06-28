@@ -132,7 +132,6 @@ export function Header(props: HeaderProps) {
                             accessibilityLabel={groupName ? `${i18n.t('lists.menu.title')}, ${groupName}` : i18n.t('lists.menu.title')}
                             accessibilityValue={groupSize > 1 ? { min: 1, max: groupSize, now: listIndex + 1 } : undefined}
                         >
-                            <Ionicons name="chevron-forward" size={14} color={t.colors.textTertiary} />
                             <PageDots groupCount={groupCount} groupIndex={groupIndex} groupSize={groupSize} listIndex={listIndex} groupName={groupName} />
                         </TouchableOpacity>
                     )}
@@ -193,14 +192,11 @@ function makeStyles(t: Theme) {
             paddingHorizontal: t.spacing.xs,
             overflow: 'hidden',
         },
-        // A leading chevron + the dots, in a 44pt tap target so the cluster reads
-        // as a button even when the indicator is a lone 8px dot.
+        // Guarantees a 44pt tap target even when the indicator is a lone 8px dot.
         listsButton: {
-            flexDirection: 'row',
+            minHeight: 44,
             alignItems: 'center',
             justifyContent: 'center',
-            gap: t.spacing.xs,
-            minHeight: 44,
         },
         iconButton: {
             padding: t.spacing.sm,
