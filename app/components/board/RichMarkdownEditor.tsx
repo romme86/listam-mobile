@@ -42,6 +42,10 @@ export function RichMarkdownEditor ({ initialMarkdown, onCommit, mode = 'block',
     // True once the editor reports real content, so a transient empty document
     // (emitted before the seeded content loads) can never clear a non-empty field.
     const seenContent = useRef(false)
+    // The last markdown actually handed to onCommit. Seeded with the incoming
+    // value (already the stored value) so re-emitting the unchanged seed on open
+    // is never mistaken for an edit, and the same text is never committed twice.
+    const committed = useRef(initialMarkdown)
     const onCommitRef = useRef(onCommit)
     onCommitRef.current = onCommit
 
@@ -52,18 +56,33 @@ export function RichMarkdownEditor ({ initialMarkdown, onCommit, mode = 'block',
         initialContent: seed(initialMarkdown, mode),
     })
 
-    // Live HTML from the webview -> markdown, kept in a ref (no re-render churn).
-    const html = useEditorContent(editor, { type: 'html', debounceInterval: 150 })
+    // Live HTML from the webview -> markdown. PERSIST on every settled change
+    // (lodash debounce fires on the trailing edge, ~once per typing pause), not
+    // only on unmount: tapping "Save" / switching block / closing the ticket
+    // unmounts this editor synchronously, but the webview delivers its content
+    // over an async bridge, so committing only on unmount dropped the last
+    // keystrokes of a quick edit — a brand-new block could even save empty. The
+    // markdown<->HTML bridge round-trips stably, so the unchanged seed never
+    // looks like an edit (md === committed guard); unmount is just a final flush.
+    const html = useEditorContent(editor, { type: 'html', debounceInterval: 250 })
     useEffect(() => {
         if (typeof html !== 'string') return
         const md = htmlToMarkdown(html)
         if (md !== '') seenContent.current = true
         if (md === '' && !seenContent.current) return
         latest.current = md
+        if (md === committed.current) return
+        committed.current = md
+        onCommitRef.current(md)
     }, [html])
 
-    // Persist on unmount — covers Save, switching block, and closing the ticket.
-    useEffect(() => () => onCommitRef.current(latest.current), [])
+    // Final flush on unmount — captures the last in-flight burst that may not
+    // have settled before Save/close (no-op if already committed live above).
+    useEffect(() => () => {
+        if (latest.current === committed.current) return
+        committed.current = latest.current
+        onCommitRef.current(latest.current)
+    }, [])
 
     // Match the app surface: transparent background + themed text/links.
     useEffect(() => {
