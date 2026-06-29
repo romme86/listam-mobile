@@ -64,6 +64,10 @@ type Props = {
     onDeviceNameChange: (name: string) => void
     // Per-board/list settings, addressed by listId so any list can be configured.
     onChangeListView: (listId: string, patch: Partial<RegistryListView>) => void
+    // Value-return enable flag (synced per-surface), addressed by the surface's
+    // nav id (composite for built-ins) + its canonical type.
+    valueReturnFor: (surfaceId: string, type: string) => boolean
+    onSetValueReturn: (surfaceId: string, type: string, enabled: boolean) => void
     onRenameList: (listId: string, name: string) => void
     onDeleteListItems: (listId: string) => void
     // Clear the completed items from one list (moved out of the bottom summary).
@@ -109,7 +113,7 @@ export function ListsMenu(props: Props) {
         peerCount, isWorkletReady, networkStatus, isJoining, onManageMembers, onManageOwnedDevices, onPairLeaf,
         localeChoice, onLocaleChoiceChange, themeChoice, onThemeChoiceChange,
         boardEnabled, onToggleBoardEnabled, deviceName, onDeviceNameChange,
-        onChangeListView, onRenameList, onDeleteListItems, onClearDone, onShareList, onJoin, onJoinList,
+        onChangeListView, valueReturnFor, onSetValueReturn, onRenameList, onDeleteListItems, onClearDone, onShareList, onJoin, onJoinList,
         initialListSettingsId, initialView, loyaltyCards, onScanCard, onSelectCard,
         sendRPCWithReply, notify,
     } = props
@@ -494,6 +498,14 @@ export function ListsMenu(props: Props) {
                                         <Text style={styles.switchLabel}>{i18n.t('list.isDefault')}</Text>
                                         <Switch value={settingsList.id === defaultListId} onValueChange={() => onSetDefault(settingsList.id)} trackColor={{ false: t.colors.border, true: t.colors.primary }} thumbColor={t.colors.surface} />
                                     </View>
+
+                                    {(settingsIsBoard || settingsIsTodo) && (
+                                        <View style={styles.switchRow}>
+                                            <Ionicons name="cash-outline" size={20} color={t.colors.text} />
+                                            <Text style={styles.switchLabel}>{i18n.t('value.enable')}</Text>
+                                            <Switch value={valueReturnFor(settingsList.id, settingsList.type)} onValueChange={(v) => onSetValueReturn(settingsList.id, settingsList.type, v)} trackColor={{ false: t.colors.border, true: t.colors.primary }} thumbColor={t.colors.surface} />
+                                        </View>
+                                    )}
 
                                     {settingsIsBoard ? (
                                         <Text style={styles.sectionNote}>{i18n.t('lists.menu.boardSoon')}</Text>

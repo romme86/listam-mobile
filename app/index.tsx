@@ -75,14 +75,15 @@ import { ListSwipePager } from './components/ListSwipePager'
 import { BoardView } from './components/board/BoardView'
 import { TicketDetail } from './components/board/TicketDetail'
 import { CreateTicket, type TicketDraft } from './components/board/CreateTicket'
+import { ValueRateSheet } from './components/ValueRateSheet'
 import { useListPager } from './nav/useListPager'
 import { selectGroupedLists, selectCurrentListView, DEFAULT_VIEW, isBuiltinSurfaceId, builtinSurfaceNameKey } from './store/registrySelectors'
 import { selectBoardConfig } from './store/boardConfigSlice'
-import { selectPeerLabels } from './store/labelsSlice'
+import { selectPeerLabels, selectValueReturnEnabled } from './store/labelsSlice'
 import { buildListMetaItem, buildGroupMetaItem, type RegistryListView } from '@listam/domain/list-registry'
 import { UNGROUPED_GROUP_ID } from '@listam/domain/list-nav'
-import { buildPeerLabelItem, buildSurfaceLabelItem, buildBuiltinGroupItem, MAX_LABEL_NAME } from '@listam/domain'
-import { BOARD_WRITE_TYPE, isBoardType, buildStatusChange, validateTicketDraft } from '@listam/domain/board'
+import { buildPeerLabelItem, buildSurfaceLabelItem, buildBuiltinGroupItem, buildValueReturnItem, surfaceLabelKey, MAX_LABEL_NAME } from '@listam/domain'
+import { BOARD_WRITE_TYPE, BOARD_LIST_TYPE, isBoardType, buildStatusChange, validateTicketDraft } from '@listam/domain/board'
 import {
     reducePlan,
     buildItemPlanEntry,
@@ -156,6 +157,13 @@ function AppInner() {
     const dispatch = useAppDispatch()
     const { localeChoice, themeChoice, defaultListId, boardEnabled, deviceName, builtinViews } = useAppSelector(selectPreferences)
     const peerLabels = useAppSelector(selectPeerLabels)
+    const valueReturnMap = useAppSelector(selectValueReturnEnabled)
+    // Whether a surface has the value-return property enabled (keyed by the
+    // canonical type, so a board's wire type 'kanban' is folded to BOARD_LIST_TYPE).
+    const isValueOn = useCallback(
+        (listId: string, type: string) => valueReturnMap.has(surfaceLabelKey(listId, isBoardType(type) ? BOARD_LIST_TYPE : type)),
+        [valueReturnMap],
+    )
     // List PRESENTATION settings are per-list and synced (registry meta-item),
     // not global — sourced from the currently-selected list.
     const {
@@ -271,6 +279,8 @@ function AppInner() {
     const [planSheetItem, setPlanSheetItem] = useState<ListEntry | null>(null)
     const [pendingListSettingsId, setPendingListSettingsId] = useState<string | null>(null)
     const [boardTicketId, setBoardTicketId] = useState<string | null>(null)
+    // Pending to-do add awaiting its mandatory value/delay rating (text to file).
+    const [valueRateAdd, setValueRateAdd] = useState<string | null>(null)
     const [createTicketVisible, setCreateTicketVisible] = useState(false)
     // The item whose "move to another list" picker is open (null = closed).
     const [moveTarget, setMoveTarget] = useState<ListEntry | null>(null)
@@ -736,7 +746,7 @@ function AppInner() {
         sendRPC(RPC_DELETE, JSON.stringify({ item: deletedItem }))
     }, [animate, dataList, dispatch, sendRPC])
 
-    const handleInsert = useCallback((_index: number, text: string) => {
+    const handleInsert = useCallback((_index: number, text: string, rates?: { valueRate: number; delayRate: number }) => {
         // Scope the add to the list currently in view. With a bare-string payload
         // the backend files every item under DEFAULT_LIST_ID, so additions to any
         // other list silently land in (and only ever show up on) the default list.
@@ -748,7 +758,7 @@ function AppInner() {
         // be written to the REAL 'default' bucket (with the surface's listType),
         // never to a 'default:type' listId.
         const listId = decodeSurface(currentId).listId
-        sendRPC(RPC_ADD, JSON.stringify({ text, listId, listType, baseKey }))
+        sendRPC(RPC_ADD, JSON.stringify({ text, listId, listType, baseKey, ...(rates ? { valueRate: rates.valueRate, delayRate: rates.delayRate } : {}) }))
     }, [sendRPC, lib, currentId])
 
     const handleEditItem = useCallback((index: number, newText: string) => {
@@ -955,6 +965,7 @@ function AppInner() {
             // Promote-into-board move: relocate the existing item (id preserved)
             // and supply the rigor fields the form collected.
             pendingMoveRef.current = null
+            const valueFields = draft.valueRate != null && draft.delayRate != null ? { valueRate: draft.valueRate, delayRate: draft.delayRate } : {}
             sendRPC(RPC_MOVE, JSON.stringify({
                 item: pending.item,
                 targetListId: pending.targetListId,
@@ -965,9 +976,11 @@ function AppInner() {
                     checklist: draft.checklist,
                     estimatedHours: draft.estimatedHours,
                     estimatedComplexity: draft.estimatedComplexity,
+                    ...valueFields,
                 },
             }))
         } else {
+            const valueFields = draft.valueRate != null && draft.delayRate != null ? { valueRate: draft.valueRate, delayRate: draft.delayRate } : {}
             sendRPC(RPC_ADD, JSON.stringify({
                 text: draft.description,
                 listId: currentId,
@@ -977,6 +990,7 @@ function AppInner() {
                 checklist: draft.checklist,
                 estimatedHours: draft.estimatedHours,
                 estimatedComplexity: draft.estimatedComplexity,
+                ...valueFields,
             }))
         }
         setCreateTicketVisible(false)
@@ -1108,10 +1122,18 @@ function AppInner() {
             setAddText('')
             return
         }
+        // On a value-return surface, rating is mandatory: defer to the rating
+        // sheet, which finishes the add with the chosen value + delay.
+        const { listId, listType } = decodeSurface(currentId)
+        if (isValueOn(listId, lib.listsById[currentId]?.type || listType)) {
+            setValueRateAdd(value)
+            setAddText('')
+            return
+        }
         handleInsert(0, value)
         haptics.toggleOn()
         setAddText('')
-    }, [addText, dataList, handleInsert, i18n, snackbar])
+    }, [addText, dataList, handleInsert, i18n, snackbar, currentId, lib, isValueOn])
 
     // Double-tap an empty part of the list to open the add bar. The handler runs
     // during the responder-negotiation bubble: an item or button that handles the
@@ -1442,6 +1464,8 @@ function AppInner() {
                 deviceName={deviceName}
                 onDeviceNameChange={handleDeviceNameChange}
                 onChangeListView={writeListView}
+                valueReturnFor={(surfaceId, type) => isValueOn(decodeSurface(surfaceId).listId, type)}
+                onSetValueReturn={(surfaceId, type, enabled) => sendRPC(RPC_UPDATE, JSON.stringify({ item: buildValueReturnItem({ listId: decodeSurface(surfaceId).listId, type: isBoardType(type) ? BOARD_LIST_TYPE : type, enabled, updatedAt: Date.now() }) }))}
                 onRenameList={handleRenameList}
                 onDeleteListItems={handleDeleteListItems}
                 onClearDone={handleClearListCompleted}
@@ -1533,6 +1557,7 @@ function AppInner() {
                 ticket={selectedTicket}
                 config={boardConfig}
                 listName={currentListName}
+                valueReturnOn={!!selectedTicket && isValueOn(selectedTicket.listId || '', selectedTicket.listType || '')}
                 onUpdate={handleUpdateTicket}
                 onChangeStatus={handleChangeTicketStatus}
                 onRequestMove={(ticket) => { setBoardTicketId(null); setMoveTarget(ticket) }}
@@ -1542,8 +1567,15 @@ function AppInner() {
                 visible={createTicketVisible}
                 config={boardConfig}
                 initialDescription={createTicketInitialDesc}
+                valueReturnOn={isValueOn(decodeSurface(pendingMoveRef.current?.targetListId ?? currentId).listId, BOARD_LIST_TYPE)}
                 onCreate={handleCreateTicket}
                 onClose={() => { setCreateTicketVisible(false); setCreateTicketInitialDesc(''); pendingMoveRef.current = null }}
+            />
+            <ValueRateSheet
+                visible={valueRateAdd !== null}
+                text={valueRateAdd ?? undefined}
+                onConfirm={(valueRate, delayRate) => { handleInsert(0, valueRateAdd ?? '', { valueRate, delayRate }); haptics.toggleOn(); setValueRateAdd(null) }}
+                onClose={() => setValueRateAdd(null)}
             />
             <MoveItemSheet
                 visible={moveTarget !== null}

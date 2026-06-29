@@ -3,6 +3,7 @@ import { Modal, View, Text, TextInput, ScrollView, TouchableOpacity, PanResponde
 import { SafeAreaProvider, SafeAreaView, initialWindowMetrics } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { validateTicketDraft, type BoardConfig } from '@listam/domain/board'
+import { VALUE_MIN, VALUE_MAX, validateValueDraft } from '@listam/domain/value'
 import { useTheme, type Theme } from '../../theme'
 import { useI18n } from '../../i18n'
 
@@ -11,6 +12,8 @@ export type TicketDraft = {
     checklist: Array<{ id: string; text: string; done: boolean }>
     estimatedHours: number
     estimatedComplexity: number
+    valueRate?: number
+    delayRate?: number
 }
 
 type Props = {
@@ -18,13 +21,15 @@ type Props = {
     config: BoardConfig
     /** Seeds the description when the form opens (e.g. promoting an item into a board via a move). */
     initialDescription?: string
+    /** When the destination board has the value-return property on, rating is mandatory. */
+    valueReturnOn?: boolean
     onCreate: (draft: TicketDraft) => void
     onClose: () => void
 }
 
 type Task = { text: string; done: boolean }
 
-export function CreateTicket({ visible, config, initialDescription = '', onCreate, onClose }: Props) {
+export function CreateTicket({ visible, config, initialDescription = '', valueReturnOn = false, onCreate, onClose }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
@@ -34,10 +39,12 @@ export function CreateTicket({ visible, config, initialDescription = '', onCreat
     const [tasks, setTasks] = useState<Task[]>([{ text: '', done: false }])
     const [hours, setHours] = useState('')
     const [complexity, setComplexity] = useState(50)
+    const [valueRate, setValueRate] = useState<number | null>(null)
+    const [delayRate, setDelayRate] = useState<number | null>(null)
     const [showErrors, setShowErrors] = useState(false)
 
     const reset = () => {
-        setDescription(''); setTasks([{ text: '', done: false }]); setHours(''); setComplexity(50); setShowErrors(false)
+        setDescription(''); setTasks([{ text: '', done: false }]); setHours(''); setComplexity(50); setValueRate(null); setDelayRate(null); setShowErrors(false)
     }
     const close = () => { reset(); onClose() }
 
@@ -49,6 +56,8 @@ export function CreateTicket({ visible, config, initialDescription = '', onCreat
             setTasks([{ text: '', done: false }])
             setHours('')
             setComplexity(50)
+            setValueRate(null)
+            setDelayRate(null)
             setShowErrors(false)
         }
     }, [visible, initialDescription])
@@ -60,6 +69,7 @@ export function CreateTicket({ visible, config, initialDescription = '', onCreat
             .filter((task) => task.text),
         estimatedHours: Number.parseFloat(hours) || 0,
         estimatedComplexity: complexity,
+        ...(valueReturnOn ? { valueRate: valueRate ?? undefined, delayRate: delayRate ?? undefined } : {}),
     })
 
     const missing = useMemo(() => {
@@ -67,8 +77,9 @@ export function CreateTicket({ visible, config, initialDescription = '', onCreat
         // Description is always required (it's the title); the rest only under rigor.
         const m = validateTicketDraft(d, config).missing
         if (!d.description && !m.includes('description')) m.push('description')
+        if (valueReturnOn) for (const x of validateValueDraft({ valueRate, delayRate }).missing) m.push(x)
         return m
-    }, [description, tasks, hours, complexity, config])
+    }, [description, tasks, hours, complexity, config, valueReturnOn, valueRate, delayRate])
 
     const submit = () => {
         if (missing.length) { setShowErrors(true); return }
@@ -162,6 +173,25 @@ export function CreateTicket({ visible, config, initialDescription = '', onCreat
                             </View>
                         </>
                     ) : null}
+
+                    {valueReturnOn ? (
+                        <>
+                            <Text style={styles.label}>{i18n.t('value.value')} *</Text>
+                            <View style={styles.sliderRow}>
+                                <Ionicons name="cash-outline" size={18} color={t.colors.success} />
+                                <ComplexitySlider value={valueRate ?? VALUE_MIN} onChange={setValueRate} min={VALUE_MIN} max={VALUE_MAX} />
+                                <Text style={styles.sliderValue}>{valueRate ?? '—'}</Text>
+                            </View>
+
+                            <Text style={styles.label}>{i18n.t('value.delay')} *</Text>
+                            <View style={styles.sliderRow}>
+                                <Ionicons name="hourglass-outline" size={18} color={t.colors.warning} />
+                                <ComplexitySlider value={delayRate ?? VALUE_MIN} onChange={setDelayRate} min={VALUE_MIN} max={VALUE_MAX} />
+                                <Text style={styles.sliderValue}>{delayRate ?? '—'}</Text>
+                            </View>
+                            {err('value') || err('delay') ? <Text style={styles.errorText}>{i18n.t('value.rate.missing')}</Text> : null}
+                        </>
+                    ) : null}
                 </ScrollView>
             </SafeAreaView>
             </SafeAreaProvider>
@@ -169,16 +199,19 @@ export function CreateTicket({ visible, config, initialDescription = '', onCreat
     )
 }
 
-// Dependency-free slider (1..100) — avoids a native module + a dev-client rebuild.
-function ComplexitySlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+// Dependency-free slider — avoids a native module + a dev-client rebuild.
+// Generic over a [min,max] integer range so it serves complexity (1..100) and
+// the value/delay rates (1..10).
+function ComplexitySlider({ value, onChange, min = 1, max = 100 }: { value: number; onChange: (v: number) => void; min?: number; max?: number }) {
     const t = useTheme()
     const styles = useMemo(() => makeStyles(t), [t])
     const widthRef = useRef(0)
+    const span = Math.max(1, max - min)
     const setFromX = (x: number) => {
         const w = widthRef.current
         if (w <= 0) return
         const pct = Math.max(0, Math.min(1, x / w))
-        onChange(Math.max(1, Math.min(100, Math.round(1 + pct * 99))))
+        onChange(Math.max(min, Math.min(max, Math.round(min + pct * span))))
     }
     const pan = useRef(PanResponder.create({
         onStartShouldSetPanResponder: () => true,
@@ -187,7 +220,7 @@ function ComplexitySlider({ value, onChange }: { value: number; onChange: (v: nu
         onPanResponderMove: (e) => setFromX(e.nativeEvent.locationX),
     })).current
     const onLayout = (e: LayoutChangeEvent) => { widthRef.current = e.nativeEvent.layout.width }
-    const pct = (Math.max(1, Math.min(100, value)) - 1) / 99
+    const pct = (Math.max(min, Math.min(max, value)) - min) / span
 
     return (
         <View style={styles.sliderTrackWrap} onLayout={onLayout} {...pan.panHandlers}>
