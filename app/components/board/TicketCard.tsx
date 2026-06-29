@@ -1,9 +1,11 @@
 import React, { useMemo } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { ticketBadges, formatDuration, deltaPercent, msToHours, type BoardConfig } from '@listam/domain/board'
+import { hasValueRating } from '@listam/domain/value'
 import { useTheme, type Theme } from '../../theme'
 import type { ListEntry } from '../_types'
 import { Avatar, PriorityPill, TimelinessBadge } from './TicketBits'
+import { ValueBadges } from '../ValueBadges'
 
 type Props = {
     ticket: ListEntry
@@ -36,7 +38,7 @@ export function TicketCard({ ticket, onPress }: Props) {
         right = <PriorityPill priority={b.priority} />
     }
 
-    const showMeta = b.assignee || right
+    const showMeta = b.assignee || right || b.checklistTotal > 0 || hasValueRating(ticket)
     return (
         <TouchableOpacity
             style={styles.card}
@@ -52,6 +54,7 @@ export function TicketCard({ ticket, onPress }: Props) {
                         {b.checklistTotal > 0 ? (
                             <Text style={styles.checklist}>{b.checklistDone}/{b.checklistTotal}</Text>
                         ) : null}
+                        <ValueBadges item={ticket} />
                     </View>
                     {right}
                 </View>

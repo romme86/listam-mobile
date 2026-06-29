@@ -29,6 +29,14 @@ export type ListEntry = {
      */
     dueAt?: number
     /**
+     * Value-return rates (1-10): how much value the task gives back (`valueRate`)
+     * and how soon — 1 = soon, 10 = far (`delayRate`). Present only on items added
+     * on a value-return-enabled surface. Generic fields (todo + board), so they
+     * sit here rather than in BoardFields.
+     */
+    valueRate?: number
+    delayRate?: number
+    /**
      * Hex key of the SHARED single-list base this item lives in (single-list
      * sharing). Absent = the personal base. Tagged by the backend on a shared
      * list's items; rides through the store (reducers spread items) so writes can

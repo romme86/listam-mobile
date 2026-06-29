@@ -3,6 +3,7 @@ import { Modal, View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet 
 import { SafeAreaProvider, SafeAreaView, initialWindowMetrics } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { ticketBadges, formatDuration, type BoardConfig, type TicketBlock } from '@listam/domain/board'
+import { clampRate } from '@listam/domain/value'
 import { useTheme, type Theme } from '../../theme'
 import { useI18n } from '../../i18n'
 import type { ListEntry } from '../_types'
@@ -10,12 +11,15 @@ import { Avatar, PriorityPill, StatusPill, TicketInlineMarkdown, stateById, form
 import { BlockBody } from './BlockBody'
 import { RichMarkdownEditor } from './RichMarkdownEditor'
 import { CloseDot } from '../CloseDot'
+import { ValueRateSheet } from '../ValueRateSheet'
 
 type Props = {
     visible: boolean
     ticket: ListEntry | null
     config: BoardConfig
     listName: string
+    /** Whether this board surface has the value-return property enabled. */
+    valueReturnOn?: boolean
     onUpdate: (patch: Record<string, unknown>) => void
     onChangeStatus: (statusId: string) => void
     onRequestMove?: (ticket: ListEntry) => void
@@ -24,11 +28,12 @@ type Props = {
 
 const PRIORITIES = ['', 'low', 'medium', 'high', 'urgent']
 
-export function TicketDetail({ visible, ticket, config, listName, onUpdate, onChangeStatus, onRequestMove, onClose }: Props) {
+export function TicketDetail({ visible, ticket, config, listName, valueReturnOn = false, onUpdate, onChangeStatus, onRequestMove, onClose }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
     const [picker, setPicker] = useState<null | 'status' | 'priority'>(null)
+    const [rateSheet, setRateSheet] = useState(false)
 
     if (!ticket) return null
     const b = ticketBadges(ticket)
@@ -95,6 +100,14 @@ export function TicketDetail({ visible, ticket, config, listName, onUpdate, onCh
                         <StatRow label={i18n.t('ticket.detail.timeSpent')} value={formatDuration(b.inProgressMs)} />
                     </View>
 
+                    {valueReturnOn ? (
+                        <TouchableOpacity style={styles.stats} onPress={() => setRateSheet(true)} accessibilityRole="button" accessibilityLabel={i18n.t('value.addRate')}>
+                            <StatRow label={i18n.t('value.value')} value={clampRate(ticket.valueRate) != null ? String(clampRate(ticket.valueRate)) : i18n.t('ticket.detail.none')} />
+                            <View style={styles.statDivider} />
+                            <StatRow label={i18n.t('value.delay')} value={clampRate(ticket.delayRate) != null ? String(clampRate(ticket.delayRate)) : i18n.t('ticket.detail.none')} />
+                        </TouchableOpacity>
+                    ) : null}
+
                     <Text style={styles.sectionLabel}>{i18n.t('ticket.detail.overview')}</Text>
                     <InlineEditable
                         value={ticket.description || ''}
@@ -152,6 +165,15 @@ export function TicketDetail({ visible, ticket, config, listName, onUpdate, onCh
                         </View>
                     </TouchableOpacity>
                 ) : null}
+
+                <ValueRateSheet
+                    visible={rateSheet}
+                    initialValue={clampRate(ticket.valueRate)}
+                    initialDelay={clampRate(ticket.delayRate)}
+                    confirmLabel={i18n.t('common.save')}
+                    onConfirm={(valueRate, delayRate) => { onUpdate({ valueRate, delayRate }); setRateSheet(false) }}
+                    onClose={() => setRateSheet(false)}
+                />
             </SafeAreaView>
             </SafeAreaProvider>
         </Modal>

@@ -14,6 +14,7 @@ import { haptics } from '../feedback'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
 import { useCategoryDragGesture } from './CategoryDrag'
+import { ValueBadges } from './ValueBadges'
 import type { ListAlignment, ListEntry } from './_types'
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window')
@@ -280,6 +281,9 @@ export function ListItem({
                         <Animated.Text style={textStyle}>
                             {item.text}
                         </Animated.Text>
+                        <View style={styles.valueTrailing} pointerEvents="none">
+                            <ValueBadges item={item} />
+                        </View>
                     </Animated.View>
                 </TouchableOpacity>
             </Animated.View>
@@ -337,6 +341,13 @@ function makeStyles(t: Theme) {
         },
         itemCentered: {
             alignItems: 'center',
+        },
+        valueTrailing: {
+            position: 'absolute',
+            right: 0,
+            top: 0,
+            bottom: 0,
+            justifyContent: 'center',
         },
         text: {
             fontSize: 20,

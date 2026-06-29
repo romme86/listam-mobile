@@ -4,9 +4,11 @@ import {
     isPeerLabelItem,
     isSurfaceLabelItem,
     isBuiltinGroupItem,
+    isValueReturnItem,
     reducePeerLabels,
     reduceSurfaceLabels,
     reduceBuiltinGroups,
+    reduceValueReturn,
 } from '@listam/domain'
 import type { RootState } from './store'
 import type { ListEntry } from '../components/_types'
@@ -77,4 +79,10 @@ export const selectSurfaceLabels = createSelector(selectLabelItems, (items) =>
 // built-ins in the same group as desktop instead of Ungrouped.
 export const selectBuiltinGroups = createSelector(selectLabelItems, (items) =>
     reduceBuiltinGroups(items.filter(isBuiltinGroupItem)),
+)
+
+// surfaceKey ('listId:type') -> true: which surfaces have the value-return
+// property enabled (each item must be rated 1-10 value + 1-10 delay to add it).
+export const selectValueReturnEnabled = createSelector(selectLabelItems, (items) =>
+    reduceValueReturn(items.filter(isValueReturnItem)),
 )
