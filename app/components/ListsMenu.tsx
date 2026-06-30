@@ -389,21 +389,22 @@ export function ListsMenu(props: Props) {
                             </View>
 
                             <ScrollView style={styles.scroll} contentContainerStyle={styles.settingsContent}>
-                                <TouchableOpacity style={styles.actionRow} onPress={() => { onManageMembers(); close() }} activeOpacity={0.6}>
-                                    <Ionicons name="people-outline" size={20} color={t.colors.text} />
-                                    <Text style={styles.actionLabel}>{i18n.t('header.action.membersRecovery')}</Text>
-                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.actionRow} onPress={() => { onManageOwnedDevices(); close() }} activeOpacity={0.6}>
-                                    <Ionicons name="hardware-chip-outline" size={20} color={t.colors.text} />
-                                    <Text style={styles.actionLabel}>{i18n.t('control.section')}</Text>
-                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.actionRow} onPress={() => { onPairLeaf(); close() }} activeOpacity={0.6}>
-                                    <Ionicons name="bluetooth-outline" size={20} color={t.colors.text} />
-                                    <Text style={styles.actionLabel}>{i18n.t('leaf.section')}</Text>
-                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
-                                </TouchableOpacity>
+                                {/* This device — name is device-local, never replicated. */}
+                                <Text style={styles.sectionLabel}>{i18n.t('desktop.settings.deviceName.label')}</Text>
+                                <TextInput
+                                    style={styles.nameInput}
+                                    defaultValue={deviceName}
+                                    placeholder={i18n.t('desktop.settings.deviceName.placeholder')}
+                                    placeholderTextColor={t.colors.placeholder}
+                                    returnKeyType="done"
+                                    maxLength={MAX_LABEL_NAME}
+                                    autoCapitalize="words"
+                                    onEndEditing={(e) => onDeviceNameChange(e.nativeEvent.text)}
+                                />
+                                <Text style={styles.sectionNote}>{i18n.t('desktop.settings.deviceName.help')}</Text>
+
+                                {/* Sharing — join someone else's shared project or list. */}
+                                <Text style={styles.sectionLabel}>{i18n.t('lists.menu.sectionSharing')}</Text>
                                 <TouchableOpacity style={styles.actionRow} onPress={() => { onJoin(); close() }} activeOpacity={0.6}>
                                     <Ionicons name="person-add-outline" size={20} color={t.colors.text} />
                                     <Text style={styles.actionLabel}>{i18n.t('joinProject.button')}</Text>
@@ -415,6 +416,7 @@ export function ListsMenu(props: Props) {
                                     <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
                                 </TouchableOpacity>
 
+                                {/* Appearance — theme + language, both device-local. */}
                                 <Text style={styles.sectionLabel}>{i18n.t('lists.menu.sectionAppearance')}</Text>
                                 <SegmentedSetting
                                     title={i18n.t('header.setting.appearance')}
@@ -431,19 +433,7 @@ export function ListsMenu(props: Props) {
                                     labelFor={i18n.labelForLocaleChoice}
                                 />
 
-                                <Text style={styles.sectionLabel}>{i18n.t('desktop.settings.deviceName.label')}</Text>
-                                <TextInput
-                                    style={styles.nameInput}
-                                    defaultValue={deviceName}
-                                    placeholder={i18n.t('desktop.settings.deviceName.placeholder')}
-                                    placeholderTextColor={t.colors.placeholder}
-                                    returnKeyType="done"
-                                    maxLength={MAX_LABEL_NAME}
-                                    autoCapitalize="words"
-                                    onEndEditing={(e) => onDeviceNameChange(e.nativeEvent.text)}
-                                />
-                                <Text style={styles.sectionNote}>{i18n.t('desktop.settings.deviceName.help')}</Text>
-
+                                {/* Boards — app-global feature toggle (off by default). */}
                                 <Text style={styles.sectionLabel}>{i18n.t('lists.menu.boardFeature')}</Text>
                                 <View style={styles.switchRow}>
                                     <Ionicons name="grid-outline" size={20} color={t.colors.text} />
@@ -451,6 +441,25 @@ export function ListsMenu(props: Props) {
                                     <Switch value={boardEnabled} onValueChange={onToggleBoardEnabled} trackColor={{ false: t.colors.border, true: t.colors.primary }} thumbColor={t.colors.surface} />
                                 </View>
 
+                                {/* People & devices — membership, owned devices, leaf pairing. */}
+                                <Text style={styles.sectionLabel}>{i18n.t('lists.menu.sectionNetwork')}</Text>
+                                <TouchableOpacity style={styles.actionRow} onPress={() => { onManageMembers(); close() }} activeOpacity={0.6}>
+                                    <Ionicons name="people-outline" size={20} color={t.colors.text} />
+                                    <Text style={styles.actionLabel}>{i18n.t('header.action.membersRecovery')}</Text>
+                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.actionRow} onPress={() => { onManageOwnedDevices(); close() }} activeOpacity={0.6}>
+                                    <Ionicons name="hardware-chip-outline" size={20} color={t.colors.text} />
+                                    <Text style={styles.actionLabel}>{i18n.t('control.section')}</Text>
+                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.actionRow} onPress={() => { onPairLeaf(); close() }} activeOpacity={0.6}>
+                                    <Ionicons name="bluetooth-outline" size={20} color={t.colors.text} />
+                                    <Text style={styles.actionLabel}>{i18n.t('leaf.section')}</Text>
+                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
+                                </TouchableOpacity>
+
+                                {/* Loyalty cards — scan a new card, tap a saved one to view. */}
                                 <Text style={styles.sectionLabel}>{i18n.t('header.section.loyaltyCards')}</Text>
                                 <TouchableOpacity style={styles.actionRow} onPress={() => { onScanCard(); close() }} activeOpacity={0.6}>
                                     <Ionicons name="scan-outline" size={20} color={t.colors.text} />
@@ -465,6 +474,7 @@ export function ListsMenu(props: Props) {
                                     </TouchableOpacity>
                                 ))}
 
+                                {/* Backup — renders its own section headers (export / auto / scheduled). */}
                                 <BackupSettings sendRPCWithReply={sendRPCWithReply} notify={notify} />
                             </ScrollView>
                         </>
