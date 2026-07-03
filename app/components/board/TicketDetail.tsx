@@ -108,15 +108,16 @@ export function TicketDetail({ visible, ticket, config, listName, valueReturnOn 
                         </TouchableOpacity>
                     ) : null}
 
-                    <Text style={styles.sectionLabel}>{i18n.t('ticket.detail.overview')}</Text>
-                    <InlineEditable
-                        value={ticket.description || ''}
-                        placeholder={i18n.t('ticket.detail.descriptionPlaceholder')}
-                        textStyle={styles.overview}
-                        markdown
-                        multiline
-                        onCommit={(description) => onUpdate({ description })}
-                    />
+                    {/* Legacy free-text overview, read-only dual-read: desktop
+                        folds it into the leading body block on open and clears
+                        the field. Editing happens in the block body below —
+                        writing description here again would just re-fold. */}
+                    {typeof ticket.description === 'string' && ticket.description.trim() ? (
+                        <>
+                            <Text style={styles.sectionLabel}>{i18n.t('ticket.detail.overview')}</Text>
+                            <TicketInlineMarkdown text={ticket.description} style={styles.overview} />
+                        </>
+                    ) : null}
 
                     <Text style={styles.sectionLabel}>{i18n.t('ticket.detail.body')}</Text>
                     <BlockBody
