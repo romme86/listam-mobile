@@ -22,6 +22,7 @@ import {
     RPC_ADD,
     RPC_MOVE,
     RPC_JOIN_KEY,
+    RPC_CREATE_INVITE,
     RPC_REMOVE_MEMBER,
     RPC_GET_MEMBERS,
     RPC_GET_OWNER_RECOVERY_CODE,
@@ -34,6 +35,7 @@ import {
 } from './hooks/_useWorklet'
 import { RPC_LIST_BACKUPS, RPC_SET_BACKUP_SCHEDULE, RPC_SHARE_LIST, RPC_JOIN_LIST } from '@listam/protocol'
 import { store } from './store/store'
+import { syncActions } from './store/syncSlice'
 import { useAppDispatch, useAppSelector } from './store/hooks'
 import { listsActions, selectItemsForList, selectAllItems } from './store/listsSlice'
 import {
@@ -202,6 +204,7 @@ function AppInner() {
         ownerRecoveryCode,
         clearOwnerRecoveryCode,
         ownerControl,
+        autobaseInviteKey,
         sendRPC,
         sendRPCWithReply,
     } = useWorklet(notify)
@@ -1161,6 +1164,38 @@ function AppInner() {
         return false
     }, [isAdding, handleRequestAdd])
 
+    // Mint a whole-project invite and offer it via the OS share sheet. Whoever
+    // joins it gets EVERY list in this project — distinct from handleShareList
+    // below, which shares one list only. The backend answers over the
+    // invite-key event (not an RPC reply), so park a pending flag here and
+    // finish in the effect below once the key lands in the store.
+    const shareProjectPendingRef = useRef(false)
+    const handleShareProject = useCallback(() => {
+        shareProjectPendingRef.current = true
+        // Clear any stale key first: re-minting can return the same invite, and
+        // an unchanged store value would never re-trigger the effect below.
+        dispatch(syncActions.autobaseInviteKeySet(''))
+        sendRPC(RPC_CREATE_INVITE)
+        // The backend replies with an empty key when this device may not mint
+        // (only the project owner can create invites) — indistinguishable from
+        // "still working" here, so time out with the roster's best explanation.
+        const ownerOnly = membershipRoster ? !membershipRoster.canAdminister : false
+        setTimeout(() => {
+            if (!shareProjectPendingRef.current) return
+            shareProjectPendingRef.current = false
+            snackbar.show(i18n.t(ownerOnly ? 'invite.share.ownerOnly' : 'invite.share.notReady'), 'error')
+        }, ownerOnly ? 4000 : 10000)
+    }, [dispatch, sendRPC, i18n, snackbar, membershipRoster])
+
+    useEffect(() => {
+        if (!shareProjectPendingRef.current || !autobaseInviteKey) return
+        shareProjectPendingRef.current = false
+        void Share.share({
+            title: i18n.t('invite.share.title'),
+            message: i18n.t('invite.share.message', { inviteKey: autobaseInviteKey }),
+        }).catch(() => snackbar.show(i18n.t('invite.share.failed'), 'error'))
+    }, [autobaseInviteKey, i18n, snackbar])
+
     // Promote ONE list to its own shared base and offer its co-edit invite via
     // the OS share sheet. Others who join this invite get only this list.
     const handleShareList = useCallback(async (listId: string) => {
@@ -1470,6 +1505,7 @@ function AppInner() {
                 onDeleteListItems={handleDeleteListItems}
                 onClearDone={handleClearListCompleted}
                 onShareList={handleShareList}
+                onShareProject={handleShareProject}
                 onJoin={handleJoin}
                 onJoinList={handleOpenJoinList}
                 initialListSettingsId={pendingListSettingsId}

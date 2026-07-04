@@ -75,6 +75,8 @@ type Props = {
     // Single-list sharing: promote one list to its own shared base (shows a
     // co-edit invite), and additively join one shared list via an invite.
     onShareList: (listId: string) => void
+    // Mint a whole-project invite (everything syncs to whoever joins it).
+    onShareProject: () => void
     // The whole-project (BlindPairing) join — replaces the local base.
     onJoin: () => void
     onJoinList: () => void
@@ -113,7 +115,7 @@ export function ListsMenu(props: Props) {
         peerCount, isWorkletReady, networkStatus, isJoining, onManageMembers, onManageOwnedDevices, onPairLeaf,
         localeChoice, onLocaleChoiceChange, themeChoice, onThemeChoiceChange,
         boardEnabled, onToggleBoardEnabled, deviceName, onDeviceNameChange,
-        onChangeListView, valueReturnFor, onSetValueReturn, onRenameList, onDeleteListItems, onClearDone, onShareList, onJoin, onJoinList,
+        onChangeListView, valueReturnFor, onSetValueReturn, onRenameList, onDeleteListItems, onClearDone, onShareList, onShareProject, onJoin, onJoinList,
         initialListSettingsId, initialView, loyaltyCards, onScanCard, onSelectCard,
         sendRPCWithReply, notify,
     } = props
@@ -403,8 +405,16 @@ export function ListsMenu(props: Props) {
                                 />
                                 <Text style={styles.sectionNote}>{i18n.t('desktop.settings.deviceName.help')}</Text>
 
-                                {/* Sharing — join someone else's shared project or list. */}
+                                {/* Sharing — invite someone to the whole project, or join
+                                    someone else's shared project or list. Sharing ONE list
+                                    lives in that list's settings. */}
                                 <Text style={styles.sectionLabel}>{i18n.t('lists.menu.sectionSharing')}</Text>
+                                <TouchableOpacity style={styles.actionRow} onPress={() => { onShareProject(); close() }} activeOpacity={0.6}>
+                                    <Ionicons name="share-social-outline" size={20} color={t.colors.text} />
+                                    <Text style={styles.actionLabel}>{i18n.t('share.project.button')}</Text>
+                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
+                                </TouchableOpacity>
+                                <Text style={styles.sectionNote}>{i18n.t('share.project.hint')}</Text>
                                 <TouchableOpacity style={styles.actionRow} onPress={() => { onJoin(); close() }} activeOpacity={0.6}>
                                     <Ionicons name="person-add-outline" size={20} color={t.colors.text} />
                                     <Text style={styles.actionLabel}>{i18n.t('joinProject.button')}</Text>
@@ -615,21 +625,27 @@ export function ListsMenu(props: Props) {
                                     )}
 
                                     {/* Built-in surfaces share the 'default' base and can't be promoted
-                                        to their own shared base, so the share affordance is hidden for them. */}
-                                    {!isBuiltinSurfaceId(settingsList.id) && (
+                                        to their own shared base — explain that instead of hiding the
+                                        section. A shared list can always mint a fresh invite (the
+                                        backend re-mints on demand). */}
+                                    <Text style={styles.sectionLabel}>{i18n.t('shareList.title')}</Text>
+                                    {isBuiltinSurfaceId(settingsList.id) ? (
+                                        <Text style={styles.sectionNote}>{i18n.t('shareList.builtinBlocked')}</Text>
+                                    ) : settingsList.baseKey ? (
                                         <>
-                                            <Text style={styles.sectionLabel}>{i18n.t('shareList.title')}</Text>
-                                            {settingsList.baseKey ? (
-                                                <View style={styles.actionRow}>
-                                                    <Ionicons name="people" size={20} color={t.colors.textSecondary} />
-                                                    <Text style={[styles.actionLabel, { color: t.colors.textSecondary }]}>{i18n.t('shareList.shared')}</Text>
-                                                </View>
-                                            ) : (
-                                                <TouchableOpacity style={styles.actionRow} onPress={() => onShareList(settingsList.id)} activeOpacity={0.6}>
-                                                    <Ionicons name="share-social-outline" size={20} color={t.colors.text} />
-                                                    <Text style={styles.actionLabel}>{i18n.t('shareList.button')}</Text>
-                                                </TouchableOpacity>
-                                            )}
+                                            <TouchableOpacity style={styles.actionRow} onPress={() => onShareList(settingsList.id)} activeOpacity={0.6}>
+                                                <Ionicons name="people" size={20} color={t.colors.text} />
+                                                <Text style={styles.actionLabel}>{i18n.t('shareList.showInvite')}</Text>
+                                            </TouchableOpacity>
+                                            <Text style={styles.sectionNote}>{i18n.t('shareList.shared')} — {i18n.t('share.list.hint')}</Text>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <TouchableOpacity style={styles.actionRow} onPress={() => onShareList(settingsList.id)} activeOpacity={0.6}>
+                                                <Ionicons name="share-social-outline" size={20} color={t.colors.text} />
+                                                <Text style={styles.actionLabel}>{i18n.t('shareList.button')}</Text>
+                                            </TouchableOpacity>
+                                            <Text style={styles.sectionNote}>{i18n.t('share.list.hint')}</Text>
                                         </>
                                     )}
 
