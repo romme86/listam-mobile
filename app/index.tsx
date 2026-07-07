@@ -802,6 +802,14 @@ function AppInner() {
         writePlan(buildItemPlanEntry({ listId: item.listId, itemId: item.id, plannedFor: dateKey, planOrder: Date.now(), updatedAt: Date.now() }) as unknown as ListEntry)
     }, [writePlan])
 
+    // Re-home a plan entry onto another day (the Overview "move to today" on a
+    // carried-over row). Upserts the same ref with a new plannedFor.
+    const movePlanForRef = useCallback((ref: string, dateKey: string) => {
+        const rec = reducePlan(allItems).get(ref)
+        if (!rec || rec.plannedFor === dateKey) return
+        writePlan(buildPlanItem({ id: ref, kind: rec.kind, refListId: rec.refListId, refItemId: rec.refItemId, refType: rec.refType, plannedFor: dateKey, planOrder: Date.now(), updatedAt: Date.now() }) as unknown as ListEntry)
+    }, [allItems, writePlan])
+
     const toggleItemPlan = useCallback((item: ListEntry) => {
         const ref = planItemKey(item.listId ?? '', item.id ?? '')
         if (plannedRefs.has(ref)) clearPlanRef(ref)
@@ -1409,6 +1417,7 @@ function AppInner() {
                     onToggleSource={toggleSourceDone}
                     onClearPlan={clearPlanRef}
                     onOpenList={openListFromOverview}
+                    onMovePlan={movePlanForRef}
                 />
             )}
 

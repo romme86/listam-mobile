@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
-import { reducePlan, groupPlanByDate, toDateKey, shiftDateKey, type PlanRecord } from '@listam/domain/plan'
+import { reducePlan, groupPlanByDate, overduePlanRecords, toDateKey, shiftDateKey, type PlanRecord } from '@listam/domain/plan'
 import { isBoardType } from '@listam/domain/board'
 import { isTodoType } from '@listam/domain/identity'
 import type { ListEntry } from './_types'
@@ -14,6 +14,7 @@ type Props = {
     onToggleSource: (item: ListEntry) => void
     onClearPlan: (ref: string) => void
     onOpenList: (listId: string, type: string) => void
+    onMovePlan: (ref: string, dateKey: string) => void
 }
 
 type ResolvedItem = { kind: 'item'; rec: PlanRecord; item: ListEntry }
@@ -23,17 +24,25 @@ type Resolved = ResolvedItem | ResolvedList
 // The read-only day plan: items and whole lists flagged into a day, joined back
 // to their live source rows. Marking an item done / clearing it writes through to
 // the source; list-cards open their list and clear from the plan when removed.
-export function OverviewScreen({ allItems, listName, onToggleSource, onClearPlan, onOpenList }: Props) {
+export function OverviewScreen({ allItems, listName, onToggleSource, onClearPlan, onOpenList, onMovePlan }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
     const [selectedDay, setSelectedDay] = useState('')
+    // Which week the strip shows: 0 = week starting today, negative pages into the past.
+    const [weekOffset, setWeekOffset] = useState(0)
 
     const today = toDateKey(Date.now())
-    const week = useMemo(() => Array.from({ length: 7 }, (_, i) => shiftDateKey(today, i)), [today])
-    const selected = (selectedDay && week.includes(selectedDay)) ? selectedDay : today
+    const tomorrowKey = useMemo(() => shiftDateKey(today, 1), [today])
+    const anchor = useMemo(() => shiftDateKey(today, weekOffset * 7), [today, weekOffset])
+    const week = useMemo(() => Array.from({ length: 7 }, (_, i) => shiftDateKey(anchor, i)), [anchor])
+    // Keep the selection on-screen: the picked day if visible, else today, else the week's first pill.
+    const selected = (selectedDay && week.includes(selectedDay))
+        ? selectedDay
+        : (week.includes(today) ? today : week[0])
 
-    const byDate = useMemo(() => groupPlanByDate(reducePlan(allItems)), [allItems])
+    const reduced = useMemo(() => reducePlan(allItems), [allItems])
+    const byDate = useMemo(() => groupPlanByDate(reduced), [reduced])
     const byKey = useMemo(() => {
         const m = new Map<string, ListEntry>()
         for (const it of allItems) m.set(`${it.listId}::${it.id}`, it)
@@ -65,23 +74,44 @@ export function OverviewScreen({ allItems, listName, onToggleSource, onClearPlan
     const done = rows.filter((r): r is ResolvedItem => r.kind === 'item' && r.item.isDone)
     const spotlight = pending[0]
     const next = pending.slice(1)
+    // Derived carryover (Today only): entries parked on a past day that aren't done
+    // yet, surfaced here without ever rewriting their stored day.
+    const carried = selected === today
+        ? overduePlanRecords(reduced, today)
+            .map(resolve)
+            .filter((r): r is Resolved => r !== null)
+            .filter((r) => r.kind === 'list' || !r.item.isDone)
+        : []
 
     const dayLabel = (dk: string) =>
         dk === today ? i18n.t('plan.today')
-            : dk === week[1] ? i18n.t('plan.tomorrow')
+            : dk === tomorrowKey ? i18n.t('plan.tomorrow')
                 : parseKey(dk).toLocaleDateString(undefined, { weekday: 'short' })
 
-    const renderRow = (r: Resolved, opts: { spotlight?: boolean } = {}) => {
+    // Origin-day badge + a one-tap "move to today" shown on carried-over rows.
+    const carryExtras = (ref: string, dk: string) => (
+        <>
+            <Text style={styles.carryBadge}>
+                {parseKey(dk).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}
+            </Text>
+            <TouchableOpacity hitSlop={8} onPress={() => onMovePlan(ref, today)} accessibilityLabel={i18n.t('plan.moveToToday')}>
+                <Ionicons name="arrow-up-circle-outline" size={20} color={t.colors.accent} />
+            </TouchableOpacity>
+        </>
+    )
+
+    const renderRow = (r: Resolved, opts: { spotlight?: boolean; carried?: boolean } = {}) => {
         if (r.kind === 'list') {
             return (
                 <TouchableOpacity
                     key={r.rec.ref}
-                    style={[styles.row, styles.listCard, opts.spotlight && styles.spotlight]}
+                    style={[styles.row, styles.listCard, opts.spotlight && styles.spotlight, opts.carried && styles.carryRow]}
                     activeOpacity={0.7}
                     onPress={() => onOpenList(r.listId, r.listType)}
                 >
                     <Ionicons name="list-outline" size={20} color={t.colors.text} />
                     <Text style={[styles.rowText, styles.listText]} numberOfLines={1}>{r.name}</Text>
+                    {opts.carried ? carryExtras(r.rec.ref, r.rec.plannedFor) : null}
                     <Text style={styles.chip}>{i18n.t('plan.listItems', { count: r.count })}</Text>
                     <TouchableOpacity hitSlop={8} onPress={() => onClearPlan(r.rec.ref)} accessibilityLabel={i18n.t('plan.clearFromPlan')}>
                         <Ionicons name="close" size={18} color={t.colors.textTertiary} />
@@ -93,7 +123,7 @@ export function OverviewScreen({ allItems, listName, onToggleSource, onClearPlan
         return (
             <TouchableOpacity
                 key={r.rec.ref}
-                style={[styles.row, opts.spotlight && styles.spotlight, item.isDone && styles.rowDone]}
+                style={[styles.row, opts.spotlight && styles.spotlight, opts.carried && styles.carryRow, item.isDone && styles.rowDone]}
                 activeOpacity={0.7}
                 onPress={() => onToggleSource(item)}
                 accessibilityRole="checkbox"
@@ -107,6 +137,7 @@ export function OverviewScreen({ allItems, listName, onToggleSource, onClearPlan
                 <Text style={[styles.rowText, opts.spotlight && styles.spotlightText, item.isDone && styles.doneText]} numberOfLines={2}>
                     {item.text}
                 </Text>
+                {opts.carried ? carryExtras(r.rec.ref, r.rec.plannedFor) : null}
                 <Text style={styles.chip}>{listName(item.listId ?? '', item.listType ?? '')}</Text>
                 <TouchableOpacity hitSlop={8} onPress={() => onClearPlan(r.rec.ref)} accessibilityLabel={i18n.t('plan.remove')}>
                     <Ionicons name="close" size={18} color={t.colors.textTertiary} />
@@ -120,6 +151,34 @@ export function OverviewScreen({ allItems, listName, onToggleSource, onClearPlan
             <Text style={styles.title}>
                 {parseKey(today).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
             </Text>
+
+            <View style={styles.weekNav}>
+                <TouchableOpacity
+                    hitSlop={8}
+                    onPress={() => { setWeekOffset((n) => n - 1); setSelectedDay('') }}
+                    accessibilityLabel={i18n.t('plan.prevWeek')}
+                >
+                    <Ionicons name="chevron-back" size={20} color={t.colors.textSecondary} />
+                </TouchableOpacity>
+                <Text style={styles.weekRange}>
+                    {`${parseKey(week[0]).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} – ${parseKey(week[6]).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`}
+                </Text>
+                <TouchableOpacity
+                    hitSlop={8}
+                    onPress={() => { setWeekOffset((n) => n + 1); setSelectedDay('') }}
+                    accessibilityLabel={i18n.t('plan.nextWeek')}
+                >
+                    <Ionicons name="chevron-forward" size={20} color={t.colors.textSecondary} />
+                </TouchableOpacity>
+                {weekOffset !== 0 ? (
+                    <TouchableOpacity
+                        style={styles.todayBtn}
+                        onPress={() => { setWeekOffset(0); setSelectedDay(today) }}
+                    >
+                        <Text style={styles.todayBtnText}>{i18n.t('plan.today')}</Text>
+                    </TouchableOpacity>
+                ) : null}
+            </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.strip} contentContainerStyle={styles.stripContent}>
                 {week.map((dk) => {
@@ -135,7 +194,14 @@ export function OverviewScreen({ allItems, listName, onToggleSource, onClearPlan
                 })}
             </ScrollView>
 
-            {rows.length === 0 ? (
+            {carried.length > 0 ? (
+                <>
+                    <Text style={styles.sectionLabel}>{i18n.t('plan.carriedOver', { count: carried.length })}</Text>
+                    {carried.map((r) => renderRow(r, { carried: true }))}
+                </>
+            ) : null}
+
+            {rows.length === 0 && carried.length === 0 ? (
                 <View style={styles.empty}>
                     <Text style={styles.emptyTitle}>{i18n.t('plan.empty.title')}</Text>
                     <Text style={styles.emptyHint}>{i18n.t('plan.empty.hint')}</Text>
@@ -176,6 +242,16 @@ function makeStyles(t: Theme) {
         screen: { flex: 1, backgroundColor: t.colors.bg },
         content: { padding: t.spacing.lg, paddingBottom: t.spacing.xxl, gap: t.spacing.sm },
         title: { fontSize: t.type.title.fontSize, fontWeight: '600', color: t.colors.text },
+        weekNav: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md, marginTop: t.spacing.sm },
+        weekRange: { fontSize: t.type.caption.fontSize, color: t.colors.textSecondary, minWidth: 120 },
+        todayBtn: {
+            marginLeft: 'auto',
+            paddingVertical: t.spacing.xs,
+            paddingHorizontal: t.spacing.md,
+            borderRadius: t.radius.pill,
+            backgroundColor: t.colors.surfaceAlt,
+        },
+        todayBtnText: { fontSize: t.type.caption.fontSize, color: t.colors.text },
         strip: { marginVertical: t.spacing.sm },
         stripContent: { gap: t.spacing.sm, paddingRight: t.spacing.lg },
         pill: {
@@ -210,6 +286,16 @@ function makeStyles(t: Theme) {
         },
         rowDone: { backgroundColor: t.colors.surfaceAlt },
         spotlight: { borderLeftWidth: 3, borderLeftColor: t.colors.accent, paddingVertical: t.spacing.lg },
+        carryRow: { borderLeftWidth: 2, borderLeftColor: t.colors.accent },
+        carryBadge: {
+            fontSize: t.type.caption.fontSize,
+            color: t.colors.textSecondary,
+            backgroundColor: t.colors.surfaceSunken,
+            paddingHorizontal: t.spacing.sm,
+            paddingVertical: 2,
+            borderRadius: t.radius.pill,
+            overflow: 'hidden',
+        },
         listCard: { backgroundColor: t.colors.surfaceAlt },
         rowText: { flex: 1, fontSize: t.type.body.fontSize, color: t.colors.text },
         spotlightText: { fontSize: t.type.bodyLg.fontSize, fontWeight: '600' },
