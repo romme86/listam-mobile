@@ -101,6 +101,9 @@ export function LeafPairingDialog({ visible, ownerControl, onFetchHubInfo, onClo
                                     )
                                 })}
 
+                                {selectedHub && hubInfo === undefined ? (
+                                    <Text style={[dialogStyles.subtitle, { marginTop: 10 }]}>{i18n.t('leaf.checkingHub')}</Text>
+                                ) : null}
                                 {selectedHub && hubInfo === null ? (
                                     <Text style={[dialogStyles.subtitle, { marginTop: 10 }]}>{i18n.t('leaf.hubNoBridge')}</Text>
                                 ) : null}
