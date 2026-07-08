@@ -9,7 +9,7 @@ import { useTheme, cardColor, type Theme } from '../theme'
 import { useI18n, type LocaleChoice } from '../i18n'
 import { MAX_LABEL_NAME } from '@listam/domain'
 import { isBoardType, BOARD_WRITE_TYPE } from '@listam/domain/board'
-import { isTodoType, TODO_LIST_TYPE } from '@listam/domain/identity'
+import { isTodoType, TODO_LIST_TYPE, DEFAULT_LIST_ID } from '@listam/domain/identity'
 import { UNGROUPED_GROUP_ID } from '@listam/domain/list-nav'
 import type { RegistryListView } from '@listam/domain/list-registry'
 import type { GroupedLists } from '../store/registrySelectors'
@@ -39,6 +39,11 @@ type Props = {
     defaultListId: string | null
     onSelect: (listId: string, type: string) => void
     onSetDefault: (listId: string) => void
+    // Synced project default target for un-targeted adds (voice / quick-add).
+    // Distinct from the device-local `defaultListId` above (which list opens).
+    // null = the built-in default; onSetSyncedDefault writes the synced setting.
+    syncedDefaultListId: string | null
+    onSetSyncedDefault: (listId: string, listType: string) => void
     onCreate: (type: string) => void
     onCreateGroup: () => void
     onRenameGroup: (groupId: string, name: string) => void
@@ -110,7 +115,7 @@ function typeIcon(type: string): keyof typeof Ionicons.glyphMap {
 
 export function ListsMenu(props: Props) {
     const {
-        visible, groups, currentListId, defaultListId,
+        visible, groups, currentListId, defaultListId, syncedDefaultListId, onSetSyncedDefault,
         onSelect, onSetDefault, onCreate, onCreateGroup, onRenameGroup, onMoveListToGroup, onClose,
         peerCount, isWorkletReady, networkStatus, isJoining, onManageMembers, onManageOwnedDevices, onPairLeaf,
         localeChoice, onLocaleChoiceChange, themeChoice, onThemeChoiceChange,
@@ -450,6 +455,23 @@ export function ListsMenu(props: Props) {
                                     <Text style={styles.switchLabel}>{i18n.t('lists.menu.boardFeatureHint')}</Text>
                                     <Switch value={boardEnabled} onValueChange={onToggleBoardEnabled} trackColor={{ false: t.colors.border, true: t.colors.primary }} thumbColor={t.colors.surface} />
                                 </View>
+
+                                {/* Default list — synced project target for un-targeted adds
+                                    (voice / quick-add). Distinct from the device-local "open
+                                    by default" star in a list's own settings. A checkmark marks
+                                    the current target; null falls back to the built-in default. */}
+                                <Text style={styles.sectionLabel}>{i18n.t('desktop.settings.defaultList.label')}</Text>
+                                {allLists.map((list) => {
+                                    const isCurrent = (syncedDefaultListId ?? DEFAULT_LIST_ID) === list.id
+                                    return (
+                                        <TouchableOpacity key={`default-${list.id}`} style={styles.actionRow} onPress={() => onSetSyncedDefault(list.id, list.type)} activeOpacity={0.6}>
+                                            <Ionicons name={typeIcon(list.type)} size={20} color={t.colors.text} />
+                                            <Text style={styles.actionLabel}>{surfaceName(list)}</Text>
+                                            {isCurrent ? <Ionicons name="checkmark" size={18} color={t.colors.primary} /> : null}
+                                        </TouchableOpacity>
+                                    )
+                                })}
+                                <Text style={styles.sectionNote}>{i18n.t('desktop.settings.defaultList.help')}</Text>
 
                                 {/* People & devices — membership, owned devices, leaf pairing. */}
                                 <Text style={styles.sectionLabel}>{i18n.t('lists.menu.sectionNetwork')}</Text>

@@ -79,10 +79,10 @@ import { TicketDetail } from './components/board/TicketDetail'
 import { CreateTicket, type TicketDraft } from './components/board/CreateTicket'
 import { ValueRateSheet } from './components/ValueRateSheet'
 import { useListPager } from './nav/useListPager'
-import { selectGroupedLists, selectCurrentListView, DEFAULT_VIEW, isBuiltinSurfaceId, builtinSurfaceNameKey } from './store/registrySelectors'
+import { selectGroupedLists, selectCurrentListView, selectSyncedDefaultList, DEFAULT_VIEW, isBuiltinSurfaceId, builtinSurfaceNameKey } from './store/registrySelectors'
 import { selectBoardConfig } from './store/boardConfigSlice'
 import { selectPeerLabels, selectValueReturnEnabled } from './store/labelsSlice'
-import { buildListMetaItem, buildGroupMetaItem, type RegistryListView } from '@listam/domain/list-registry'
+import { buildListMetaItem, buildGroupMetaItem, buildProjectSettingsItem, type RegistryListView } from '@listam/domain/list-registry'
 import { UNGROUPED_GROUP_ID } from '@listam/domain/list-nav'
 import { buildPeerLabelItem, buildSurfaceLabelItem, buildBuiltinGroupItem, buildValueReturnItem, surfaceLabelKey, MAX_LABEL_NAME } from '@listam/domain'
 import { BOARD_WRITE_TYPE, BOARD_LIST_TYPE, isBoardType, buildStatusChange, validateTicketDraft } from '@listam/domain/board'
@@ -181,6 +181,7 @@ function AppInner() {
     } = useAppSelector(selectCurrentListView)
     const loyaltyCards = useAppSelector(selectLoyaltyCardHandles)
     const groupedLists = useAppSelector(selectGroupedLists)
+    const syncedDefaultList = useAppSelector(selectSyncedDefaultList)
     const boardConfig = useAppSelector(selectBoardConfig)
     // Every materialized item (incl. the plan channel) — the Overview reduces the
     // plan entries out of this and joins them to their source rows.
@@ -1485,6 +1486,8 @@ function AppInner() {
                 groups={groupedLists}
                 currentListId={currentId}
                 defaultListId={defaultListId}
+                syncedDefaultListId={syncedDefaultList?.defaultListId ?? null}
+                onSetSyncedDefault={(listId: string, listType: string) => sendRPC(RPC_UPDATE, JSON.stringify({ item: buildProjectSettingsItem({ defaultListId: listId, defaultListType: listType, updatedAt: Date.now() }) }))}
                 onSelect={(id: string, type: string) => { setOverviewVisible(false); handleSelectList(id, type) }}
                 onSetDefault={handleSetDefaultList}
                 onCreate={handleCreateList}
