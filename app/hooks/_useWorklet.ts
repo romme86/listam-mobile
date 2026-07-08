@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, type MutableRefObject } from 'react'
 import { Alert } from 'react-native'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { haptics } from '../feedback'
 import * as FileSystemExpo from 'expo-file-system'
 import { toByteArray } from 'base64-js'
@@ -101,6 +102,18 @@ export type OwnerControlState = {
     lastResult: { command?: string; serverPublicKeyHex?: string; result?: any } | null
 }
 
+// The backend keeps the owner-control paired-device list in memory only (the
+// device-identity seed is persisted backend-side, but this non-secret list is
+// not). Persist it here as a local preference and rehydrate the backend on boot,
+// so paired hubs (e.g. a headless "Geekom") survive an app restart instead of
+// vanishing from Owned devices. Only non-empty lists are written, so an early
+// empty reply can never wipe the cache (unpairing, when added, must clear it).
+const PREF_OWNED_DEVICES = '@lista_owned_devices'
+const persistOwnedDevices = (servers: OwnerControlServer[]) => {
+    if (!Array.isArray(servers) || servers.length === 0) return
+    void AsyncStorage.setItem(PREF_OWNED_DEVICES, JSON.stringify(servers)).catch(() => {})
+}
+
 export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
     const i18n = useI18n()
     const dispatch = useAppDispatch()
@@ -167,6 +180,27 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
             return null
         }
     }, [])
+
+    // Rehydrate the persisted owned-devices list once the worklet is ready. Sending
+    // the cached list back re-populates the backend's in-memory registry (so status
+    // and commands work against those hubs) and repopulates the UI without waiting
+    // for the user to reopen the Owned devices dialog.
+    const ownedDevicesHydratedRef = useRef(false)
+    useEffect(() => {
+        if (!isWorkletReady || ownedDevicesHydratedRef.current) return
+        ownedDevicesHydratedRef.current = true
+        void (async () => {
+            try {
+                const raw = await AsyncStorage.getItem(PREF_OWNED_DEVICES)
+                const cached: OwnerControlServer[] = raw ? JSON.parse(raw) : []
+                if (!Array.isArray(cached) || cached.length === 0) return
+                setOwnerControl((prev) => (prev.servers.length ? prev : { ...prev, servers: cached }))
+                sendRPC(RPC_CONTROL_LIST, JSON.stringify({ servers: cached }))
+            } catch (e) {
+                appLogger.warn('owned-devices hydrate failed', { message: (e as Error)?.message })
+            }
+        })()
+    }, [isWorkletReady, sendRPC])
 
     const startWorklet = useCallback(async () => {
         appLogger.info('Starting worklet singleton')
@@ -345,6 +379,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                             notifyRef.current(i18nRef.current.t('backend.recovery.failed'), 'error')
                         }
                     } else if (payload.type === 'owner-control-servers') {
+                        if (Array.isArray(payload.servers)) persistOwnedDevices(payload.servers)
                         setOwnerControl((prev) => ({
                             ...prev,
                             deviceId: typeof payload.deviceId === 'string' ? payload.deviceId : prev.deviceId,
@@ -352,6 +387,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                         }))
                     } else if (payload.type === 'owner-control-paired') {
                         if (payload.ok) {
+                            if (Array.isArray(payload.servers)) persistOwnedDevices(payload.servers)
                             setOwnerControl((prev) => ({
                                 ...prev,
                                 servers: Array.isArray(payload.servers) ? payload.servers : prev.servers,
