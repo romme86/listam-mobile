@@ -18,11 +18,6 @@ type HeaderProps = {
     networkStatus: NetworkStatus
     isJoining: boolean
     onMenuToggle: () => void
-    onOverview: () => void
-    overviewActive: boolean
-    // The day-plan Overview is an opt-in organization capability (gated on
-    // boardEnabled). The sun button is only rendered once it's been activated.
-    showOverview: boolean
     trialDaysRemaining?: number
     // You-are-here across the list hierarchy, shown as centered dots: one per
     // group, the active group expanded into its lists. Tapping opens the tray.
@@ -41,9 +36,6 @@ export function Header(props: HeaderProps) {
         networkStatus,
         isJoining,
         onMenuToggle,
-        onOverview,
-        overviewActive,
-        showOverview,
         trialDaysRemaining,
         groupCount = 0,
         groupIndex = 0,
@@ -137,21 +129,7 @@ export function Header(props: HeaderProps) {
                     )}
                 </View>
 
-                <View style={styles.rightSection}>
-                    {showOverview && (
-                        <AnimatedIconButton
-                            style={styles.iconButton}
-                            onPress={onOverview}
-                            accessibilityLabel={i18n.t('desktop.nav.overview')}
-                        >
-                            <Ionicons
-                                name={overviewActive ? 'sunny' : 'sunny-outline'}
-                                size={HEADER_ICON_SIZE}
-                                color={overviewActive ? t.colors.accent : t.colors.text}
-                            />
-                        </AnimatedIconButton>
-                    )}
-                </View>
+                <View style={styles.rightSection} />
             </View>
         </SafeAreaView>
     )

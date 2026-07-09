@@ -22,12 +22,15 @@ export type PreferencesState = {
     themeChoice: ThemeChoice
     // Per-device: which list the app opens to on launch (null = first list).
     defaultListId: string | null
-    // Per-device master switch for the opt-in organization capabilities (off by
-    // default — the app is a grocery + to-do list app out of the box). When off,
-    // the "New board" create tile AND the day-plan Overview (the Header sun button)
-    // are hidden; existing boards stay visible. The user turns this on to unlock
-    // boards and the day plan.
+    // Per-device switch for the opt-in board capability (off by default — the
+    // app is a grocery + to-do list app out of the box). When off, the "New
+    // board" create tile is hidden; existing boards stay visible.
     boardEnabled: boolean
+    // Per-device master switch for the day-plan Overview AND every plan
+    // behavior that feeds it (triple-tap capture, swipe-right flag, long-press
+    // plan sheet, tray row, per-list "Show in Overview"). Off by default;
+    // independent of boardEnabled since 2026-07 (it used to ride it).
+    overviewEnabled: boolean
     // Per-device source of truth for THIS device's human name. Also re-asserted
     // as a synced peer-label (keyed by this device's own writer key) so other
     // peers can tell devices apart in the members screen. '' = unnamed.
@@ -46,6 +49,7 @@ const initialState: PreferencesState = {
     themeChoice: 'system',
     defaultListId: null,
     boardEnabled: false,
+    overviewEnabled: false,
     deviceName: '',
     builtinViews: {},
 }
@@ -64,6 +68,7 @@ const preferencesSlice = createSlice({
                 state.defaultListId = next.defaultListId
             }
             if (typeof next.boardEnabled === 'boolean') state.boardEnabled = next.boardEnabled
+            if (typeof next.overviewEnabled === 'boolean') state.overviewEnabled = next.overviewEnabled
             if (typeof next.deviceName === 'string') state.deviceName = next.deviceName
             if (next.builtinViews && typeof next.builtinViews === 'object') {
                 state.builtinViews = next.builtinViews
@@ -80,6 +85,9 @@ const preferencesSlice = createSlice({
         },
         boardEnabledSet(state, action: PayloadAction<boolean>) {
             state.boardEnabled = !!action.payload
+        },
+        overviewEnabledSet(state, action: PayloadAction<boolean>) {
+            state.overviewEnabled = !!action.payload
         },
         deviceNameSet(state, action: PayloadAction<string>) {
             state.deviceName = typeof action.payload === 'string' ? action.payload : ''

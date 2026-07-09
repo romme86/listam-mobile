@@ -1,23 +1,50 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useRef } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { ticketBadges, formatDuration, deltaPercent, msToHours, type BoardConfig } from '@listam/domain/board'
 import { hasValueRating } from '@listam/domain/value'
 import { useTheme, type Theme } from '../../theme'
 import type { ListEntry } from '../_types'
 import { Avatar, PriorityPill, TimelinessBadge } from './TicketBits'
+import { createCardTapCadence, TRIPLE_TAP_MS } from '../tapCadence'
 import { ValueBadges } from '../ValueBadges'
 
 type Props = {
     ticket: ListEntry
     config: BoardConfig
     onPress: (ticket: ListEntry) => void
+    /**
+     * Triple-tap: capture this ticket into the Overview. When wired, a single
+     * tap's detail-open is deferred by the tap window so a fast triple adds to
+     * the plan instead of navigating; when absent, taps open immediately.
+     */
+    onTripleTap?: (ticket: ListEntry) => void
 }
 
 // A board ticket as a card. Tapping opens the detail/editor — it never toggles
 // "done" or deletes (that's the grocery behavior boards must NOT inherit).
-export function TicketCard({ ticket, onPress }: Props) {
+export function TicketCard({ ticket, onPress, onTripleTap }: Props) {
     const t = useTheme()
     const styles = useMemo(() => makeStyles(t), [t])
+    const cadence = useRef(createCardTapCadence())
+    const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    useEffect(() => () => { if (settleTimer.current) clearTimeout(settleTimer.current) }, [])
+
+    const handlePress = () => {
+        if (!onTripleTap) {
+            onPress(ticket)
+            return
+        }
+        if (settleTimer.current) clearTimeout(settleTimer.current)
+        if (cadence.current.register(Date.now()) === 'capture') {
+            settleTimer.current = null
+            onTripleTap(ticket)
+            return
+        }
+        settleTimer.current = setTimeout(() => {
+            settleTimer.current = null
+            if (cadence.current.settle()) onPress(ticket)
+        }, TRIPLE_TAP_MS)
+    }
     const b = ticketBadges(ticket)
     const estLabel = b.estimatedHours ? `${b.estimatedHours}h` : null
     const delta = b.isDone && b.timeliness ? deltaPercent(msToHours(b.inProgressMs), b.estimatedHours ?? 0) : null
@@ -43,7 +70,7 @@ export function TicketCard({ ticket, onPress }: Props) {
         <TouchableOpacity
             style={styles.card}
             activeOpacity={0.7}
-            onPress={() => onPress(ticket)}
+            onPress={handlePress}
             accessibilityRole="button"
         >
             <Text style={styles.title} numberOfLines={2}>{ticket.text || ''}</Text>

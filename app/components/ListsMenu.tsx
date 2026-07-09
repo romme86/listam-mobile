@@ -63,6 +63,18 @@ type Props = {
     // App-global board feature toggle (off by default).
     boardEnabled: boolean
     onToggleBoardEnabled: () => void
+    // App-global Overview (day plan) toggle — off by default, independent of
+    // boards. When on: pinned Overview row (with today-count badge), per-list
+    // "Show in Overview" switch, and the capture gestures elsewhere.
+    overviewEnabled: boolean
+    onToggleOverviewEnabled: () => void
+    overviewOpen: boolean
+    overviewTodayCount: number
+    onOpenOverview: () => void
+    // Whole-list capture: whether this surface has a live plan record, and the
+    // toggle that writes/clears one (addressed like value-return below).
+    showInOverviewFor: (surfaceId: string, type: string) => boolean
+    onSetShowInOverview: (surfaceId: string, type: string, enabled: boolean) => void
     // This device's human name (synced as a peer-label so other peers can tell
     // devices apart). Commit publishes the label; empty clears it.
     deviceName: string
@@ -119,7 +131,10 @@ export function ListsMenu(props: Props) {
         onSelect, onSetDefault, onCreate, onCreateGroup, onRenameGroup, onMoveListToGroup, onClose,
         peerCount, isWorkletReady, networkStatus, isJoining, onManageMembers, onManageOwnedDevices, onPairLeaf,
         localeChoice, onLocaleChoiceChange, themeChoice, onThemeChoiceChange,
-        boardEnabled, onToggleBoardEnabled, deviceName, onDeviceNameChange,
+        boardEnabled, onToggleBoardEnabled,
+        overviewEnabled, onToggleOverviewEnabled, overviewOpen, overviewTodayCount, onOpenOverview,
+        showInOverviewFor, onSetShowInOverview,
+        deviceName, onDeviceNameChange,
         onChangeListView, valueReturnFor, onSetValueReturn, onRenameList, onDeleteListItems, onClearDone, onShareList, onShareProject, onJoin, onJoinList,
         initialListSettingsId, initialView, loyaltyCards, onScanCard, onSelectCard,
         sendRPCWithReply, notify,
@@ -284,6 +299,23 @@ export function ListsMenu(props: Props) {
                             </View>
 
                             <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} scrollEnabled={!draggingId}>
+                                {overviewEnabled ? (
+                                    <View style={[styles.row, overviewOpen && styles.rowCurrent]}>
+                                        <TouchableOpacity
+                                            style={styles.rowMain}
+                                            onPress={() => { if (!armedRef.current) onOpenOverview() }}
+                                            accessibilityRole="button"
+                                        >
+                                            <View style={styles.rowIcon}>
+                                                <Ionicons name="today-outline" size={19} color={t.colors.textSecondary} />
+                                            </View>
+                                            <Text style={styles.rowName} numberOfLines={1}>{i18n.t('desktop.nav.overview')}</Text>
+                                            {overviewTodayCount > 0 ? (
+                                                <Text style={styles.rowBadge}>{String(overviewTodayCount)}</Text>
+                                            ) : null}
+                                        </TouchableOpacity>
+                                    </View>
+                                ) : null}
                                 {groups.map(({ group, lists }) => {
                                     const editable = group.id !== UNGROUPED_GROUP_ID
                                     const isDropHover = hoveredGroup === group.id && draggingId != null
@@ -456,6 +488,16 @@ export function ListsMenu(props: Props) {
                                     <Switch value={boardEnabled} onValueChange={onToggleBoardEnabled} trackColor={{ false: t.colors.border, true: t.colors.primary }} thumbColor={t.colors.surface} />
                                 </View>
 
+                                {/* Overview — app-global day-plan toggle (off by default,
+                                    independent of boards). Gates the surface, the pinned tray
+                                    row, and every capture gesture. */}
+                                <Text style={styles.sectionLabel}>{i18n.t('lists.menu.overviewFeature')}</Text>
+                                <View style={styles.switchRow}>
+                                    <Ionicons name="today-outline" size={20} color={t.colors.text} />
+                                    <Text style={styles.switchLabel}>{i18n.t('lists.menu.overviewFeatureHint')}</Text>
+                                    <Switch value={overviewEnabled} onValueChange={onToggleOverviewEnabled} trackColor={{ false: t.colors.border, true: t.colors.primary }} thumbColor={t.colors.surface} />
+                                </View>
+
                                 {/* Default list — synced project target for un-targeted adds
                                     (voice / quick-add). Distinct from the device-local "open
                                     by default" star in a list's own settings. A checkmark marks
@@ -546,6 +588,16 @@ export function ListsMenu(props: Props) {
                                             <Ionicons name="cash-outline" size={20} color={t.colors.text} />
                                             <Text style={styles.switchLabel}>{i18n.t('value.enable')}</Text>
                                             <Switch value={valueReturnFor(settingsList.id, settingsList.type)} onValueChange={(v) => onSetValueReturn(settingsList.id, settingsList.type, v)} trackColor={{ false: t.colors.border, true: t.colors.primary }} thumbColor={t.colors.surface} />
+                                        </View>
+                                    )}
+
+                                    {/* Whole-list capture: pins this list as a card on the
+                                        Overview's Now day (a plan record — clears like any). */}
+                                    {overviewEnabled && (
+                                        <View style={styles.switchRow}>
+                                            <Ionicons name="today-outline" size={20} color={t.colors.text} />
+                                            <Text style={styles.switchLabel}>{i18n.t('plan.showInOverview')}</Text>
+                                            <Switch value={showInOverviewFor(settingsList.id, settingsList.type)} onValueChange={(v) => onSetShowInOverview(settingsList.id, settingsList.type, v)} trackColor={{ false: t.colors.border, true: t.colors.primary }} thumbColor={t.colors.surface} />
                                         </View>
                                     )}
 
@@ -756,6 +808,17 @@ function makeStyles(t: Theme) {
         },
         rowName: { fontSize: t.type.body.fontSize, color: t.colors.text, flexShrink: 1 },
         rowShared: { marginLeft: t.spacing.xs },
+        rowBadge: {
+            fontSize: t.type.caption.fontSize,
+            fontWeight: '700',
+            color: t.colors.textSecondary,
+            backgroundColor: t.colors.surfaceSunken,
+            paddingHorizontal: t.spacing.sm,
+            paddingVertical: 2,
+            borderRadius: t.radius.pill,
+            overflow: 'hidden',
+            marginLeft: t.spacing.xs,
+        },
         utilityRow: {
             flexDirection: 'row', marginTop: t.spacing.md, paddingTop: t.spacing.md,
             paddingHorizontal: t.spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.colors.border,

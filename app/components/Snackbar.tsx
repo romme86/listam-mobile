@@ -1,12 +1,14 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
-import { Animated, StyleSheet, Text, View } from 'react-native'
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme, type Theme } from '../theme'
 import { useReduceMotion } from '../hooks/useReduceMotion'
 
 type SnackbarType = 'info' | 'success' | 'error'
-type SnackbarContextValue = { show: (message: string, type?: SnackbarType) => void }
+// Optional single action (e.g. "Undo") shown as a pressable label on the right.
+type SnackbarAction = { label: string; onPress: () => void }
+type SnackbarContextValue = { show: (message: string, type?: SnackbarType, action?: SnackbarAction) => void }
 
 const SnackbarContext = createContext<SnackbarContextValue>({ show: () => {} })
 
@@ -28,6 +30,7 @@ export function SnackbarProvider({ children }: { children: React.ReactNode }) {
 
     const [message, setMessage] = useState<string | null>(null)
     const [variant, setVariant] = useState<SnackbarType>('info')
+    const [action, setAction] = useState<SnackbarAction | null>(null)
     const opacity = useRef(new Animated.Value(0)).current
     const translateY = useRef(new Animated.Value(16)).current
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -50,9 +53,10 @@ export function SnackbarProvider({ children }: { children: React.ReactNode }) {
     }, [opacity, translateY, reduceMotion, t.motion.duration.fast])
 
     const show = useCallback(
-        (msg: string, type: SnackbarType = 'info') => {
+        (msg: string, type: SnackbarType = 'info', nextAction?: SnackbarAction) => {
             setMessage(msg)
             setVariant(type)
+            setAction(nextAction ?? null)
             opacity.setValue(reduceMotion ? 1 : 0)
             translateY.setValue(reduceMotion ? 0 : 16)
             if (!reduceMotion) {
@@ -86,7 +90,7 @@ export function SnackbarProvider({ children }: { children: React.ReactNode }) {
             {children}
             {message !== null && (
                 <Animated.View
-                    pointerEvents="none"
+                    pointerEvents={action ? 'box-none' : 'none'}
                     style={[
                         styles.wrap,
                         { bottom: insets.bottom + 24, opacity, transform: [{ translateY }] },
@@ -95,6 +99,19 @@ export function SnackbarProvider({ children }: { children: React.ReactNode }) {
                     <View style={styles.card} accessibilityLiveRegion="polite">
                         <Ionicons name={ICONS[variant]} size={18} color={accent} />
                         <Text style={styles.text}>{message}</Text>
+                        {action ? (
+                            <TouchableOpacity
+                                hitSlop={12}
+                                accessibilityRole="button"
+                                onPress={() => {
+                                    if (timer.current) clearTimeout(timer.current)
+                                    action.onPress()
+                                    hide()
+                                }}
+                            >
+                                <Text style={styles.action}>{action.label}</Text>
+                            </TouchableOpacity>
+                        ) : null}
                     </View>
                 </Animated.View>
             )}
@@ -130,6 +147,14 @@ function makeStyles(t: Theme) {
             color: '#ffffff',
             fontSize: t.type.body.fontSize,
             fontWeight: '500',
+        },
+        action: {
+            color: t.colors.accent,
+            fontSize: t.type.label.fontSize,
+            fontWeight: '700',
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            marginLeft: t.spacing.sm,
         },
     })
 }
