@@ -3,25 +3,24 @@ import { Modal, View, Text, TextInput, TouchableOpacity, Pressable, StyleSheet }
 import { Ionicons } from '@expo/vector-icons'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
-import { toDateKey, shiftDateKey } from '@listam/domain/plan'
 import type { ListEntry } from './_types'
 
 type Props = {
     visible: boolean
     item: ListEntry | null
     planned: boolean
-    onPickDay: (dateKey: string) => void
-    onClear: () => void
+    /** Add to / remove from the Overview (today) — toggles on `planned`. */
+    onToggleOverview: () => void
     onEdit: (text: string) => void
     /** Move this item to another list. Omitted hides the action. */
     onMove?: () => void
     onClose: () => void
 }
 
-// Bottom-sheet for the deliberate flag path: long-pressing a list row opens it
-// to edit the row text or plan it for a specific day (Today + the next six),
-// mirroring the desktop day-picker popover.
-export function PlanSheet({ visible, item, planned, onPickDay, onClear, onEdit, onMove, onClose }: Props) {
+// Bottom-sheet for the deliberate row actions: long-pressing a list row opens
+// it to edit the text, add/remove the item from the Overview (the accessible,
+// non-gesture capture path — no day picking on mobile), or move it elsewhere.
+export function PlanSheet({ visible, item, planned, onToggleOverview, onEdit, onMove, onClose }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
@@ -32,13 +31,6 @@ export function PlanSheet({ visible, item, planned, onPickDay, onClear, onEdit, 
     }, [visible, item])
 
     if (!item) return null
-
-    const today = toDateKey(Date.now())
-    const week = Array.from({ length: 7 }, (_, i) => shiftDateKey(today, i))
-    const dayLabel = (dk: string) =>
-        dk === today ? i18n.t('plan.today')
-            : dk === week[1] ? i18n.t('plan.tomorrow')
-                : parseKey(dk).toLocaleDateString(undefined, { weekday: 'short' })
 
     const submitEdit = () => {
         const value = draft.trim()
@@ -51,7 +43,7 @@ export function PlanSheet({ visible, item, planned, onPickDay, onClear, onEdit, 
             <Pressable style={styles.scrim} onPress={onClose}>
                 <Pressable style={styles.sheet} onPress={() => { /* swallow */ }}>
                     <View style={styles.handle} />
-                    <Text style={styles.heading}>{i18n.t('plan.planFor')}</Text>
+                    <Text style={styles.heading}>{i18n.t('desktop.nav.overview')}</Text>
 
                     <TextInput
                         style={styles.input}
@@ -63,37 +55,27 @@ export function PlanSheet({ visible, item, planned, onPickDay, onClear, onEdit, 
                         placeholderTextColor={t.colors.placeholder}
                     />
 
-                    <View style={styles.grid}>
-                        {week.map((dk) => (
-                            <TouchableOpacity key={dk} style={styles.dayCell} onPress={() => onPickDay(dk)}>
-                                <Text style={styles.dayDow}>{dayLabel(dk)}</Text>
-                                <Text style={styles.dayNum}>{String(parseKey(dk).getDate())}</Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
+                    <TouchableOpacity style={styles.actionRow} onPress={onToggleOverview}>
+                        <Ionicons
+                            name={planned ? 'close-circle-outline' : 'add-circle-outline'}
+                            size={18}
+                            color={planned ? t.colors.danger : t.colors.text}
+                        />
+                        <Text style={[styles.actionText, planned && styles.actionDanger]}>
+                            {i18n.t(planned ? 'plan.removeFromOverview' : 'plan.addToOverview')}
+                        </Text>
+                    </TouchableOpacity>
 
                     {onMove ? (
-                        <TouchableOpacity style={styles.moveRow} onPress={onMove}>
+                        <TouchableOpacity style={styles.actionRow} onPress={onMove}>
                             <Ionicons name="swap-horizontal" size={18} color={t.colors.text} />
-                            <Text style={styles.moveText}>{i18n.t('main.item.move')}</Text>
-                        </TouchableOpacity>
-                    ) : null}
-
-                    {planned ? (
-                        <TouchableOpacity style={styles.clearBtn} onPress={onClear}>
-                            <Ionicons name="close-circle-outline" size={18} color={t.colors.danger} />
-                            <Text style={styles.clearText}>{i18n.t('plan.clearFromPlan')}</Text>
+                            <Text style={styles.actionText}>{i18n.t('main.item.move')}</Text>
                         </TouchableOpacity>
                     ) : null}
                 </Pressable>
             </Pressable>
         </Modal>
     )
-}
-
-function parseKey(key: string): Date {
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key)
-    return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date()
 }
 
 function makeStyles(t: Theme) {
@@ -117,20 +99,8 @@ function makeStyles(t: Theme) {
             paddingHorizontal: t.spacing.md,
             paddingVertical: t.spacing.sm,
         },
-        grid: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.sm },
-        dayCell: {
-            width: '22%',
-            flexGrow: 1,
-            alignItems: 'center',
-            paddingVertical: t.spacing.md,
-            backgroundColor: t.colors.surfaceAlt,
-            borderRadius: t.radius.md,
-        },
-        dayDow: { fontSize: t.type.caption.fontSize, color: t.colors.textSecondary, textTransform: 'uppercase' },
-        dayNum: { fontSize: t.type.title.fontSize, fontWeight: '600', color: t.colors.text, marginTop: 2 },
-        moveRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm, paddingVertical: t.spacing.sm },
-        moveText: { color: t.colors.text, fontSize: t.type.body.fontSize },
-        clearBtn: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm, paddingVertical: t.spacing.sm },
-        clearText: { color: t.colors.danger, fontSize: t.type.body.fontSize },
+        actionRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm, paddingVertical: t.spacing.sm },
+        actionText: { color: t.colors.text, fontSize: t.type.body.fontSize },
+        actionDanger: { color: t.colors.danger },
     })
 }
