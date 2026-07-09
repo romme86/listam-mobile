@@ -14,6 +14,7 @@ import { haptics } from '../feedback'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
 import { useCategoryDragGesture } from './CategoryDrag'
+import { createRowTapCadence } from './tapCadence'
 import { ValueBadges } from './ValueBadges'
 import type { ListAlignment, ListEntry } from './_types'
 
@@ -32,8 +33,14 @@ type ListItemProps = {
     onEdit?: (index: number, text: string) => void
     /** Swipe-right (quick): flag this item into today's plan. */
     onFlagToday?: (index: number) => void
-    /** Long-press: open the plan sheet (edit / plan for a day) for this item. */
+    /** Long-press: open the plan sheet (edit / add-remove / move) for this item. */
     onPlanFor?: (item: ListEntry) => void
+    /**
+     * Triple-tap: capture this item into the Overview. Taps 1–2 still toggle
+     * done (in place, netting zero — index.tsx defers their reorder/write); the
+     * third tap within the window fires this instead of a toggle.
+     */
+    onTripleTap?: (item: ListEntry) => void
     /** Whether this item is already in the day plan (drives the row indicator). */
     planned?: boolean
     textScaleFactor?: number
@@ -55,6 +62,7 @@ export function ListItem({
     onEdit,
     onFlagToday,
     onPlanFor,
+    onTripleTap,
     planned = false,
     textScaleFactor = 1,
     listAlignment = 'left',
@@ -83,9 +91,17 @@ export function ListItem({
         isDeleting.current = false
     }, [item.text, item.timeOfCompletion, panX])
 
+    // Tap cadence for the triple-tap capture; only counts when the gesture is
+    // wired (Overview enabled), so the disabled path is exactly a plain tap.
+    const tapCadence = useRef(createRowTapCadence())
+
     const handleSingleTap = useCallback(() => {
         // A long-press that armed a drag must not also toggle on release.
         if (armedRef.current) return
+        if (onTripleTap && tapCadence.current.register(Date.now()) === 'capture') {
+            onTripleTap(item)
+            return
+        }
         if (!onToggleDone) return
         if (item.isDone) {
             haptics.toggleOff()
@@ -93,7 +109,7 @@ export function ListItem({
             haptics.toggleOn()
         }
         onToggleDone(index)
-    }, [onToggleDone, index, item.isDone])
+    }, [onTripleTap, item, onToggleDone, index])
 
     const startEdit = useCallback(() => {
         if (!onEdit) return
@@ -257,7 +273,7 @@ export function ListItem({
             {onFlagToday ? (
                 <Animated.View style={[styles.flagBg, { opacity: flagOpacity }]}>
                     <Ionicons name={planned ? 'star' : 'star-outline'} size={22} color={t.colors.onAccent} />
-                    <Text style={styles.flagLabel}>{planned ? i18n.t('plan.inPlan') : i18n.t('plan.today')}</Text>
+                    <Text style={styles.flagLabel}>{planned ? i18n.t('plan.inOverview') : i18n.t('plan.addToOverview')}</Text>
                 </Animated.View>
             ) : null}
             <Animated.View

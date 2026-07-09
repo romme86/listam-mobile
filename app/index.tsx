@@ -37,7 +37,7 @@ import { RPC_LIST_BACKUPS, RPC_SET_BACKUP_SCHEDULE, RPC_SHARE_LIST, RPC_JOIN_LIS
 import { store } from './store/store'
 import { syncActions } from './store/syncSlice'
 import { useAppDispatch, useAppSelector } from './store/hooks'
-import { listsActions, selectItemsForList, selectAllItems } from './store/listsSlice'
+import { listsActions, selectItemsForList, selectSelectedListItems, selectAllItems } from './store/listsSlice'
 import {
     preferencesActions,
     selectPreferences,
@@ -88,9 +88,13 @@ import { buildPeerLabelItem, buildSurfaceLabelItem, buildBuiltinGroupItem, build
 import { BOARD_WRITE_TYPE, BOARD_LIST_TYPE, isBoardType, buildStatusChange, validateTicketDraft } from '@listam/domain/board'
 import {
     reducePlan,
+    groupPlanByDate,
     buildItemPlanEntry,
+    buildListPlanEntry,
     buildPlanItem,
+    isPlanItem,
     planItemKey,
+    planListKey,
     toDateKey,
 } from '@listam/domain/plan'
 import { OverviewScreen } from './components/OverviewScreen'
@@ -123,6 +127,8 @@ const PREF_LOCALE_CHOICE = '@lista_locale_choice'
 const PREF_THEME_CHOICE = '@lista_theme_choice'
 const PREF_DEFAULT_LIST = '@lista_default_list'
 const PREF_BOARD_ENABLED = '@lista_board_enabled'
+const PREF_OVERVIEW_ENABLED = '@lista_overview_enabled'
+const PREF_OVERVIEW_OPEN = '@lista_overview_open'
 const PREF_DEVICE_NAME = '@lista_device_name'
 const PREF_BACKUP_PROMPTED = '@lista_backup_prompted'
 const PREF_BUILTIN_VIEWS = '@lista_builtin_views'
@@ -149,6 +155,12 @@ function parseBuiltinViews(raw: string | null): Record<string, Partial<RegistryL
 
 // Max gap between the two taps of a double-tap-to-add gesture.
 const DOUBLE_TAP_MS = 300
+// Settle window for row-toggle taps while the Overview is enabled: within it,
+// further taps keep flipping in place and a third tap becomes a capture; only
+// after it does the row reorder + the write go out (see handleToggleDone).
+const TAP_SETTLE_MS = 300
+// Identity for a pending toggle (same shape as the plan item ref's payload).
+const toggleKeyOf = (item: ListEntry) => `${item.listId ?? ''}::${item.id ?? ''}`
 
 function AppInner() {
     const t = useTheme()
@@ -157,7 +169,7 @@ function AppInner() {
     const snackbar = useSnackbar()
     const reduceMotion = useReduceMotion()
     const dispatch = useAppDispatch()
-    const { localeChoice, themeChoice, defaultListId, boardEnabled, deviceName, builtinViews } = useAppSelector(selectPreferences)
+    const { localeChoice, themeChoice, defaultListId, boardEnabled, overviewEnabled, deviceName, builtinViews } = useAppSelector(selectPreferences)
     const peerLabels = useAppSelector(selectPeerLabels)
     const valueReturnMap = useAppSelector(selectValueReturnEnabled)
     // Whether a surface has the value-return property enabled (keyed by the
@@ -239,9 +251,13 @@ function AppInner() {
         [categoriesEnabled, applyLearnedCategories, dataList]
     )
 
-    // The set of live plan refs ('i:listId::itemId' / 'l:listId::type'), recomputed
-    // when items change so rows/headers can show their flag state.
-    const plannedRefs = useMemo(() => new Set([...reducePlan(allItems).keys()]), [allItems])
+    // Live plan state, reduced once per items change: the record map feeds the
+    // per-day grouping (tray badge) and the ref set (row/header flag state,
+    // 'i:listId::itemId' / 'l:listId::type').
+    const planRecords = useMemo(() => reducePlan(allItems), [allItems])
+    const plannedRefs = useMemo(() => new Set([...planRecords.keys()]), [planRecords])
+    const planByDate = useMemo(() => groupPlanByDate(planRecords), [planRecords])
+    const todayPlanCount = planByDate.get(toDateKey(Date.now()))?.length ?? 0
 
     const [joinDialogVisible, setJoinDialogVisible] = useState(false)
     // The join dialog is reused for both the destructive whole-project join
@@ -269,16 +285,18 @@ function AppInner() {
     // Which sub-view the lists menu opens in: the burger jumps to 'settings',
     // the list-name strip opens the 'lists' switcher.
     const [menuInitialView, setMenuInitialView] = useState<'lists' | 'settings'>('lists')
-    // The day-plan Overview is an OPT-IN organization capability, gated behind the
-    // same toggle as boards (preferences.boardEnabled). By default the app is just
-    // a grocery + to-do list app, so the Overview is off: the app launches straight
-    // onto the selected list and the Header's sun button is hidden. Enabling boards
-    // reveals the sun button and lets the user toggle the day plan on.
+    // The day-plan Overview is an OPT-IN capability behind its own preference
+    // (preferences.overviewEnabled, general settings). By default the app is just
+    // a grocery + to-do list app: no Overview surface, and none of the plan
+    // gestures (triple-tap, swipe-right flag, long-press sheet) are wired.
+    // overviewVisible is whether the surface is currently shown; it is persisted
+    // (PREF_OVERVIEW_OPEN) via setOverviewShown so an opted-in user relaunches
+    // onto the Overview when they left it open.
     const [overviewVisible, setOverviewVisible] = useState(false)
-    // Effective Overview visibility: it can only ever show while boards are
-    // enabled, so disabling boards (or the default, boards-off state) always
-    // collapses back to the list — even if overviewVisible lingered true.
-    const overviewOpen = boardEnabled && overviewVisible
+    // Effective Overview visibility: it can only ever show while the feature is
+    // enabled, so disabling it always collapses back to the list — even if
+    // overviewVisible lingered true.
+    const overviewOpen = overviewEnabled && overviewVisible
     // The item whose plan sheet (edit / plan-for-a-day) is open (null = closed).
     const [planSheetItem, setPlanSheetItem] = useState<ListEntry | null>(null)
     const [pendingListSettingsId, setPendingListSettingsId] = useState<string | null>(null)
@@ -435,18 +453,26 @@ function AppInner() {
             PREF_THEME_CHOICE,
             PREF_DEFAULT_LIST,
             PREF_BOARD_ENABLED,
+            PREF_OVERVIEW_ENABLED,
+            PREF_OVERVIEW_OPEN,
             PREF_DEVICE_NAME,
             PREF_BUILTIN_VIEWS,
-        ]).then(([[, localeChoice], [, themeChoice], [, defaultList], [, boardEnabled], [, deviceName], [, builtinViewsRaw]]) => {
+        ]).then(([[, localeChoice], [, themeChoice], [, defaultList], [, boardEnabled], [, overviewEnabledRaw], [, overviewOpenRaw], [, deviceName], [, builtinViewsRaw]]) => {
             const parsedBuiltinViews = parseBuiltinViews(builtinViewsRaw)
             dispatch(preferencesActions.preferencesHydrated({
                 ...(isLocaleChoice(localeChoice) ? { localeChoice } : {}),
                 ...(isThemeChoice(themeChoice) ? { themeChoice } : {}),
                 ...(defaultList !== null ? { defaultListId: defaultList } : {}),
                 ...(boardEnabled === '1' || boardEnabled === '0' ? { boardEnabled: boardEnabled === '1' } : {}),
+                ...(overviewEnabledRaw === '1' || overviewEnabledRaw === '0' ? { overviewEnabled: overviewEnabledRaw === '1' } : {}),
                 ...(deviceName !== null ? { deviceName } : {}),
                 ...(parsedBuiltinViews ? { builtinViews: parsedBuiltinViews } : {}),
             }))
+            // Land back on the Overview when the user left it open. Decided here,
+            // with both persisted values in hand, so it can't race the hydration
+            // dispatch or the default-list restore (which only changes the list
+            // UNDER the overlay).
+            if (overviewEnabledRaw === '1' && overviewOpenRaw === '1') setOverviewVisible(true)
         })
 
         void prepareLoyaltyCards()
@@ -522,6 +548,26 @@ function AppInner() {
         dispatch(preferencesActions.boardEnabledSet(next))
         AsyncStorage.setItem(PREF_BOARD_ENABLED, next ? '1' : '0')
     }, [boardEnabled, dispatch])
+
+    // Show/hide the Overview surface AND persist it, so relaunches land where
+    // the user left off. Persisting happens ONLY here (never from an effect —
+    // a mount-time effect writer would race the multiGet restore above).
+    const setOverviewShown = useCallback((next: boolean) => {
+        setOverviewVisible(next)
+        AsyncStorage.setItem(PREF_OVERVIEW_OPEN, next ? '1' : '0')
+    }, [])
+
+    const handleToggleOverviewEnabled = useCallback(() => {
+        const next = !overviewEnabled
+        dispatch(preferencesActions.overviewEnabledSet(next))
+        AsyncStorage.setItem(PREF_OVERVIEW_ENABLED, next ? '1' : '0')
+        // Turning the feature off also forgets the open state: re-enabling weeks
+        // later must not relaunch straight into the Overview.
+        if (!next) {
+            setOverviewVisible(false)
+            AsyncStorage.setItem(PREF_OVERVIEW_OPEN, '0')
+        }
+    }, [overviewEnabled, dispatch])
 
     // This device's own writer key, learned from the membership roster (unknown
     // at boot — the roster arrives asynchronously once peers connect).
@@ -718,10 +764,54 @@ function AppInner() {
         return () => clearInterval(interval)
     }, [isJoining])
 
+    // Toggling done is two-phase while the Overview is enabled: the state flip
+    // lands immediately IN PLACE (instant strikethrough, no row movement), and
+    // the reorder + synced write settle TAP_SETTLE_MS later. Within the window
+    // further taps keep flipping in place — a fast double-tap nets zero and
+    // sends nothing — and a third tap is diverted to capture (captureToggle
+    // cancels the pending settle). With the Overview disabled everything runs
+    // in one shot, which is exactly the pre-Overview behavior.
+    const pendingToggleRef = useRef(new Map<string, { originalIsDone: boolean; timer: ReturnType<typeof setTimeout> | null }>())
+
+    const settleToggle = useCallback((key: string) => {
+        const pending = pendingToggleRef.current.get(key)
+        if (!pending) return
+        pendingToggleRef.current.delete(key)
+        if (pending.timer) clearTimeout(pending.timer)
+        const list = selectSelectedListItems(store.getState())
+        const index = list.findIndex((it) => toggleKeyOf(it) === key)
+        if (index >= 0) {
+            const current = list[index]
+            // Net-zero (double-tap): nothing moved, nothing to sync.
+            if (!!current.isDone === pending.originalIsDone) return
+            animate()
+            const newList = [...list]
+            newList.splice(index, 1)
+            if (current.isDone) newList.push(current)
+            else newList.unshift(current)
+            dispatch(listsActions.selectedListItemsReplaced(newList))
+            sendRPC(RPC_UPDATE, JSON.stringify({ item: current }))
+            return
+        }
+        // The row left the visible list mid-window (surface switch): still send
+        // a net-nonzero flip so it is never local-only.
+        const item = selectAllItems(store.getState()).find((it) => !isPlanItem(it) && toggleKeyOf(it) === key)
+        if (item && !!item.isDone !== pending.originalIsDone) {
+            sendRPC(RPC_UPDATE, JSON.stringify({ item }))
+        }
+    }, [animate, dispatch, sendRPC])
+
+    // A triple-tap's first two taps flipped in place and netted zero — dropping
+    // the pending settle restores "nothing happened" for them, with no write.
+    const cancelPendingToggle = useCallback((item: ListEntry) => {
+        const pending = pendingToggleRef.current.get(toggleKeyOf(item))
+        if (!pending) return
+        if (pending.timer) clearTimeout(pending.timer)
+        pendingToggleRef.current.delete(toggleKeyOf(item))
+    }, [])
+
     const handleToggleDone = useCallback((index: number) => {
-        animate()
-        const newList = [...dataList]
-        const current = newList[index]
+        const current = dataList[index]
         if (!current) return
 
         const updatedItem: ListEntry = {
@@ -731,16 +821,27 @@ function AppInner() {
             updatedAt: Date.now(),
         }
 
-        newList.splice(index, 1)
-        if (updatedItem.isDone) {
-            newList.push(updatedItem)
-        } else {
-            newList.unshift(updatedItem)
+        if (!overviewEnabled) {
+            animate()
+            const newList = [...dataList]
+            newList.splice(index, 1)
+            if (updatedItem.isDone) {
+                newList.push(updatedItem)
+            } else {
+                newList.unshift(updatedItem)
+            }
+            dispatch(listsActions.selectedListItemsReplaced(newList))
+            sendRPC(RPC_UPDATE, JSON.stringify({ item: updatedItem }))
+            return
         }
 
-        dispatch(listsActions.selectedListItemsReplaced(newList))
-        sendRPC(RPC_UPDATE, JSON.stringify({ item: updatedItem }))
-    }, [animate, dataList, dispatch, sendRPC])
+        dispatch(listsActions.listItemUpdated(updatedItem))
+        const key = toggleKeyOf(current)
+        const pending = pendingToggleRef.current.get(key) ?? { originalIsDone: !!current.isDone, timer: null }
+        if (pending.timer) clearTimeout(pending.timer)
+        pending.timer = setTimeout(() => settleToggle(key), TAP_SETTLE_MS)
+        pendingToggleRef.current.set(key, pending)
+    }, [dataList, overviewEnabled, animate, dispatch, sendRPC, settleToggle])
 
     const handleDelete = useCallback((index: number) => {
         const deletedItem = dataList[index]
@@ -793,10 +894,10 @@ function AppInner() {
     }, [dispatch, sendRPC])
 
     const clearPlanRef = useCallback((ref: string) => {
-        const rec = reducePlan(allItems).get(ref)
+        const rec = planRecords.get(ref)
         if (!rec) return
         writePlan(buildPlanItem({ id: ref, kind: rec.kind, refListId: rec.refListId, refItemId: rec.refItemId, refType: rec.refType, plannedFor: '', planOrder: rec.planOrder, updatedAt: Date.now() }) as unknown as ListEntry)
-    }, [allItems, writePlan])
+    }, [planRecords, writePlan])
 
     const flagItemForDay = useCallback((item: ListEntry, dateKey: string) => {
         if (!item.id || !item.listId) return
@@ -806,10 +907,10 @@ function AppInner() {
     // Re-home a plan entry onto another day (the Overview "move to today" on a
     // carried-over row). Upserts the same ref with a new plannedFor.
     const movePlanForRef = useCallback((ref: string, dateKey: string) => {
-        const rec = reducePlan(allItems).get(ref)
+        const rec = planRecords.get(ref)
         if (!rec || rec.plannedFor === dateKey) return
         writePlan(buildPlanItem({ id: ref, kind: rec.kind, refListId: rec.refListId, refItemId: rec.refItemId, refType: rec.refType, plannedFor: dateKey, planOrder: Date.now(), updatedAt: Date.now() }) as unknown as ListEntry)
-    }, [allItems, writePlan])
+    }, [planRecords, writePlan])
 
     const toggleItemPlan = useCallback((item: ListEntry) => {
         const ref = planItemKey(item.listId ?? '', item.id ?? '')
@@ -817,10 +918,36 @@ function AppInner() {
         else flagItemForDay(item, toDateKey(Date.now()))
     }, [plannedRefs, clearPlanRef, flagItemForDay])
 
+    // Single entry point for every capture gesture (triple-tap, swipe-right,
+    // plan-sheet action): toggles plan membership for TODAY with a haptic and
+    // an undoable snackbar. The undo closure is self-contained — it restores
+    // the exact prior record (or clears the fresh one) via writePlan, so it
+    // stays correct even though the surrounding memos have moved on by then.
+    const captureToggle = useCallback((item: ListEntry) => {
+        cancelPendingToggle(item)
+        const ref = planItemKey(item.listId ?? '', item.id ?? '')
+        const prev = planRecords.get(ref)
+        toggleItemPlan(item)
+        if (prev) haptics.toggleOff()
+        else haptics.toggleOn()
+        const undo = () => {
+            if (prev) {
+                writePlan(buildPlanItem({ id: ref, kind: prev.kind, refListId: prev.refListId, refItemId: prev.refItemId, refType: prev.refType, plannedFor: prev.plannedFor, planOrder: prev.planOrder, updatedAt: Date.now() }) as unknown as ListEntry)
+            } else {
+                writePlan(buildPlanItem({ id: ref, kind: 'item', refListId: item.listId ?? '', refItemId: item.id ?? '', refType: '', plannedFor: '', planOrder: Date.now(), updatedAt: Date.now() }) as unknown as ListEntry)
+            }
+        }
+        snackbar.show(
+            i18n.t(prev ? 'plan.removedFromOverview' : 'plan.addedToOverview'),
+            'success',
+            { label: i18n.t('plan.undo'), onPress: undo },
+        )
+    }, [cancelPendingToggle, planRecords, toggleItemPlan, writePlan, snackbar, i18n])
+
     const handleFlagToday = useCallback((index: number) => {
         const item = dataList[index]
-        if (item) toggleItemPlan(item)
-    }, [dataList, toggleItemPlan])
+        if (item) captureToggle(item)
+    }, [dataList, captureToggle])
 
     const handlePlanFor = useCallback((item: ListEntry) => setPlanSheetItem(item), [])
 
@@ -844,12 +971,27 @@ function AppInner() {
         sendRPC(RPC_UPDATE, JSON.stringify({ item: updated }))
     }, [dispatch, sendRPC])
 
-    const planListName = useCallback((listId: string) => lib.listsById[listId]?.name ?? listId, [lib])
+    // Plan records store the REAL listId ('default' for built-in surfaces), but
+    // nav + names key off the composite surface id ('default:shopping' …), so
+    // re-encode before any lookup or selection.
+    const planNavId = useCallback((listId: string, type: string) => {
+        const canonical = isBoardType(type) ? BOARD_LIST_TYPE : type
+        return listId === DEFAULT_LIST_ID ? surfaceLabelKey(listId, canonical) : listId
+    }, [])
 
-    const openListFromOverview = useCallback((listId: string) => {
-        setOverviewVisible(false)
-        dispatch(listsActions.selectedListChanged({ listId }))
-    }, [dispatch])
+    const planListName = useCallback((listId: string, type: string) => {
+        const navId = planNavId(listId, type)
+        const rec = lib.listsById[navId]
+        if (rec?.name) return rec.name
+        if (isBuiltinSurfaceId(navId)) return i18n.t(builtinSurfaceNameKey(decodeSurface(navId).listType))
+        return lib.listsById[listId]?.name ?? listId
+    }, [planNavId, lib, i18n])
+
+    const openListFromOverview = useCallback((listId: string, type: string) => {
+        const navId = planNavId(listId, type)
+        setOverviewShown(false)
+        dispatch(listsActions.selectedListChanged({ listId: navId, listType: lib.listsById[navId]?.type ?? type }))
+    }, [planNavId, lib, dispatch, setOverviewShown])
 
     const planSheetRef = planSheetItem ? planItemKey(planSheetItem.listId ?? '', planSheetItem.id ?? '') : ''
 
@@ -1399,9 +1541,6 @@ function AppInner() {
                 networkStatus={networkStatus}
                 isJoining={isJoining}
                 onMenuToggle={() => { setMenuInitialView('settings'); setPendingListSettingsId(null); setListsMenuVisible(true) }}
-                onOverview={() => setOverviewVisible((v) => !v)}
-                overviewActive={overviewOpen}
-                showOverview={boardEnabled}
                 trialDaysRemaining={subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
                 groupCount={position?.groupCount ?? 0}
                 groupIndex={position?.groupIndex ?? 0}
@@ -1488,7 +1627,7 @@ function AppInner() {
                 defaultListId={defaultListId}
                 syncedDefaultListId={syncedDefaultList?.defaultListId ?? null}
                 onSetSyncedDefault={(listId: string, listType: string) => sendRPC(RPC_UPDATE, JSON.stringify({ item: buildProjectSettingsItem({ defaultListId: listId, defaultListType: listType, updatedAt: Date.now() }) }))}
-                onSelect={(id: string, type: string) => { setOverviewVisible(false); handleSelectList(id, type) }}
+                onSelect={(id: string, type: string) => { setOverviewShown(false); handleSelectList(id, type) }}
                 onSetDefault={handleSetDefaultList}
                 onCreate={handleCreateList}
                 onCreateGroup={handleCreateGroup}
@@ -1508,6 +1647,18 @@ function AppInner() {
                 onThemeChoiceChange={handleThemeChoiceChange}
                 boardEnabled={boardEnabled}
                 onToggleBoardEnabled={handleToggleBoardEnabled}
+                overviewEnabled={overviewEnabled}
+                onToggleOverviewEnabled={handleToggleOverviewEnabled}
+                overviewOpen={overviewOpen}
+                overviewTodayCount={todayPlanCount}
+                onOpenOverview={() => { setOverviewShown(true); setListsMenuVisible(false); setPendingListSettingsId(null) }}
+                showInOverviewFor={(surfaceId: string, type: string) => plannedRefs.has(planListKey(decodeSurface(surfaceId).listId, isBoardType(type) ? BOARD_LIST_TYPE : type))}
+                onSetShowInOverview={(surfaceId: string, type: string, enabled: boolean) => {
+                    const listId = decodeSurface(surfaceId).listId
+                    const canonical = isBoardType(type) ? BOARD_LIST_TYPE : type
+                    if (enabled) writePlan(buildListPlanEntry({ listId, listType: canonical, plannedFor: toDateKey(Date.now()), planOrder: Date.now(), updatedAt: Date.now() }) as unknown as ListEntry)
+                    else clearPlanRef(planListKey(listId, canonical))
+                }}
                 deviceName={deviceName}
                 onDeviceNameChange={handleDeviceNameChange}
                 onChangeListView={writeListView}
@@ -1541,6 +1692,7 @@ function AppInner() {
                         tickets={dataList}
                         config={boardConfig}
                         onOpenTicket={handleOpenTicket}
+                        onTripleTapTicket={overviewEnabled ? captureToggle : undefined}
                     />
                 ) : isGridView ? (
                     <VisualGridList
@@ -1561,9 +1713,10 @@ function AppInner() {
                         onDelete={handleDelete}
                         onEdit={handleEditItem}
                         onRequestAdd={handleRequestAdd}
-                        onFlagToday={handleFlagToday}
-                        onPlanFor={handlePlanFor}
-                        isPlanned={isItemPlanned}
+                        onFlagToday={overviewEnabled ? handleFlagToday : undefined}
+                        onPlanFor={overviewEnabled ? handlePlanFor : undefined}
+                        onTripleTap={overviewEnabled ? captureToggle : undefined}
+                        isPlanned={overviewEnabled ? isItemPlanned : undefined}
                         categoriesEnabled={categoriesEnabled}
                         categoryHeadersVisible={categoryHeadersVisible}
                         listTextSize={listTextSize}
@@ -1582,8 +1735,7 @@ function AppInner() {
                 visible={planSheetItem !== null}
                 item={planSheetItem}
                 planned={planSheetRef !== '' && plannedRefs.has(planSheetRef)}
-                onPickDay={(dateKey) => { if (planSheetItem) flagItemForDay(planSheetItem, dateKey); setPlanSheetItem(null) }}
-                onClear={() => { if (planSheetRef) clearPlanRef(planSheetRef); setPlanSheetItem(null) }}
+                onToggleOverview={() => { if (planSheetItem) captureToggle(planSheetItem); setPlanSheetItem(null) }}
                 onEdit={(text) => { if (planSheetItem) editPlanItemText(planSheetItem, text); setPlanSheetItem(null) }}
                 onMove={isTodo ? () => { setMoveTarget(planSheetItem); setPlanSheetItem(null) } : undefined}
                 onClose={() => setPlanSheetItem(null)}
