@@ -10,12 +10,14 @@ type Props = {
     tickets: ListEntry[]
     config: BoardConfig
     onOpenTicket: (ticket: ListEntry) => void
+    /** Triple-tap capture into the Overview (threaded down to each card). */
+    onTripleTapTicket?: (ticket: ListEntry) => void
 }
 
 // The board surface: a horizontal status-chip filter over a vertical list of
 // ticket cards (one status at a time), per the phone design. Status names/colors
 // come from the board config, so custom boards work unchanged.
-export function BoardView({ tickets, config, onOpenTicket }: Props) {
+export function BoardView({ tickets, config, onOpenTicket, onTripleTapTicket }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
@@ -59,7 +61,7 @@ export function BoardView({ tickets, config, onOpenTicket }: Props) {
             <FlatList
                 data={selected?.tickets ?? []}
                 keyExtractor={(item) => item.id ?? item.itemId ?? item.text}
-                renderItem={({ item }) => <TicketCard ticket={item} config={config} onPress={onOpenTicket} />}
+                renderItem={({ item }) => <TicketCard ticket={item} config={config} onPress={onOpenTicket} onTripleTap={onTripleTapTicket} />}
                 contentContainerStyle={styles.listContent}
                 ItemSeparatorComponent={() => <View style={{ height: t.spacing.md }} />}
                 ListEmptyComponent={<Text style={styles.empty}>{i18n.t('board.empty')}</Text>}
