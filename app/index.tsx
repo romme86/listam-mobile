@@ -602,14 +602,19 @@ function AppInner() {
         writePeerLabel(name)
     }, [deviceName, dispatch, writePeerLabel])
 
-    // Re-assert the peer-label when the roster (and thus the self writer key)
-    // becomes known, since at name-set time the key may have been unavailable.
-    // Only when our stored name differs from what's already synced for us.
+    // Re-assert the peer-label when the self writer key becomes known OR the base
+    // becomes writable. A name set while the base is still read-only (e.g. right
+    // after a fresh install, before write access lands) is silently refused; the
+    // backend rebroadcasts the roster the moment writable flips true, and this
+    // re-fires then so the name isn't lost. Only writes when our stored name
+    // differs from what's already synced for us. (writable === false only when the
+    // backend explicitly says so — an older roster leaves it undefined = allowed.)
     useEffect(() => {
         if (!selfWriterKey || !deviceName) return
+        if (membershipRoster && membershipRoster.writable === false) return
         if (peerLabels.get(selfWriterKey) === deviceName) return
         writePeerLabel(deviceName)
-    }, [selfWriterKey, deviceName, peerLabels, writePeerLabel])
+    }, [selfWriterKey, deviceName, peerLabels, writePeerLabel, membershipRoster])
 
     const handleLocaleChoiceChange = useCallback((choice: LocaleChoice) => {
         dispatch(preferencesActions.localeChoiceSet(choice))

@@ -13,6 +13,8 @@ export type MembershipRoster = {
     canAdminister: boolean
     /** This device's own writer key — present even when not in `writers` yet. */
     localWriterKey?: string | null
+    /** Whether this device's base can currently append (undefined = old roster). */
+    writable?: boolean
     writers: MembershipMember[]
 }
 
@@ -22,6 +24,7 @@ export type DevicesState = {
     ownerWriterKey: string | null
     canAdminister: boolean
     localWriterKey: string | null
+    writable: boolean
     writerIds: string[]
     writersById: Record<string, MembershipMember>
 }
@@ -32,6 +35,7 @@ const initialState: DevicesState = {
     ownerWriterKey: null,
     canAdminister: false,
     localWriterKey: null,
+    writable: false,
     writerIds: [],
     writersById: {},
 }
@@ -48,6 +52,7 @@ const devicesSlice = createSlice({
                 state.ownerWriterKey = null
                 state.canAdminister = false
                 state.localWriterKey = null
+                state.writable = false
                 state.writerIds = []
                 state.writersById = {}
                 return
@@ -58,6 +63,9 @@ const devicesSlice = createSlice({
             state.ownerWriterKey = roster.ownerWriterKey
             state.canAdminister = roster.canAdminister
             state.localWriterKey = typeof roster.localWriterKey === 'string' ? roster.localWriterKey : null
+            // Undefined (an older roster) is treated as writable so name advertising
+            // isn't blocked; only an explicit false makes the frontend wait.
+            state.writable = roster.writable !== false
             state.writerIds = []
             state.writersById = {}
 
@@ -88,6 +96,7 @@ export const selectMembershipRoster = createSelector(
             ownerWriterKey: state.ownerWriterKey,
             canAdminister: state.canAdminister,
             localWriterKey: state.localWriterKey,
+            writable: state.writable,
             writers: state.writerIds
                 .map((writerKey) => state.writersById[writerKey])
                 .filter((member): member is MembershipMember => Boolean(member)),
