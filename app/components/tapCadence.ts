@@ -5,31 +5,49 @@
 /** Max gap between consecutive taps for them to count as one cadence. */
 export const TRIPLE_TAP_MS = 300
 
-export type RowTapDecision = 'pass' | 'capture'
+export type RowTapDecision = 'wait' | 'add' | 'capture'
+export type RowTapOutcome = 'none' | 'toggle' | 'add'
 
 /**
- * Row mode: single taps keep their instant behavior (the row toggle flips in
- * place and settles later — see index.tsx handleToggleDone), so taps 1 and 2
- * "pass" through; a third tap within the window is diverted to "capture".
+ * Row mode: a single tap toggles done, a double-tap opens the add bar, and —
+ * when the Overview is enabled — a triple-tap captures the item into it. A
+ * toggle must not pre-empt a still-arriving second/third tap, so no tap acts on
+ * its own: `register` answers 'wait' and the caller settles after the window.
+ *
+ *  - register(now, tripleEnabled): 'capture' fires at once on the 3rd tap (only
+ *    when tripleEnabled). With tripleEnabled off there is no third outcome, so
+ *    the 2nd tap answers 'add' immediately — no need to keep waiting. Else 'wait'.
+ *  - settle(): resolves a waiting cadence once the window elapses — 1 tap =
+ *    'toggle', 2 taps = 'add', nothing pending = 'none'.
  */
 export function createRowTapCadence(windowMs: number = TRIPLE_TAP_MS) {
     let count = 0
     let lastTs = 0
+    const reset = () => {
+        count = 0
+        lastTs = 0
+    }
     return {
-        register(now: number): RowTapDecision {
+        register(now: number, tripleEnabled: boolean = true): RowTapDecision {
             count = now - lastTs < windowMs ? count + 1 : 1
             lastTs = now
-            if (count >= 3) {
-                count = 0
-                lastTs = 0
+            if (tripleEnabled && count >= 3) {
+                reset()
                 return 'capture'
             }
-            return 'pass'
+            if (!tripleEnabled && count >= 2) {
+                reset()
+                return 'add'
+            }
+            return 'wait'
         },
-        reset() {
-            count = 0
-            lastTs = 0
+        settle(): RowTapOutcome {
+            const n = count
+            reset()
+            if (n <= 0) return 'none'
+            return n === 1 ? 'toggle' : 'add'
         },
+        reset,
     }
 }
 

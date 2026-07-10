@@ -11,6 +11,8 @@ export type MembershipRoster = {
     currentEpoch: number
     ownerWriterKey: string | null
     canAdminister: boolean
+    /** This device's own writer key — present even when not in `writers` yet. */
+    localWriterKey?: string | null
     writers: MembershipMember[]
 }
 
@@ -19,6 +21,7 @@ export type DevicesState = {
     currentEpoch: number
     ownerWriterKey: string | null
     canAdminister: boolean
+    localWriterKey: string | null
     writerIds: string[]
     writersById: Record<string, MembershipMember>
 }
@@ -28,6 +31,7 @@ const initialState: DevicesState = {
     currentEpoch: 0,
     ownerWriterKey: null,
     canAdminister: false,
+    localWriterKey: null,
     writerIds: [],
     writersById: {},
 }
@@ -43,6 +47,7 @@ const devicesSlice = createSlice({
                 state.currentEpoch = 0
                 state.ownerWriterKey = null
                 state.canAdminister = false
+                state.localWriterKey = null
                 state.writerIds = []
                 state.writersById = {}
                 return
@@ -52,6 +57,7 @@ const devicesSlice = createSlice({
             state.currentEpoch = Number.isFinite(roster.currentEpoch) ? roster.currentEpoch : 0
             state.ownerWriterKey = roster.ownerWriterKey
             state.canAdminister = roster.canAdminister
+            state.localWriterKey = typeof roster.localWriterKey === 'string' ? roster.localWriterKey : null
             state.writerIds = []
             state.writersById = {}
 
@@ -81,6 +87,7 @@ export const selectMembershipRoster = createSelector(
             currentEpoch: state.currentEpoch,
             ownerWriterKey: state.ownerWriterKey,
             canAdminister: state.canAdminister,
+            localWriterKey: state.localWriterKey,
             writers: state.writerIds
                 .map((writerKey) => state.writersById[writerKey])
                 .filter((member): member is MembershipMember => Boolean(member)),

@@ -57,7 +57,7 @@ try {
 after(() => fs.rmSync(buildDir, { recursive: true, force: true }))
 
 const { default: reducer, listsActions, selectSelectedListItems, selectItemsForList } = slice
-const { selectedListChanged, listItemAdded, selectedListItemsSynced, selectedListItemsReplaced } = listsActions
+const { selectedListChanged, listItemAdded, selectedListItemsSynced, selectedListItemsReplaced, listRemoved } = listsActions
 
 let seq = 0
 function makeEntry(over = {}) {
@@ -112,6 +112,31 @@ test('SYNC_LIST (bare array) folds into default and does not clobber the viewed 
     assert.deepEqual(texts(selectSelectedListItems(store.getState())), ['KeepMe'])
     // ...and the synced items land in the default bucket.
     assert.deepEqual(texts(selectItemsForList(store.getState(), 'default')), ['SyncedDefault'])
+})
+
+// Deleting a named list must drop the WHOLE bucket record, not just its items —
+// registrySelectors.extraLists scans listsById, so a leftover empty ListRecord
+// would resurface as a stray "Ungrouped" list once the registry tombstone lands.
+test('listRemoved drops the whole bucket so a deleted list cannot resurface', () => {
+    const store = makeStore()
+    store.dispatch(selectedListChanged({ listId: 'list-party', listType: 'shopping' }))
+    store.dispatch(listItemAdded(makeEntry({ text: 'Cups', listId: 'list-party' })))
+    assert.deepEqual(texts(selectItemsForList(store.getState(), 'list-party')), ['Cups'])
+
+    store.dispatch(listRemoved({ listId: 'list-party' }))
+    const { lists } = store.getState()
+    assert.equal(lists.listsById['list-party'], undefined, 'the record itself is gone')
+    assert.ok(!lists.listIds.includes('list-party'), 'unlinked from listIds')
+    assert.ok(!lists.projectsById[lists.selectedProjectId].listIds.includes('list-party'), 'unlinked from project')
+    assert.deepEqual(texts(selectItemsForList(store.getState(), 'list-party')), [])
+})
+
+test('listRemoved refuses to remove the shared default bucket (built-in surfaces)', () => {
+    const store = makeStore()
+    store.dispatch(listItemAdded(makeEntry({ text: 'Bread', listId: 'default' })))
+    store.dispatch(listRemoved({ listId: 'default' }))
+    assert.ok(store.getState().lists.listsById['default'], 'the built-in default bucket survives')
+    assert.deepEqual(texts(selectItemsForList(store.getState(), 'default')), ['Bread'])
 })
 
 // Mesh-safety: peer/surface label meta-items (reserved '__peers__' /
