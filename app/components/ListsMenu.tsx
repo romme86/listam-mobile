@@ -4,6 +4,7 @@ import {
     type GestureResponderEvent,
 } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import Clipboard from '@react-native-clipboard/clipboard'
 import { haptics } from '../feedback'
 import { useTheme, cardColor, type Theme } from '../theme'
 import { useI18n, type LocaleChoice } from '../i18n'
@@ -79,6 +80,10 @@ type Props = {
     // devices apart). Commit publishes the label; empty clears it.
     deviceName: string
     onDeviceNameChange: (name: string) => void
+    // This device's own writer key — the public identifier peers use to tell
+    // devices apart. Shown read-only in Settings so the user can match this
+    // device against a row in Members. Null until the base is open/writable.
+    selfWriterKey: string | null
     // Per-board/list settings, addressed by listId so any list can be configured.
     onChangeListView: (listId: string, patch: Partial<RegistryListView>) => void
     // Value-return enable flag (synced per-surface), addressed by the surface's
@@ -136,7 +141,7 @@ export function ListsMenu(props: Props) {
         boardEnabled, onToggleBoardEnabled,
         overviewEnabled, onToggleOverviewEnabled, overviewOpen, overviewTodayCount, onOpenOverview,
         showInOverviewFor, onSetShowInOverview,
-        deviceName, onDeviceNameChange,
+        deviceName, onDeviceNameChange, selfWriterKey,
         onChangeListView, valueReturnFor, onSetValueReturn, onRenameList, onDeleteListItems, onDeleteList, onClearDone, onShareList, onShareProject, onJoin, onJoinList,
         initialListSettingsId, initialView, loyaltyCards, onScanCard, onSelectCard,
         sendRPCWithReply, notify,
@@ -451,6 +456,29 @@ export function ListsMenu(props: Props) {
                                     onEndEditing={(e) => onDeviceNameChange(e.nativeEvent.text)}
                                 />
                                 <Text style={styles.sectionNote}>{i18n.t('desktop.settings.deviceName.help')}</Text>
+
+                                {/* This device's own writer key — the public identifier peers
+                                    use to tell devices apart. Read-only + copyable so the user
+                                    can match this device against a row in Members (e.g. to check
+                                    why a name isn't syncing). Null until the base is open. */}
+                                <Text style={styles.sectionLabel}>{i18n.t('desktop.settings.deviceKey.label')}</Text>
+                                {selfWriterKey ? (
+                                    <View style={styles.deviceKeyRow}>
+                                        <Text style={styles.deviceKeyValue} selectable numberOfLines={2}>{selfWriterKey}</Text>
+                                        <TouchableOpacity
+                                            onPress={() => { Clipboard.setString(selfWriterKey); notify(i18n.t('desktop.settings.deviceKey.copied'), 'success') }}
+                                            hitSlop={8}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={i18n.t('desktop.peers.copy')}
+                                            style={styles.deviceKeyCopy}
+                                        >
+                                            <Ionicons name="copy-outline" size={18} color={t.colors.text} />
+                                        </TouchableOpacity>
+                                    </View>
+                                ) : (
+                                    <Text style={styles.sectionNote}>{i18n.t('desktop.settings.deviceKey.pending')}</Text>
+                                )}
+                                <Text style={styles.sectionNote}>{i18n.t('desktop.settings.deviceKey.help')}</Text>
 
                                 {/* Sharing — invite someone to the whole project, or join
                                     someone else's shared project or list. Sharing ONE list
@@ -858,6 +886,17 @@ function makeStyles(t: Theme) {
             paddingHorizontal: t.spacing.md, paddingVertical: t.spacing.sm,
             borderWidth: StyleSheet.hairlineWidth, borderColor: t.colors.border,
         },
+        deviceKeyRow: {
+            flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm,
+            backgroundColor: t.colors.surfaceAlt, borderRadius: t.radius.md,
+            paddingHorizontal: t.spacing.md, paddingVertical: t.spacing.sm,
+            borderWidth: StyleSheet.hairlineWidth, borderColor: t.colors.border,
+        },
+        deviceKeyValue: {
+            flex: 1, fontSize: t.type.caption.fontSize, color: t.colors.textSecondary,
+            fontVariant: ['tabular-nums'], letterSpacing: 0.2,
+        },
+        deviceKeyCopy: { padding: t.spacing.xs },
         switchRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md, paddingVertical: t.spacing.sm, minHeight: 44 },
         switchLabel: { flex: 1, fontSize: t.type.bodyStrong.fontSize, color: t.colors.text },
         actionRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md, paddingVertical: t.spacing.md, minHeight: 44 },
