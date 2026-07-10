@@ -24,6 +24,7 @@ import {
 } from '../store/devicesSlice'
 import { boardConfigActions } from '../store/boardConfigSlice'
 import { labelsActions } from '../store/labelsSlice'
+import { presenceActions } from '../store/presenceSlice'
 import { useI18n } from '../i18n'
 import {
     RPC_UPDATE,
@@ -422,6 +423,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                     dispatch(devicesActions.rosterReceived(null))
                     dispatch(boardConfigActions.boardConfigReset())
                     dispatch(labelsActions.labelsCleared())
+                    dispatch(presenceActions.presenceCleared())
                     return
                 case 'sync-list':
                     if (Array.isArray(event.items)) {
@@ -432,19 +434,23 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                         // — fold any present here additively, never clearing.
                         dispatch(listsActions.selectedListItemsSynced(event.items as ListEntry[]))
                         dispatch(labelsActions.labelsApplied(event.items as ListEntry[]))
+                        dispatch(presenceActions.presenceApplied(event.items as ListEntry[]))
                     }
                     return
                 case 'delete-from-backend':
                     dispatch(listsActions.listItemDeleted(event.item as ListEntry))
                     dispatch(labelsActions.labelItemRemoved(event.item as ListEntry))
+                    dispatch(presenceActions.presenceItemRemoved(event.item as ListEntry))
                     return
                 case 'update-from-backend':
                     dispatch(listsActions.listItemUpdated(event.item as ListEntry))
                     dispatch(labelsActions.labelItemApplied(event.item as ListEntry))
+                    dispatch(presenceActions.presenceItemApplied(event.item as ListEntry))
                     return
                 case 'add-from-backend':
                     dispatch(listsActions.listItemAdded(event.item as ListEntry))
                     dispatch(labelsActions.labelItemApplied(event.item as ListEntry))
+                    dispatch(presenceActions.presenceItemApplied(event.item as ListEntry))
                     return
                 case 'invite-key':
                     if (event.key != null) {

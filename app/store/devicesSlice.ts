@@ -5,6 +5,8 @@ export type MembershipMember = {
     writerKey: string
     isOwner: boolean
     isSelf: boolean
+    /** Owner-signed join date (ms); null for an older base that never captured it. */
+    joinedAt?: number | null
 }
 
 export type MembershipRoster = {
@@ -76,6 +78,7 @@ const devicesSlice = createSlice({
                     writerKey: member.writerKey,
                     isOwner: member.isOwner,
                     isSelf: member.isSelf,
+                    joinedAt: typeof member.joinedAt === 'number' ? member.joinedAt : null,
                 }
             }
         },

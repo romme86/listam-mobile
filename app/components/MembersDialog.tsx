@@ -1,8 +1,10 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { View, Text, Modal, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native'
+import { isOnlineNow, averageOnlineMs, type PresenceEntry } from '@listam/domain'
 import { makeDialogStyles } from './_styles'
 import { useTheme } from '../theme'
 import { useI18n } from '../i18n'
+import { formatAgo, formatUptime } from '../util/relativeTime'
 import type { MembershipRoster } from '../store/devicesSlice'
 
 type MembersDialogProps = {
@@ -11,6 +13,8 @@ type MembersDialogProps = {
     // writerKeyHex -> human device name (from synced peer labels). Falls back to
     // the short key when a peer hasn't set a name.
     peerLabels: Map<string, string>
+    // writerKeyHex -> presence facts (online-now / last-seen / last-ping / avg).
+    presence: Map<string, PresenceEntry>
     recoveryCode: string | null
     recoverCodeInput: string
     setRecoverCodeInput: (text: string) => void
@@ -30,6 +34,7 @@ export function MembersDialog({
     visible,
     roster,
     peerLabels,
+    presence,
     recoveryCode,
     recoverCodeInput,
     setRecoverCodeInput,
@@ -42,6 +47,15 @@ export function MembersDialog({
     const t = useTheme()
     const i18n = useI18n()
     const d = useMemo(() => makeDialogStyles(t), [t])
+
+    // Presence (online-now, "seen ago") decays with wall-clock and gets no event
+    // once a peer stops beating — re-render on a slow tick while the dialog is open.
+    const [nowTick, setNowTick] = useState(() => Date.now())
+    useEffect(() => {
+        if (!visible) return
+        const id = setInterval(() => setNowTick(Date.now()), 20000)
+        return () => clearInterval(id)
+    }, [visible])
 
     const writers = roster?.writers ?? []
     const canAdminister = roster?.canAdminister ?? false
@@ -70,40 +84,78 @@ export function MembersDialog({
                     </Text>
 
                     <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
-                        {writers.map((m) => (
-                            <View
-                                key={m.writerKey}
-                                style={{
-                                    flexDirection: 'row',
-                                    alignItems: 'center',
-                                    paddingVertical: 10,
-                                    borderBottomWidth: 1,
-                                    borderBottomColor: t.colors.border,
-                                }}
-                            >
-                                <View style={{ flex: 1 }}>
-                                    <Text style={{ color: t.colors.text, fontSize: 15, fontVariant: ['tabular-nums'] }}>
-                                        {peerLabels.get(m.writerKey) || shortKey(m.writerKey)}
-                                    </Text>
-                                    <Text style={{ color: t.colors.placeholder, fontSize: 12, marginTop: 2 }}>
-                                        {[m.isOwner ? i18n.t('members.role.owner') : null, m.isSelf ? i18n.t('members.role.self') : null]
-                                            .filter(Boolean)
-                                            .join(' - ') || i18n.t('members.role.member')}
-                                    </Text>
-                                </View>
-                                {canAdminister && !m.isOwner && !m.isSelf ? (
-                                    <TouchableOpacity
-                                        onPress={() => confirmRemove(m.writerKey)}
-                                        accessibilityRole="button"
-                                        style={{ paddingHorizontal: 12, paddingVertical: 6 }}
-                                    >
-                                        <Text style={{ color: t.colors.danger, fontWeight: '600' }}>
-                                            {i18n.t('common.remove')}
+                        {writers.map((m) => {
+                            const p = presence.get(m.writerKey)
+                            const online = isOnlineNow(p, nowTick)
+                            const lastActiveAt = p?.lastActiveAt ?? 0
+                            const lastInteractionAt = p?.lastInteractionAt ?? 0
+                            const avgMs = averageOnlineMs(p)
+                            const joinedAt = typeof m.joinedAt === 'number' ? m.joinedAt : null
+                            const meta = [
+                                joinedAt ? i18n.t('presence.joined', { date: i18n.date(joinedAt, { day: 'numeric', month: 'short' }) }) : null,
+                                lastInteractionAt ? i18n.t('presence.lastPing', { ago: formatAgo(nowTick - lastInteractionAt) }) : null,
+                                avgMs > 0 ? i18n.t('presence.avgOnline', { time: formatUptime(avgMs) }) : null,
+                            ].filter(Boolean).join(' · ')
+                            const statusLabel = online
+                                ? i18n.t('presence.onlineNow')
+                                : (lastActiveAt ? i18n.t('presence.lastSeen', { ago: formatAgo(nowTick - lastActiveAt) }) : '')
+                            return (
+                                <View
+                                    key={m.writerKey}
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'flex-start',
+                                        paddingVertical: 10,
+                                        borderBottomWidth: 1,
+                                        borderBottomColor: t.colors.border,
+                                    }}
+                                >
+                                    <View
+                                        style={{
+                                            width: 9,
+                                            height: 9,
+                                            borderRadius: 9,
+                                            marginTop: 5,
+                                            marginRight: 10,
+                                            backgroundColor: online ? t.colors.success : 'transparent',
+                                            borderWidth: online ? 0 : 1.5,
+                                            borderColor: t.colors.placeholder,
+                                        }}
+                                    />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={{ color: t.colors.text, fontSize: 15, fontVariant: ['tabular-nums'] }}>
+                                            {peerLabels.get(m.writerKey) || shortKey(m.writerKey)}
                                         </Text>
-                                    </TouchableOpacity>
-                                ) : null}
-                            </View>
-                        ))}
+                                        <Text style={{ color: t.colors.placeholder, fontSize: 12, marginTop: 2 }}>
+                                            {[m.isOwner ? i18n.t('members.role.owner') : null, m.isSelf ? i18n.t('members.role.self') : null]
+                                                .filter(Boolean)
+                                                .join(' - ') || i18n.t('members.role.member')}
+                                        </Text>
+                                        {meta ? (
+                                            <Text style={{ color: t.colors.placeholder, fontSize: 11, marginTop: 3, fontVariant: ['tabular-nums'] }}>
+                                                {meta}
+                                            </Text>
+                                        ) : null}
+                                        {statusLabel ? (
+                                            <Text style={{ color: online ? t.colors.success : t.colors.placeholder, fontSize: 11, marginTop: 2, fontWeight: online ? '600' : '400' }}>
+                                                {statusLabel}
+                                            </Text>
+                                        ) : null}
+                                    </View>
+                                    {canAdminister && !m.isOwner && !m.isSelf ? (
+                                        <TouchableOpacity
+                                            onPress={() => confirmRemove(m.writerKey)}
+                                            accessibilityRole="button"
+                                            style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+                                        >
+                                            <Text style={{ color: t.colors.danger, fontWeight: '600' }}>
+                                                {i18n.t('common.remove')}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ) : null}
+                                </View>
+                            )
+                        })}
                     </ScrollView>
 
                     {/* Owner recovery: reveal a backup code (owner) or restore ownership (other device). */}
