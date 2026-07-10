@@ -1757,6 +1757,7 @@ function AppInner() {
                 }}
                 deviceName={deviceName}
                 onDeviceNameChange={handleDeviceNameChange}
+                selfWriterKey={selfWriterKey}
                 onChangeListView={writeListView}
                 valueReturnFor={(surfaceId, type) => isValueOn(decodeSurface(surfaceId).listId, type)}
                 onSetValueReturn={(surfaceId, type, enabled) => sendRPC(RPC_UPDATE, JSON.stringify({ item: buildValueReturnItem({ listId: decodeSurface(surfaceId).listId, type: isBoardType(type) ? BOARD_LIST_TYPE : type, enabled, updatedAt: Date.now() }) }))}
