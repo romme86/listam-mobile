@@ -87,6 +87,8 @@ type Props = {
     onSetValueReturn: (surfaceId: string, type: string, enabled: boolean) => void
     onRenameList: (listId: string, name: string) => void
     onDeleteListItems: (listId: string) => void
+    // Delete a whole named list (registry + items). Never wired for built-ins.
+    onDeleteList: (listId: string) => void
     // Clear the completed items from one list (moved out of the bottom summary).
     onClearDone: (listId: string) => void
     // Single-list sharing: promote one list to its own shared base (shows a
@@ -135,7 +137,7 @@ export function ListsMenu(props: Props) {
         overviewEnabled, onToggleOverviewEnabled, overviewOpen, overviewTodayCount, onOpenOverview,
         showInOverviewFor, onSetShowInOverview,
         deviceName, onDeviceNameChange,
-        onChangeListView, valueReturnFor, onSetValueReturn, onRenameList, onDeleteListItems, onClearDone, onShareList, onShareProject, onJoin, onJoinList,
+        onChangeListView, valueReturnFor, onSetValueReturn, onRenameList, onDeleteListItems, onDeleteList, onClearDone, onShareList, onShareProject, onJoin, onJoinList,
         initialListSettingsId, initialView, loyaltyCards, onScanCard, onSelectCard,
         sendRPCWithReply, notify,
     } = props
@@ -195,6 +197,11 @@ export function ListsMenu(props: Props) {
         () => (settingsListId ? allLists.find((l) => l.id === settingsListId) ?? null : null),
         [allLists, settingsListId],
     )
+    // If the open settings sheet's list disappears (deleted here or synced away
+    // from a peer), close the sheet instead of showing an empty shell.
+    useEffect(() => {
+        if (settingsListId && !allLists.some((l) => l.id === settingsListId)) setSettingsListId(null)
+    }, [allLists, settingsListId])
     const settingsIsBoard = !!settingsList && isBoardType(settingsList.type)
     const settingsIsTodo = !!settingsList && isTodoType(settingsList.type)
     const listView: RegistryListView = useMemo(
@@ -428,7 +435,10 @@ export function ListsMenu(props: Props) {
                             </View>
 
                             <ScrollView style={styles.scroll} contentContainerStyle={styles.settingsContent}>
-                                {/* This device — name is device-local, never replicated. */}
+                                {/* This device — the name is stored device-local AND published
+                                    to peers via the synced peer-label channel (@listam/domain/
+                                    labels), keyed by this device's writer key, so it shows up
+                                    on other devices. Only theme/locale stay device-local. */}
                                 <Text style={styles.sectionLabel}>{i18n.t('desktop.settings.deviceName.label')}</Text>
                                 <TextInput
                                     style={styles.nameInput}
@@ -735,6 +745,15 @@ export function ListsMenu(props: Props) {
                                         <Ionicons name="trash-outline" size={20} color={t.colors.danger} />
                                         <Text style={[styles.actionLabel, { color: t.colors.danger }]}>{i18n.t('header.action.deleteAll')}</Text>
                                     </TouchableOpacity>
+                                    {/* Deleting the list itself is only for user-created named lists —
+                                        built-in Groceries/Board/Todo share the 'default' bucket and have
+                                        no registry meta-item to tombstone, so they can only be cleared. */}
+                                    {!isBuiltinSurfaceId(settingsList.id) && (
+                                        <TouchableOpacity style={[styles.actionRow, styles.dangerRow]} onPress={() => onDeleteList(settingsList.id)} activeOpacity={0.6}>
+                                            <Ionicons name="trash" size={20} color={t.colors.danger} />
+                                            <Text style={[styles.actionLabel, { color: t.colors.danger }]}>{i18n.t('header.action.deleteList')}</Text>
+                                        </TouchableOpacity>
+                                    )}
                                 </ScrollView>
                             ) : null}
                         </>

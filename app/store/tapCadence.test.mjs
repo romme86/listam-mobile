@@ -1,7 +1,10 @@
-// The triple-tap recognizers behind the Overview capture gesture.
+// The multi-tap recognizers behind the row toggle / add / Overview-capture
+// gestures.
 //
-//   Row mode — single taps stay instant (they toggle in place and settle
-//   later), so taps 1–2 "pass"; the 3rd within the window is a "capture".
+//   Row mode — a lone tap toggles done, a double-tap adds, a triple-tap
+//   captures. No tap acts on its own: register() answers "wait" and the caller
+//   settle()s after the window — 1 tap "toggle", 2 taps "add". With capture
+//   disabled the 2nd tap "add"s at once (no third to wait for).
 //   Card mode — a card tap opens its detail, so taps "wait" while a triple is
 //   still possible and the caller opens only when settle() confirms the
 //   cadence ended short.
@@ -45,38 +48,53 @@ after(() => fs.rmSync(buildDir, { recursive: true, force: true }))
 
 const { createRowTapCadence, createCardTapCadence, TRIPLE_TAP_MS } = mod
 
-test('row: three quick taps → pass, pass, capture', () => {
+test('row: a lone tap waits, then settles to a toggle', () => {
     const c = createRowTapCadence(300)
-    assert.equal(c.register(1000), 'pass')
-    assert.equal(c.register(1100), 'pass')
+    assert.equal(c.register(1000), 'wait')
+    assert.equal(c.settle(), 'toggle')
+    assert.equal(c.settle(), 'none', 'already settled — nothing pending')
+})
+
+test('row: a double-tap waits then settles to add', () => {
+    const c = createRowTapCadence(300)
+    assert.equal(c.register(1000), 'wait')
+    assert.equal(c.register(1100), 'wait', 'a 3rd tap could still come, so keep waiting')
+    assert.equal(c.settle(), 'add')
+})
+
+test('row: three quick taps → wait, wait, capture (fires at once)', () => {
+    const c = createRowTapCadence(300)
+    assert.equal(c.register(1000), 'wait')
+    assert.equal(c.register(1100), 'wait')
     assert.equal(c.register(1200), 'capture')
+    assert.equal(c.settle(), 'none', 'capture consumed the cadence — nothing pending')
 })
 
 test('row: a gap beyond the window restarts the cadence', () => {
     const c = createRowTapCadence(300)
-    assert.equal(c.register(1000), 'pass')
-    assert.equal(c.register(1100), 'pass')
-    // Too late for a triple — this is tap 1 of a new cadence.
-    assert.equal(c.register(1500), 'pass')
-    assert.equal(c.register(1600), 'pass')
-    assert.equal(c.register(1700), 'capture')
+    assert.equal(c.register(1000), 'wait')
+    assert.equal(c.register(1100), 'wait')
+    // Too late for a triple — this is tap 1 of a new cadence, settles as a toggle.
+    assert.equal(c.register(1500), 'wait')
+    assert.equal(c.settle(), 'toggle')
 })
 
-test('row: capture resets — a fourth quick tap is a fresh single', () => {
+test('row: capture resets — the next quick tap is a fresh single', () => {
     const c = createRowTapCadence(300)
     c.register(1000)
     c.register(1100)
     assert.equal(c.register(1200), 'capture')
-    assert.equal(c.register(1300), 'pass')
+    assert.equal(c.register(1300), 'wait')
+    assert.equal(c.settle(), 'toggle')
 })
 
-test('row: two taps then silence never capture', () => {
+test('row: with capture disabled, the 2nd tap adds immediately', () => {
     const c = createRowTapCadence(300)
-    assert.equal(c.register(1000), 'pass')
-    assert.equal(c.register(1100), 'pass')
-    // The caller's toggles settle on their own; nothing else to assert here —
-    // the next tap after the window starts over.
-    assert.equal(c.register(2000), 'pass')
+    assert.equal(c.register(1000, false), 'wait')
+    assert.equal(c.register(1100, false), 'add', 'no third outcome to wait for')
+    // A lone tap still settles to a toggle.
+    assert.equal(c.register(2000, false), 'wait')
+    assert.equal(c.settle(), 'toggle')
 })
 
 test('card: single tap waits, settle confirms exactly one open', () => {

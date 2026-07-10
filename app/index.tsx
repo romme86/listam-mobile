@@ -569,10 +569,14 @@ function AppInner() {
         }
     }, [overviewEnabled, dispatch])
 
-    // This device's own writer key, learned from the membership roster (unknown
-    // at boot — the roster arrives asynchronously once peers connect).
+    // This device's own writer key. Prefer the owner-signed roster's isSelf
+    // writer, but fall back to the raw local writer key (present once the base is
+    // writable) so a device that isn't in the owner-signed writer set yet can
+    // still advertise its synced peer label instead of staying silently nameless.
     const selfWriterKey = useMemo(
-        () => membershipRoster?.writers.find((m) => m.isSelf)?.writerKey ?? null,
+        () => membershipRoster?.writers.find((m) => m.isSelf)?.writerKey
+            ?? membershipRoster?.localWriterKey
+            ?? null,
         [membershipRoster],
     )
 
@@ -842,6 +846,34 @@ function AppInner() {
         pending.timer = setTimeout(() => settleToggle(key), TAP_SETTLE_MS)
         pendingToggleRef.current.set(key, pending)
     }, [dataList, overviewEnabled, animate, dispatch, sendRPC, settleToggle])
+
+    // The list-view row cadence (ListItem) disambiguates single/double/triple
+    // taps before it calls back, so a resolved toggle is one-shot: flip, reorder,
+    // sync. It fires up to TRIPLE_TAP_MS AFTER the tap, so it must NOT trust a
+    // snapshot captured at tap time — resolve against the LIVE list and match by
+    // identity (mirrors settleToggle) so a peer add / a swipe-delete / a second
+    // toggle landing inside that window is neither clobbered nor resurrected. The
+    // row passes the item (not an index) precisely because the index goes stale.
+    const handleRowToggleDone = useCallback((item: ListEntry) => {
+        const key = toggleKeyOf(item)
+        const list = selectSelectedListItems(store.getState())
+        const index = list.findIndex((it) => toggleKeyOf(it) === key)
+        if (index < 0) return // the row was deleted during the tap window — do nothing
+        const current = list[index]
+        const updatedItem: ListEntry = {
+            ...current,
+            isDone: !current.isDone,
+            timeOfCompletion: !current.isDone ? Date.now() : 0,
+            updatedAt: Date.now(),
+        }
+        animate()
+        const newList = [...list]
+        newList.splice(index, 1)
+        if (updatedItem.isDone) newList.push(updatedItem)
+        else newList.unshift(updatedItem)
+        dispatch(listsActions.selectedListItemsReplaced(newList))
+        sendRPC(RPC_UPDATE, JSON.stringify({ item: updatedItem }))
+    }, [animate, dispatch, sendRPC])
 
     const handleDelete = useCallback((index: number) => {
         const deletedItem = dataList[index]
@@ -1509,6 +1541,62 @@ function AppInner() {
         )
     }, [animate, dispatch, i18n, lib, sendRPC])
 
+    // Delete a whole named list (registry tombstone + cascade its items), mirrors
+    // desktop's deleteList. Built-in surfaces (Groceries/Board/Todo) share the
+    // 'default' bucket and have no registry meta-item, so they can't be deleted —
+    // only cleared; the button is hidden for them and this bails as a safety net.
+    const handleDeleteList = useCallback((listId: string) => {
+        const rec = lib.listsById[listId]
+        if (!rec || isBuiltinSurfaceId(listId)) return
+        Alert.alert(
+            i18n.t('main.deleteList.title'),
+            i18n.t('main.deleteList.message'),
+            [
+                { text: i18n.t('common.cancel'), style: 'cancel' },
+                {
+                    text: i18n.t('main.deleteList.action'),
+                    style: 'destructive',
+                    onPress: () => {
+                        animate()
+                        // Cascade the items FIRST, while the list's base is still
+                        // routed — the registry tombstone can trigger a shared-base
+                        // reconcile that closes the base and would strand later writes.
+                        const items = selectItemsForList(store.getState(), listId)
+                        items.forEach((item) => sendRPC(RPC_DELETE, JSON.stringify({ item })))
+                        // Soft-delete tombstone: reduceRegistry drops regDeleted metas
+                        // (mirrors desktop deleteListMeta). Rides the normal LWW pipeline.
+                        const now = Date.now()
+                        const meta = {
+                            ...buildListMetaItem({
+                                id: rec.id,
+                                name: rec.name,
+                                type: rec.type,
+                                groupId: rec.groupId ?? null,
+                                order: rec.order ?? now,
+                                view: rec.view,
+                                baseKey: rec.baseKey ?? null,
+                                updatedAt: now,
+                            }),
+                            regDeleted: true,
+                        }
+                        sendRPC(RPC_UPDATE, JSON.stringify({ item: meta }))
+                        // Remove the bucket outright (not just empty it) so the list
+                        // can't resurface as a stray Ungrouped list via extraLists.
+                        dispatch(listsActions.listRemoved({ listId }))
+                        // If the deleted list was the one on screen, fall back to Groceries.
+                        if (currentId === listId) {
+                            dispatch(listsActions.selectedListChanged({
+                                listId: `${DEFAULT_LIST_ID}:${DEFAULT_LIST_TYPE}`,
+                                listType: DEFAULT_LIST_TYPE,
+                            }))
+                        }
+                        haptics.delete()
+                    },
+                },
+            ]
+        )
+    }, [animate, currentId, dispatch, i18n, lib, sendRPC])
+
     // Show paywall if trial expired and not subscribed
     if (subscription.shouldShowPaywall) {
         return (
@@ -1666,6 +1754,7 @@ function AppInner() {
                 onSetValueReturn={(surfaceId, type, enabled) => sendRPC(RPC_UPDATE, JSON.stringify({ item: buildValueReturnItem({ listId: decodeSurface(surfaceId).listId, type: isBoardType(type) ? BOARD_LIST_TYPE : type, enabled, updatedAt: Date.now() }) }))}
                 onRenameList={handleRenameList}
                 onDeleteListItems={handleDeleteListItems}
+                onDeleteList={handleDeleteList}
                 onClearDone={handleClearListCompleted}
                 onShareList={handleShareList}
                 onShareProject={handleShareProject}
@@ -1709,7 +1798,7 @@ function AppInner() {
                 ) : (
                     <InertialElasticList
                         data={displayList}
-                        onToggleDone={handleToggleDone}
+                        onToggleDone={handleRowToggleDone}
                         onDelete={handleDelete}
                         onEdit={handleEditItem}
                         onRequestAdd={handleRequestAdd}

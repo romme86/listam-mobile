@@ -14,7 +14,7 @@ import { haptics } from '../feedback'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
 import { useCategoryDragGesture } from './CategoryDrag'
-import { createRowTapCadence } from './tapCadence'
+import { createRowTapCadence, TRIPLE_TAP_MS } from './tapCadence'
 import { ValueBadges } from './ValueBadges'
 import type { ListAlignment, ListEntry } from './_types'
 
@@ -28,17 +28,21 @@ type ListItemProps = {
     visualIndex?: number
     scrollY: Animated.Value
     totalItemHeight: number
-    onToggleDone?: (index: number) => void
+    /** Toggle this row's done state. Receives the ITEM (not an index) because the
+     *  cadence defers the call, by which time a positional index may be stale. */
+    onToggleDone?: (item: ListEntry) => void
     onDelete?: (index: number) => void
     onEdit?: (index: number, text: string) => void
+    /** Double-tap: open the add bar (mirrors the empty-list "double-tap to add"). */
+    onRequestAdd?: () => void
     /** Swipe-right (quick): flag this item into today's plan. */
     onFlagToday?: (index: number) => void
     /** Long-press: open the plan sheet (edit / add-remove / move) for this item. */
     onPlanFor?: (item: ListEntry) => void
     /**
-     * Triple-tap: capture this item into the Overview. Taps 1–2 still toggle
-     * done (in place, netting zero — index.tsx defers their reorder/write); the
-     * third tap within the window fires this instead of a toggle.
+     * Triple-tap: capture this item into the Overview. The cadence defers every
+     * tap (see handleTap) so a lone tap toggles done, a double-tap adds, and the
+     * third tap within the window fires this instead — no tap acts prematurely.
      */
     onTripleTap?: (item: ListEntry) => void
     /** Whether this item is already in the day plan (drives the row indicator). */
@@ -60,6 +64,7 @@ export function ListItem({
     onToggleDone,
     onDelete,
     onEdit,
+    onRequestAdd,
     onFlagToday,
     onPlanFor,
     onTripleTap,
@@ -91,25 +96,55 @@ export function ListItem({
         isDeleting.current = false
     }, [item.text, item.timeOfCompletion, panX])
 
-    // Tap cadence for the triple-tap capture; only counts when the gesture is
-    // wired (Overview enabled), so the disabled path is exactly a plain tap.
+    // Every tap runs through the cadence: a lone tap toggles done, a double-tap
+    // opens the add bar, and a triple-tap (Overview on) captures the item. Nothing
+    // acts on the first tap — the toggle waits out the window so a 2nd/3rd tap can
+    // still be recognized. tripleEnabled tracks whether capture is even wired.
     const tapCadence = useRef(createRowTapCadence())
+    const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const clearSettle = useCallback(() => {
+        if (settleTimer.current) {
+            clearTimeout(settleTimer.current)
+            settleTimer.current = null
+        }
+    }, [])
+    // Drop a pending settle if the row unmounts (surface switch, delete).
+    React.useEffect(() => clearSettle, [clearSettle])
 
-    const handleSingleTap = useCallback(() => {
-        // A long-press that armed a drag must not also toggle on release.
+    const doToggle = useCallback(() => {
+        if (!onToggleDone) return
+        if (item.isDone) haptics.toggleOff()
+        else haptics.toggleOn()
+        onToggleDone(item)
+    }, [onToggleDone, item])
+
+    const doAdd = useCallback(() => {
+        if (!onRequestAdd) return
+        haptics.select()
+        onRequestAdd()
+    }, [onRequestAdd])
+
+    const handleTap = useCallback(() => {
+        // A long-press that armed a drag must not also fire on release.
         if (armedRef.current) return
-        if (onTripleTap && tapCadence.current.register(Date.now()) === 'capture') {
-            onTripleTap(item)
+        const decision = tapCadence.current.register(Date.now(), !!onTripleTap)
+        clearSettle()
+        if (decision === 'capture') {
+            onTripleTap?.(item)
             return
         }
-        if (!onToggleDone) return
-        if (item.isDone) {
-            haptics.toggleOff()
-        } else {
-            haptics.toggleOn()
+        if (decision === 'add') {
+            doAdd()
+            return
         }
-        onToggleDone(index)
-    }, [onTripleTap, item, onToggleDone, index])
+        settleTimer.current = setTimeout(() => {
+            settleTimer.current = null
+            if (armedRef.current) return
+            const outcome = tapCadence.current.settle()
+            if (outcome === 'toggle') doToggle()
+            else if (outcome === 'add') doAdd()
+        }, TRIPLE_TAP_MS)
+    }, [armedRef, onTripleTap, item, doAdd, doToggle, clearSettle])
 
     const startEdit = useCallback(() => {
         if (!onEdit) return
@@ -285,7 +320,7 @@ export function ListItem({
             >
                 <TouchableOpacity
                     activeOpacity={0.7}
-                    onPress={handleSingleTap}
+                    onPress={handleTap}
                     onLongPress={dragEnabled ? undefined : (onPlanFor ? () => { haptics.select(); onPlanFor(item) } : startEdit)}
                     delayLongPress={350}
                     accessibilityRole="checkbox"

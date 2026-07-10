@@ -150,6 +150,27 @@ const listsSlice = createSlice({
                 listId === DEFAULT_LIST_ID ? listType : undefined,
             )
         },
+        // Remove a whole named list bucket (used when a list is deleted). Emptying
+        // the bucket is NOT enough: a leftover empty ListRecord in listsById would
+        // reappear as a stray "Ungrouped" list once the registry tombstone lands
+        // (extraLists in registrySelectors scans listsById, not items). So drop the
+        // record and unlink it from every index. Built-ins ('default') are never
+        // removed — they have no registry meta-item and share the bucket.
+        listRemoved(state, action: PayloadAction<{ listId: string }>) {
+            const listId = action.payload?.listId
+            if (!listId || listId === DEFAULT_LIST_ID) return
+            const list = state.listsById[listId]
+            if (!list) return
+            for (const itemId of list.itemIds) delete state.itemsById[itemId]
+            delete state.listsById[listId]
+            state.listIds = state.listIds.filter((id) => id !== listId)
+            const project = state.projectsById[list.projectId]
+            if (project) project.listIds = project.listIds.filter((id) => id !== listId)
+            if (list.folderId) {
+                const folder = state.foldersById[list.folderId]
+                if (folder) folder.listIds = folder.listIds.filter((id) => id !== listId)
+            }
+        },
         listItemAdded(state, action: PayloadAction<ListEntry>) {
             applyItemProjection(state, action.payload, 'add')
         },
