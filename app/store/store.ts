@@ -6,6 +6,7 @@ import loyaltyCardsReducer from './loyaltyCardsSlice'
 import devicesReducer from './devicesSlice'
 import boardConfigReducer from './boardConfigSlice'
 import labelsReducer from './labelsSlice'
+import presenceReducer from './presenceSlice'
 
 export const store = configureStore({
     reducer: {
@@ -16,6 +17,7 @@ export const store = configureStore({
         devices: devicesReducer,
         boardConfig: boardConfigReducer,
         labels: labelsReducer,
+        presence: presenceReducer,
     },
 })
 

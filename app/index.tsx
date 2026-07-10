@@ -82,6 +82,7 @@ import { useListPager } from './nav/useListPager'
 import { selectGroupedLists, selectCurrentListView, selectSyncedDefaultList, DEFAULT_VIEW, isBuiltinSurfaceId, builtinSurfaceNameKey } from './store/registrySelectors'
 import { selectBoardConfig } from './store/boardConfigSlice'
 import { selectPeerLabels, selectValueReturnEnabled } from './store/labelsSlice'
+import { selectPresence } from './store/presenceSlice'
 import { buildListMetaItem, buildGroupMetaItem, buildProjectSettingsItem, type RegistryListView } from '@listam/domain/list-registry'
 import { UNGROUPED_GROUP_ID } from '@listam/domain/list-nav'
 import { buildPeerLabelItem, buildSurfaceLabelItem, buildBuiltinGroupItem, buildValueReturnItem, surfaceLabelKey, MAX_LABEL_NAME } from '@listam/domain'
@@ -171,6 +172,7 @@ function AppInner() {
     const dispatch = useAppDispatch()
     const { localeChoice, themeChoice, defaultListId, boardEnabled, overviewEnabled, deviceName, builtinViews } = useAppSelector(selectPreferences)
     const peerLabels = useAppSelector(selectPeerLabels)
+    const presence = useAppSelector(selectPresence)
     const valueReturnMap = useAppSelector(selectValueReturnEnabled)
     // Whether a surface has the value-return property enabled (keyed by the
     // canonical type, so a board's wire type 'kanban' is folded to BOARD_LIST_TYPE).
@@ -1685,6 +1687,7 @@ function AppInner() {
                 visible={membersDialogVisible}
                 roster={membershipRoster}
                 peerLabels={peerLabels}
+                presence={presence}
                 recoveryCode={ownerRecoveryCode}
                 recoverCodeInput={recoverCodeInput}
                 setRecoverCodeInput={setRecoverCodeInput}

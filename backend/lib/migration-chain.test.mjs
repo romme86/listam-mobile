@@ -30,6 +30,7 @@ import {
     secretStoreKey,
 } from '@listam/secrets'
 import { legacyItemId } from '@listam/domain/list-reducer'
+import { isLabelItem } from '@listam/domain'
 import { RPC_ADD, RPC_GET_MEMBERS, RPC_REQUEST_SYNC } from '@listam/protocol'
 
 // The prototype's apply: view entries were the bare item objects, keyed by
@@ -146,7 +147,10 @@ test('cumulative migration chain: legacy base gains ids, owner, epoch, and secre
     const modernAfter = second.seen.items.find((item) => item.id === modern.id)
     assert.ok(milkAfter && breadAfter && modernAfter, 'all items rebuild with identical ids after restart')
     assert.equal(breadAfter.isDone, true)
-    assert.equal(second.seen.items.length, 3, 'no duplicates from a re-run migration')
+    // Count only real list content: the backend also self-publishes a synced
+    // presence/heartbeat meta-item (hidden from lists via isLabelItem), so the raw
+    // item set carries one extra entry that is not a duplicate.
+    assert.equal(second.seen.items.filter((item) => !isLabelItem(item)).length, 3, 'no duplicates from a re-run migration')
 
     assert.equal(second.seen.roster.ownerWriterKey, ownerWriterKey, 'owner adopted exactly once, not re-bootstrapped')
     assert.equal(second.seen.roster.currentEpoch, 1, 'epoch did not advance on restart')

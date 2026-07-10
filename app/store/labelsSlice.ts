@@ -1,6 +1,7 @@
 import { createSelector, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 import {
     isLabelItem,
+    isPresenceItem,
     isPeerLabelItem,
     isSurfaceLabelItem,
     isBuiltinGroupItem,
@@ -12,6 +13,11 @@ import {
 } from '@listam/domain'
 import type { RootState } from './store'
 import type { ListEntry } from '../components/_types'
+
+// isLabelItem now also covers the presence channel (so every list projection
+// hides presence too), but presence lives in its own slice — exclude it here so
+// frequent heartbeat writes don't churn the label selectors' memos.
+const isLabelOnly = (item: ListEntry) => isLabelItem(item) && !isPresenceItem(item)
 
 // Peer/surface name labels are reserved meta-items that ride the normal item
 // pipeline but live in the '__peers__'/'__surfacenames__' buckets. They are
@@ -37,13 +43,13 @@ const labelsSlice = createSlice({
         // mostly arrive per-item, so this must NOT clear existing labels).
         labelsApplied(state, action: PayloadAction<ListEntry[]>) {
             for (const item of action.payload) {
-                if (isLabelItem(item) && item.id) state.itemsById[item.id] = item
+                if (isLabelOnly(item) && item.id) state.itemsById[item.id] = item
             }
         },
         // Fold a single incremental item (add/update). Non-label items are ignored.
         labelItemApplied(state, action: PayloadAction<ListEntry>) {
             const item = action.payload
-            if (isLabelItem(item) && item.id) state.itemsById[item.id] = item
+            if (isLabelOnly(item) && item.id) state.itemsById[item.id] = item
         },
         labelItemRemoved(state, action: PayloadAction<ListEntry>) {
             const item = action.payload
