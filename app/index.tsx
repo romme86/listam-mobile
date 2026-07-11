@@ -79,11 +79,11 @@ import { TicketDetail } from './components/board/TicketDetail'
 import { CreateTicket, type TicketDraft } from './components/board/CreateTicket'
 import { ValueRateSheet } from './components/ValueRateSheet'
 import { useListPager } from './nav/useListPager'
-import { selectGroupedLists, selectCurrentListView, selectSyncedDefaultList, DEFAULT_VIEW, isBuiltinSurfaceId, builtinSurfaceNameKey } from './store/registrySelectors'
+import { selectGroupedLists, selectCurrentListView, DEFAULT_VIEW, isBuiltinSurfaceId, builtinSurfaceNameKey } from './store/registrySelectors'
 import { selectBoardConfig } from './store/boardConfigSlice'
 import { selectPeerLabels, selectValueReturnEnabled } from './store/labelsSlice'
 import { selectPresence } from './store/presenceSlice'
-import { buildListMetaItem, buildGroupMetaItem, buildProjectSettingsItem, type RegistryListView } from '@listam/domain/list-registry'
+import { buildListMetaItem, buildGroupMetaItem, type RegistryListView } from '@listam/domain/list-registry'
 import { UNGROUPED_GROUP_ID } from '@listam/domain/list-nav'
 import { buildPeerLabelItem, buildSurfaceLabelItem, buildBuiltinGroupItem, buildValueReturnItem, surfaceLabelKey, MAX_LABEL_NAME } from '@listam/domain'
 import { BOARD_WRITE_TYPE, BOARD_LIST_TYPE, isBoardType, buildStatusChange, validateTicketDraft } from '@listam/domain/board'
@@ -195,7 +195,6 @@ function AppInner() {
     } = useAppSelector(selectCurrentListView)
     const loyaltyCards = useAppSelector(selectLoyaltyCardHandles)
     const groupedLists = useAppSelector(selectGroupedLists)
-    const syncedDefaultList = useAppSelector(selectSyncedDefaultList)
     const boardConfig = useAppSelector(selectBoardConfig)
     // Every materialized item (incl. the plan channel) — the Overview reduces the
     // plan entries out of this and joins them to their source rows.
@@ -519,12 +518,28 @@ function AppInner() {
         sendRPC(RPC_UPDATE, JSON.stringify({ item: meta }))
     }, [lib, sendRPC, builtinViews, dispatch])
 
+    // Duplicate list names made spoken/name-based targeting ambiguous, so
+    // create/rename validate against every visible list name — registry lists
+    // AND the built-in surfaces (lib.listsById carries both, with resolved
+    // display names), accent-/case-/whitespace-insensitively.
+    const foldListName = (value: string) => value
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim()
+    const listNameTaken = useCallback((name: string, excludeId?: string) => {
+        const target = foldListName(name)
+        if (!target) return false
+        return Object.values(lib.listsById).some((rec) => rec && rec.id !== excludeId && foldListName(String(rec.name ?? '')) === target)
+    }, [lib])
+
     // Rename a list/board: re-emit its meta-item with a new name (mirrors
     // handleRenameGroup). Preserves type/group/order/view.
     const handleRenameList = useCallback((listId: string, name: string) => {
         const rec = lib.listsById[listId]
         const trimmed = name.trim()
         if (!rec || !trimmed || trimmed === rec.name) return
+        if (listNameTaken(trimmed, listId)) {
+            snackbar.show(i18n.t('desktop.list.duplicateName'), 'error')
+            return
+        }
         const now = Date.now()
         // A built-in surface has no registry meta-item; its rename syncs via the
         // surface-name label channel (keyed by the real listId+type), like desktop.
@@ -543,7 +558,7 @@ function AppInner() {
             updatedAt: now,
         })
         sendRPC(RPC_UPDATE, JSON.stringify({ item: meta }))
-    }, [lib, sendRPC])
+    }, [lib, sendRPC, listNameTaken, snackbar, i18n])
 
     const handleToggleBoardEnabled = useCallback(() => {
         const next = !boardEnabled
@@ -1243,11 +1258,15 @@ function AppInner() {
         const id = `list-${Date.now().toString(36)}`
         const now = Date.now()
         const isGrocery = !isBoardType(type) && !isTodoType(type)
-        const name = isBoardType(type)
+        const baseName = isBoardType(type)
             ? i18n.t('lists.menu.newBoard')
             : isTodoType(type)
                 ? i18n.t('lists.menu.newTodo')
                 : i18n.t('lists.menu.newGrocery')
+        // List names are unique per project now; the auto-generated name gets a
+        // numeric suffix instead of colliding with an earlier unrenamed list.
+        let name = baseName
+        for (let n = 2; listNameTaken(name); n++) name = `${baseName} ${n}`
         // New grocery lists ship lean: categories off by default (the user can
         // re-enable per-list from list settings). User-created lists carry a real
         // registry meta-item, so unlike the built-in surfaces this override sticks.
@@ -1258,7 +1277,7 @@ function AppInner() {
         sendRPC(RPC_UPDATE, JSON.stringify({ item: meta }))
         dispatch(listsActions.selectedListChanged({ listId: id, listType: type }))
         setListsMenuVisible(false)
-    }, [dispatch, i18n, sendRPC])
+    }, [dispatch, i18n, sendRPC, listNameTaken])
 
     // Groups are registry meta-items too (synced). Rename re-emits the whole
     // group meta-item with the same id (LWW replace by updatedAt).
@@ -1721,8 +1740,6 @@ function AppInner() {
                 groups={groupedLists}
                 currentListId={currentId}
                 defaultListId={defaultListId}
-                syncedDefaultListId={syncedDefaultList?.defaultListId ?? null}
-                onSetSyncedDefault={(listId: string, listType: string) => sendRPC(RPC_UPDATE, JSON.stringify({ item: buildProjectSettingsItem({ defaultListId: listId, defaultListType: listType, updatedAt: Date.now() }) }))}
                 onSelect={(id: string, type: string) => { setOverviewShown(false); handleSelectList(id, type) }}
                 onSetDefault={handleSetDefaultList}
                 onCreate={handleCreateList}

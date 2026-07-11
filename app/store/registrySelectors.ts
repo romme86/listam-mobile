@@ -39,11 +39,6 @@ export const selectRegistry = createSelector(selectListsState, (lists) => {
     return reduceRegistry(metaItems)
 })
 
-// The synced project settings ({ defaultListId, defaultListType } | null): the
-// project-wide default target for un-targeted adds (voice / quick-add). Distinct
-// from the device-local preferences.defaultListId (which list opens on launch).
-export const selectSyncedDefaultList = createSelector(selectRegistry, (reg) => reg.settings)
-
 // The fixed display order of the built-in surfaces and the SHARED i18n key for
 // each one's name when the user hasn't renamed it (the rename channel wins).
 export const BUILTIN_SURFACE_TYPES = [DEFAULT_LIST_TYPE, BOARD_LIST_TYPE, TODO_LIST_TYPE] as const
