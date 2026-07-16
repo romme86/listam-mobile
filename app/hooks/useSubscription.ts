@@ -12,7 +12,7 @@ import {
     purchaseErrorListener,
     type Purchase,
     type PurchaseError,
-    type ProductSubscription,
+    type ProductOrSubscription,
     type EventSubscription,
 } from 'react-native-iap'
 import { useI18n } from '../i18n'
@@ -22,19 +22,80 @@ const TRIAL_START_KEY = '@lista_trial_start'
 const TRIAL_DURATION_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
 
-// Product IDs - create these in App Store Connect / Google Play Console
+// Store catalog expected by the paywall:
+// - App Store Connect: `standard` is auto-renewing and
+//   `standard.yearly.nonrenewing` is a non-renewing subscription.
+// - Play Console: the existing subscription has `yearly-auto` (auto-renewing)
+//   and `yearly-prepaid` (prepaid) base plans.
+const IOS_RECURRING_ID = 'standard'
+const IOS_PREPAID_ID = 'standard.yearly.nonrenewing'
+const ANDROID_PRODUCT_ID = 'ch.saynode.listam.yearly'
+const ANDROID_PREPAID_BASE_PLAN_ID = 'yearly-prepaid'
+
 const PRODUCT_IDS = Platform.select({
-    ios: ['standard'],
+    ios: [IOS_RECURRING_ID, IOS_PREPAID_ID],
     android: ['ch.saynode.listam.yearly'],
 }) ?? []
+
+export type PaymentPlan = {
+    id: string
+    productId: string
+    kind: 'recurring' | 'prepaid'
+    displayPrice: string
+    productType: 'in-app' | 'subs'
+    offerToken?: string
+}
 
 export type SubscriptionState = {
     isLoading: boolean
     isSubscribed: boolean
     isTrialActive: boolean
     trialDaysRemaining: number
-    product: ProductSubscription | null
+    plans: PaymentPlan[]
+    selectedPlanId: string | null
     error: string | null
+    isPaywallDismissed: boolean
+}
+
+function plansFromProducts(products: ProductOrSubscription[]): PaymentPlan[] {
+    if (Platform.OS === 'ios') {
+        return products
+            .filter((product) => PRODUCT_IDS.includes(product.id))
+            .map((product) => ({
+                id: product.id,
+                productId: product.id,
+                kind: product.id === IOS_PREPAID_ID ? 'prepaid' as const : 'recurring' as const,
+                displayPrice: product.displayPrice,
+                productType: product.type,
+            }))
+            .sort((a) => a.kind === 'recurring' ? -1 : 1)
+    }
+
+    const product = products.find((item) => item.id === ANDROID_PRODUCT_ID && item.type === 'subs')
+    if (!product || product.type !== 'subs' || product.platform !== 'android') return []
+    return product.subscriptionOffers.map((offer) => {
+        const basePlanId = offer.basePlanIdAndroid ?? offer.id
+        const tags = offer.offerTagsAndroid ?? []
+        const prepaid = basePlanId === ANDROID_PREPAID_BASE_PLAN_ID || tags.includes('prepaid')
+        return {
+            id: basePlanId,
+            productId: product.id,
+            kind: prepaid ? 'prepaid' as const : 'recurring' as const,
+            displayPrice: offer.displayPrice,
+            productType: 'subs' as const,
+            offerToken: offer.offerTokenAndroid ?? undefined,
+        }
+    }).sort((a) => a.kind === 'recurring' ? -1 : 1)
+}
+
+function hasActiveEntitlement(purchases: Purchase[]) {
+    const now = Date.now()
+    return purchases.some((purchase) => {
+        if (!PRODUCT_IDS.includes(purchase.productId) || purchase.purchaseState !== 'purchased') return false
+        if ('isSuspendedAndroid' in purchase && purchase.isSuspendedAndroid) return false
+        if ('expirationDateIOS' in purchase && purchase.expirationDateIOS && purchase.expirationDateIOS <= now) return false
+        return true
+    })
 }
 
 export function useSubscription() {
@@ -44,8 +105,10 @@ export function useSubscription() {
         isSubscribed: false,
         isTrialActive: true,
         trialDaysRemaining: 30,
-        product: null,
+        plans: [],
+        selectedPlanId: null,
         error: null,
+        isPaywallDismissed: false,
     })
 
     // Initialize IAP connection
@@ -132,10 +195,8 @@ export function useSubscription() {
     const checkStatus = async () => {
         try {
             // Check for existing purchases
-            const purchases = await getAvailablePurchases({})
-            const hasActiveSubscription = purchases.some((purchase) =>
-                PRODUCT_IDS.includes(purchase.productId)
-            )
+            const purchases = await getAvailablePurchases({ onlyIncludeActiveItemsIOS: true })
+            const hasActiveSubscription = hasActiveEntitlement(purchases)
 
             if (hasActiveSubscription) {
                 setState((prev) => ({
@@ -146,13 +207,17 @@ export function useSubscription() {
                 return
             }
 
-            // Get available subscription products
-            const products = await fetchProducts({ skus: PRODUCT_IDS, type: 'subs' })
-            const product = (products?.[0] as ProductSubscription) ?? null
+            // `all` is required because Apple's non-renewing subscription is an
+            // IAP product while the recurring option is a subscription product.
+            const products = await fetchProducts({ skus: PRODUCT_IDS, type: 'all' })
+            const plans = plansFromProducts((products ?? []) as ProductOrSubscription[])
 
             setState((prev) => ({
                 ...prev,
-                product,
+                plans,
+                selectedPlanId: prev.selectedPlanId && plans.some((plan) => plan.id === prev.selectedPlanId)
+                    ? prev.selectedPlanId
+                    : plans[0]?.id ?? null,
             }))
 
             // Check trial status
@@ -163,8 +228,9 @@ export function useSubscription() {
         }
     }
 
-    const purchase = useCallback(async () => {
-        if (!state.product) {
+    const purchase = useCallback(async (planId?: string) => {
+        const plan = state.plans.find((candidate) => candidate.id === (planId ?? state.selectedPlanId))
+        if (!plan) {
             setState((prev) => ({ ...prev, error: i18n.t('paywall.noSubscriptionAvailable') }))
             return
         }
@@ -172,28 +238,19 @@ export function useSubscription() {
         setState((prev) => ({ ...prev, isLoading: true, error: null }))
 
         try {
-            const sku = state.product.id
+            const sku = plan.productId
 
             if (Platform.OS === 'ios') {
                 await requestPurchase({
                     request: { apple: { sku } },
-                    type: 'subs',
+                    type: plan.productType,
                 })
             } else {
-                // Android requires skus array and subscription offers
-                const subscriptionOffers =
-                    'subscriptionOffers' in state.product
-                        ? state.product.subscriptionOffers?.map((offer) => ({
-                              sku,
-                              offerToken: offer.offerTokenAndroid ?? '',
-                          }))
-                        : undefined
-
                 await requestPurchase({
                     request: {
                         google: {
                             skus: [sku],
-                            subscriptionOffers,
+                            subscriptionOffers: plan.offerToken ? [{ sku, offerToken: plan.offerToken }] : undefined,
                         },
                     },
                     type: 'subs',
@@ -207,16 +264,14 @@ export function useSubscription() {
                 isLoading: false,
             }))
         }
-    }, [i18n, state.product])
+    }, [i18n, state.plans, state.selectedPlanId])
 
     const restore = useCallback(async () => {
         setState((prev) => ({ ...prev, isLoading: true, error: null }))
 
         try {
-            const purchases = await getAvailablePurchases({})
-            const hasActiveSubscription = purchases.some((purchase) =>
-                PRODUCT_IDS.includes(purchase.productId)
-            )
+            const purchases = await getAvailablePurchases({ onlyIncludeActiveItemsIOS: true })
+            const hasActiveSubscription = hasActiveEntitlement(purchases)
 
             setState((prev) => ({
                 ...prev,
@@ -234,12 +289,22 @@ export function useSubscription() {
         }
     }, [i18n])
 
-    const shouldShowPaywall = !state.isLoading && !state.isSubscribed && !state.isTrialActive
+    const selectPlan = useCallback((planId: string) => {
+        setState((prev) => ({ ...prev, selectedPlanId: planId, error: null }))
+    }, [])
+
+    const dismissPaywall = useCallback(() => {
+        setState((prev) => ({ ...prev, isPaywallDismissed: true, error: null }))
+    }, [])
+
+    const shouldShowPaywall = !state.isLoading && !state.isSubscribed && !state.isTrialActive && !state.isPaywallDismissed
 
     return {
         ...state,
         shouldShowPaywall,
         purchase,
+        selectPlan,
+        dismissPaywall,
         restore,
         refresh: checkStatus,
     }

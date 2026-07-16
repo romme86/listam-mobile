@@ -16,6 +16,8 @@ export type SyncState = {
     isJoining: boolean
     joinPhase: JoinPhase
     networkStatus: NetworkStatus
+    baseId: string | null
+    epoch: number | null
 }
 
 const initialState: SyncState = {
@@ -25,6 +27,8 @@ const initialState: SyncState = {
     isJoining: false,
     joinPhase: null,
     networkStatus: 'connecting',
+    baseId: null,
+    epoch: null,
 }
 
 const syncSlice = createSlice({
@@ -53,12 +57,18 @@ const syncSlice = createSlice({
                 state.networkStatus = next
             }
         },
+        baseStateReceived(state, action: PayloadAction<{ baseId?: string | null; epoch?: number | null }>) {
+            state.baseId = typeof action.payload.baseId === 'string' ? action.payload.baseId : null
+            state.epoch = Number.isInteger(action.payload.epoch) ? action.payload.epoch as number : null
+        },
         syncReset(state) {
             state.autobaseInviteKey = ''
             state.peerCount = 0
             state.isJoining = false
             state.joinPhase = null
             state.networkStatus = 'connecting'
+            state.baseId = null
+            state.epoch = null
         },
     },
 })

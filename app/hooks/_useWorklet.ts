@@ -48,6 +48,7 @@ import {
     RPC_IMPORT,
     RPC_SHARE_LIST,
     RPC_JOIN_LIST,
+    RPC_REQUEST_SYNC,
 } from '@listam/protocol'
 import type { ListEntry } from '@/app/components/_types'
 
@@ -81,6 +82,8 @@ type UseWorkletResult = {
     isJoiningRef: MutableRefObject<boolean>
     joinPhase: JoinPhase
     networkStatus: NetworkStatus
+    baseId: string | null
+    epoch: number | null
     membershipRoster: MembershipRoster | null
     ownerRecoveryCode: string | null
     clearOwnerRecoveryCode: () => void
@@ -127,6 +130,8 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         isJoining,
         joinPhase,
         networkStatus,
+        baseId,
+        epoch,
     } = useAppSelector(selectSyncState)
     const [ownerRecoveryCode, setOwnerRecoveryCode] = useState<string | null>(null)
     const clearOwnerRecoveryCode = useCallback(() => setOwnerRecoveryCode(null), [])
@@ -269,6 +274,8 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                     if (payload.type === 'peer-count') {
                         const count = typeof payload.count === 'number' ? payload.count : 0
                         dispatch(syncActions.peerCountSet(count))
+                    } else if (payload.type === 'base-state') {
+                        dispatch(syncActions.baseStateReceived({ baseId: payload.baseId, epoch: payload.epoch }))
                     } else if (payload.type === 'network-status') {
                         dispatch(syncActions.networkStatusSet(payload.status))
                     } else if (payload.type === 'join-phase') {
@@ -503,6 +510,15 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         }
     }, [dispatch, startWorklet])
 
+    // Initial catch-up is explicit: backend startup can emit its first snapshot
+    // before React has attached this listener. The request also refreshes the
+    // roster and publishes an immediate presence beat on the backend side.
+    useEffect(() => {
+        if (!isWorkletReady) return
+        sendRPC(RPC_REQUEST_SYNC)
+        sendRPC(RPC_GET_MEMBERS)
+    }, [isWorkletReady, sendRPC])
+
     return {
         dataList,
         autobaseInviteKey,
@@ -513,6 +529,8 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         isJoiningRef,
         joinPhase,
         networkStatus,
+        baseId,
+        epoch,
         membershipRoster,
         ownerRecoveryCode,
         clearOwnerRecoveryCode,
@@ -543,4 +561,5 @@ export {
     RPC_IMPORT,
     RPC_SHARE_LIST,
     RPC_JOIN_LIST,
+    RPC_REQUEST_SYNC,
 }

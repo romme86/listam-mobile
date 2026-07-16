@@ -32,6 +32,7 @@ import {
 } from './SegmentedSetting'
 import { BackupSettings } from './BackupSettings'
 import { CloseDot } from './CloseDot'
+import { decodeSurface } from '../listProjection'
 
 type Props = {
     visible: boolean
@@ -49,6 +50,8 @@ type Props = {
     isWorkletReady: boolean
     networkStatus: NetworkStatus
     isJoining: boolean
+    baseId: string | null
+    epoch: number | null
     onManageMembers: () => void
     onManageOwnedDevices: () => void
     onPairLeaf: () => void
@@ -101,7 +104,7 @@ type Props = {
     onJoinList: () => void
     // When set as the menu opens, jump straight into that list's settings.
     initialListSettingsId?: string | null
-    // When the menu opens via the burger, jump straight to the settings view.
+    // When the menu opens via the header cog, jump straight to the settings view.
     initialView?: 'lists' | 'settings'
     loyaltyCards: LoyaltyCardHandle[]
     onScanCard: () => void
@@ -132,6 +135,7 @@ export function ListsMenu(props: Props) {
         visible, groups, currentListId, defaultListId,
         onSelect, onSetDefault, onCreate, onCreateGroup, onRenameGroup, onMoveListToGroup, onClose,
         peerCount, isWorkletReady, networkStatus, isJoining, onManageMembers, onManageOwnedDevices, onPairLeaf,
+        baseId, epoch,
         localeChoice, onLocaleChoiceChange, themeChoice, onThemeChoiceChange,
         boardEnabled, onToggleBoardEnabled,
         overviewEnabled, onToggleOverviewEnabled, overviewOpen, overviewTodayCount, onOpenOverview,
@@ -593,6 +597,25 @@ export function ListsMenu(props: Props) {
                                         onEndEditing={(e) => onRenameList(settingsList.id, e.nativeEvent.text)}
                                     />
 
+                                    <Text style={styles.sectionLabel}>{i18n.t('list.identity.title')}</Text>
+                                    {(() => {
+                                        const decoded = decodeSurface(settingsList.id)
+                                        const listId = decoded.listId
+                                        const surfaceId = `${listId}:${decoded.listType || settingsList.type}`
+                                        const identityRows = [
+                                            [i18n.t('list.identity.project'), baseId || '—'],
+                                            [i18n.t('list.identity.list'), listId],
+                                            [i18n.t('list.identity.surface'), surfaceId],
+                                            [i18n.t('list.identity.epoch'), epoch == null ? '—' : String(epoch)],
+                                        ]
+                                        return <View style={styles.identityBlock}>{identityRows.map(([label, value]) => (
+                                            <View key={label} style={styles.identityRow}>
+                                                <Text style={styles.identityLabel}>{label}</Text>
+                                                <Text selectable style={styles.identityValue}>{value}</Text>
+                                            </View>
+                                        ))}</View>
+                                    })()}
+
                                     <View style={styles.switchRow}>
                                         <Ionicons name={settingsList.id === defaultListId ? 'star' : 'star-outline'} size={20} color={t.colors.text} />
                                         <Text style={styles.switchLabel}>{i18n.t('list.isDefault')}</Text>
@@ -875,6 +898,10 @@ function makeStyles(t: Theme) {
             fontVariant: ['tabular-nums'], letterSpacing: 0.2,
         },
         deviceKeyCopy: { padding: t.spacing.xs },
+        identityBlock: { gap: t.spacing.xs },
+        identityRow: { flexDirection: 'row', alignItems: 'flex-start', gap: t.spacing.md },
+        identityLabel: { width: 88, fontSize: t.type.caption.fontSize, color: t.colors.textTertiary },
+        identityValue: { flex: 1, fontSize: t.type.caption.fontSize, color: t.colors.textSecondary, fontVariant: ['tabular-nums'] },
         switchRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md, paddingVertical: t.spacing.sm, minHeight: 44 },
         switchLabel: { flex: 1, fontSize: t.type.bodyStrong.fontSize, color: t.colors.text },
         actionRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md, paddingVertical: t.spacing.md, minHeight: 44 },
