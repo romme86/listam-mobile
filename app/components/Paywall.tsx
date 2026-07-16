@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 import {
     View,
     Text,
+    ScrollView,
     TouchableOpacity,
     StyleSheet,
     ActivityIndicator,
@@ -16,26 +17,30 @@ import type { SubscriptionState } from '../hooks/useSubscription'
 
 type PaywallProps = {
     state: SubscriptionState
-    onPurchase: () => void
+    onPurchase: (planId?: string) => void
+    onSelectPlan: (planId: string) => void
     onRestore: () => void
+    onDismiss: () => void
 }
 
-export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
+export function Paywall({ state, onPurchase, onSelectPlan, onRestore, onDismiss }: PaywallProps) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
 
-    const price = Platform.select({
+    const fallbackPrice = Platform.select({
         ios: 'CHF 1.00',
         android: '$0.99',
     }) ?? '$0.99'
+    const selectedPlan = state.plans.find((plan) => plan.id === state.selectedPlanId) ?? state.plans[0]
+    const price = selectedPlan?.displayPrice ?? fallbackPrice
 
     const openPrivacyPolicy = () => Linking.openURL('https://saynode.ch/privacy')
     const openTerms = () => Linking.openURL('https://saynode.ch/terms')
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.content}>
+            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
                 <View style={styles.header}>
                     <View style={styles.heartCircle}>
                         <Ionicons name="heart" size={32} color={t.colors.text} />
@@ -51,6 +56,38 @@ export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
                     <Text style={styles.period}>{i18n.t('paywall.period')}</Text>
                 </View>
 
+                {state.plans.length > 1 && (
+                    <View style={styles.planOptions}>
+                        {state.plans.map((plan) => {
+                            const selected = plan.id === selectedPlan?.id
+                            return (
+                                <TouchableOpacity
+                                    key={plan.id}
+                                    style={[styles.planOption, selected && styles.planOptionSelected]}
+                                    onPress={() => onSelectPlan(plan.id)}
+                                    accessibilityRole="radio"
+                                    accessibilityState={{ selected }}
+                                >
+                                    <View style={styles.planCopy}>
+                                        <Text style={styles.planTitle}>
+                                            {i18n.t(plan.kind === 'prepaid' ? 'paywall.plan.prepaid' : 'paywall.plan.recurring')}
+                                        </Text>
+                                        <Text style={styles.planHint}>
+                                            {i18n.t(plan.kind === 'prepaid' ? 'paywall.plan.prepaidHint' : 'paywall.plan.recurringHint')}
+                                        </Text>
+                                    </View>
+                                    <Text style={styles.planPrice}>{plan.displayPrice}</Text>
+                                    <Ionicons
+                                        name={selected ? 'radio-button-on' : 'radio-button-off'}
+                                        size={20}
+                                        color={selected ? t.colors.accent : t.colors.textTertiary}
+                                    />
+                                </TouchableOpacity>
+                            )
+                        })}
+                    </View>
+                )}
+
                 <View style={styles.features}>
                     <FeatureRow text={i18n.t('paywall.feature.unlimitedLists')} styles={styles} accent={t.colors.text} />
                     <FeatureRow text={i18n.t('paywall.feature.p2pSync')} styles={styles} accent={t.colors.text} />
@@ -63,14 +100,16 @@ export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
                 <View style={styles.buttons}>
                     <TouchableOpacity
                         style={styles.subscribeButton}
-                        onPress={onPurchase}
+                        onPress={() => onPurchase(selectedPlan?.id)}
                         disabled={state.isLoading}
                         accessibilityRole="button"
                     >
                         {state.isLoading ? (
                             <ActivityIndicator color={t.colors.onPrimary} />
                         ) : (
-                            <Text style={styles.subscribeButtonText}>{i18n.t('paywall.subscribe', { price })}</Text>
+                            <Text style={styles.subscribeButtonText}>
+                                {i18n.t(selectedPlan?.kind === 'prepaid' ? 'paywall.buyPrepaid' : 'paywall.subscribe', { price })}
+                            </Text>
                         )}
                     </TouchableOpacity>
 
@@ -82,15 +121,26 @@ export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
                     >
                         <Text style={styles.restoreButtonText}>{i18n.t('paywall.restore')}</Text>
                     </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.dismissButton}
+                        onPress={onDismiss}
+                        disabled={state.isLoading}
+                        accessibilityRole="button"
+                    >
+                        <Text style={styles.dismissButtonText}>{i18n.t('paywall.maybeNextTime')}</Text>
+                    </TouchableOpacity>
                 </View>
 
                 <View style={styles.footer}>
                     <Text style={styles.footerText}>
-                        {i18n.t('paywall.footer', {
-                            store: Platform.OS === 'ios'
-                                ? i18n.t('paywall.platform.ios')
-                                : i18n.t('paywall.platform.android'),
-                        })}
+                        {selectedPlan?.kind === 'prepaid'
+                            ? i18n.t('paywall.footerPrepaid')
+                            : i18n.t('paywall.footer', {
+                                store: Platform.OS === 'ios'
+                                    ? i18n.t('paywall.platform.ios')
+                                    : i18n.t('paywall.platform.android'),
+                            })}
                     </Text>
                     <View style={styles.links}>
                         <TouchableOpacity onPress={openPrivacyPolicy}>
@@ -102,7 +152,7 @@ export function Paywall({ state, onPurchase, onRestore }: PaywallProps) {
                         </TouchableOpacity>
                     </View>
                 </View>
-            </View>
+            </ScrollView>
         </SafeAreaView>
     )
 }
@@ -123,7 +173,7 @@ function makeStyles(t: Theme) {
             backgroundColor: t.colors.bg,
         },
         content: {
-            flex: 1,
+            flexGrow: 1,
             padding: t.spacing.xl,
             justifyContent: 'space-between',
         },
@@ -156,7 +206,7 @@ function makeStyles(t: Theme) {
         },
         priceContainer: {
             alignItems: 'center',
-            marginVertical: t.spacing.xl,
+            marginVertical: t.spacing.lg,
         },
         price: {
             fontSize: 48,
@@ -169,8 +219,20 @@ function makeStyles(t: Theme) {
             marginTop: t.spacing.xs,
         },
         features: {
-            marginVertical: t.spacing.xl,
+            marginVertical: t.spacing.lg,
         },
+        planOptions: { gap: t.spacing.sm },
+        planOption: {
+            flexDirection: 'row', alignItems: 'center', gap: t.spacing.md,
+            borderWidth: StyleSheet.hairlineWidth, borderColor: t.colors.border,
+            borderRadius: t.radius.md, padding: t.spacing.md,
+            backgroundColor: t.colors.surface,
+        },
+        planOptionSelected: { borderColor: t.colors.accent, backgroundColor: t.colors.surfaceAlt },
+        planCopy: { flex: 1 },
+        planTitle: { fontSize: t.type.bodyStrong.fontSize, fontWeight: '600', color: t.colors.text },
+        planHint: { marginTop: 2, fontSize: t.type.caption.fontSize, color: t.colors.textSecondary },
+        planPrice: { fontSize: t.type.label.fontSize, fontWeight: '600', color: t.colors.text },
         featureRow: {
             flexDirection: 'row',
             alignItems: 'center',
@@ -210,6 +272,8 @@ function makeStyles(t: Theme) {
             color: t.colors.textSecondary,
             fontSize: t.type.body.fontSize,
         },
+        dismissButton: { paddingVertical: t.spacing.sm, alignItems: 'center' },
+        dismissButtonText: { color: t.colors.textTertiary, fontSize: t.type.body.fontSize },
         footer: {
             marginTop: t.spacing.xl,
             alignItems: 'center',

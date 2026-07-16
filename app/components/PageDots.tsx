@@ -9,27 +9,35 @@ type Props = {
     groupSize: number // lists in the active group
     listIndex: number // active list within the active group
     groupName: string
+    overviewEnabled?: boolean
+    overviewOpen?: boolean
+    overviewLabel?: string
 }
 
 // A you-are-here indicator across the whole list hierarchy: a row of group dots,
 // the active group expanded into its lists (with a subtle pill behind them ONLY
 // when it holds more than one). Past a handful of groups/lists it collapses to a
 // compact "Group · n/m" label so it never overruns the header.
-export function PageDots({ groupCount, groupIndex, groupSize, listIndex, groupName }: Props) {
+export function PageDots({ groupCount, groupIndex, groupSize, listIndex, groupName, overviewEnabled = false, overviewOpen = false, overviewLabel = 'Overview' }: Props) {
     const t = useTheme()
     const styles = useMemo(() => makeStyles(t), [t])
 
     // Collapse to a compact label before the dot row can grow wide enough to
     // overrun the header — including the dense 5-6 groups WITH a wide active pill.
-    if (groupCount > 6 || groupSize > 9 || (groupCount >= 5 && groupSize > 4)) {
+    const totalGroups = groupCount + (overviewEnabled ? 1 : 0)
+    if (totalGroups > 6 || groupSize > 9 || (totalGroups >= 5 && groupSize > 4)) {
+        if (overviewOpen) return <Text style={styles.label} numberOfLines={1}>{overviewLabel}</Text>
         const pos = groupSize > 1 ? ` · ${listIndex + 1}/${groupSize}` : ''
         return <Text style={styles.label} numberOfLines={1}>{groupName}{pos}</Text>
     }
 
     return (
         <View style={styles.row}>
+            {overviewEnabled ? (
+                <View style={[styles.groupDot, overviewOpen && styles.groupDotActive]} />
+            ) : null}
             {Array.from({ length: groupCount }).map((_, gi) => {
-                if (gi !== groupIndex) {
+                if (overviewOpen || gi !== groupIndex) {
                     return <View key={gi} style={styles.groupDot} />
                 }
                 // The active group with a single list stays a plain (accented) dot —

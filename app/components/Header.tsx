@@ -26,6 +26,11 @@ type HeaderProps = {
     groupSize?: number
     listIndex?: number
     groupName?: string
+    overviewEnabled?: boolean
+    overviewOpen?: boolean
+    listName?: string
+    showBarcode?: boolean
+    onBarcode?: () => void
     onOpenLists: () => void
 }
 
@@ -42,6 +47,11 @@ export function Header(props: HeaderProps) {
         groupSize = 0,
         listIndex = 0,
         groupName = '',
+        overviewEnabled = false,
+        overviewOpen = false,
+        listName = '',
+        showBarcode = false,
+        onBarcode,
         onOpenLists,
     } = props
 
@@ -91,8 +101,12 @@ export function Header(props: HeaderProps) {
         <SafeAreaView style={styles.safeArea} edges={['top']}>
             <View style={styles.container}>
                 <View style={styles.leftSection}>
-                    <AnimatedIconButton style={styles.iconButton} onPress={onMenuToggle}>
-                        <Ionicons name="menu-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
+                    <AnimatedIconButton
+                        style={styles.iconButton}
+                        onPress={onMenuToggle}
+                        accessibilityLabel={i18n.t('lists.menu.settings')}
+                    >
+                        <Ionicons name="settings-outline" size={HEADER_ICON_SIZE} color={t.colors.text} />
                     </AnimatedIconButton>
                     <Animated.View
                         style={[styles.statusDot, { backgroundColor: status.color, opacity: pulse }]}
@@ -115,7 +129,31 @@ export function Header(props: HeaderProps) {
                 </View>
 
                 <View style={styles.centerSection}>
-                    {(groupCount > 1 || groupSize > 1) && (
+                    {!overviewOpen && listName ? (
+                        <TouchableOpacity
+                            style={styles.listTitleButton}
+                            onPress={onOpenLists}
+                            activeOpacity={0.6}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${i18n.t('lists.menu.title')}, ${listName}`}
+                        >
+                            <Text style={styles.listTitle} numberOfLines={1}>{listName}</Text>
+                        </TouchableOpacity>
+                    ) : null}
+                    {!overviewOpen && showBarcode && onBarcode ? (
+                        <TouchableOpacity
+                            style={styles.barcodeButton}
+                            onPress={onBarcode}
+                            accessibilityRole="button"
+                            accessibilityLabel={i18n.t('header.section.loyaltyCards')}
+                        >
+                            <Ionicons name="barcode-outline" size={20} color={t.colors.textTertiary} />
+                        </TouchableOpacity>
+                    ) : null}
+                </View>
+
+                <View style={styles.rightSection}>
+                    {(overviewEnabled || groupCount > 1 || groupSize > 1) && (
                         <TouchableOpacity
                             style={styles.listsButton}
                             onPress={onOpenLists}
@@ -124,12 +162,19 @@ export function Header(props: HeaderProps) {
                             accessibilityLabel={groupName ? `${i18n.t('lists.menu.title')}, ${groupName}` : i18n.t('lists.menu.title')}
                             accessibilityValue={groupSize > 1 ? { min: 1, max: groupSize, now: listIndex + 1 } : undefined}
                         >
-                            <PageDots groupCount={groupCount} groupIndex={groupIndex} groupSize={groupSize} listIndex={listIndex} groupName={groupName} />
+                            <PageDots
+                                groupCount={groupCount}
+                                groupIndex={groupIndex}
+                                groupSize={groupSize}
+                                listIndex={listIndex}
+                                groupName={groupName}
+                                overviewEnabled={overviewEnabled}
+                                overviewOpen={overviewOpen}
+                                overviewLabel={i18n.t('desktop.nav.overview')}
+                            />
                         </TouchableOpacity>
                     )}
                 </View>
-
-                <View style={styles.rightSection} />
             </View>
         </SafeAreaView>
     )
@@ -157,18 +202,31 @@ function makeStyles(t: Theme) {
         rightSection: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: t.spacing.md,
+            flexShrink: 0,
         },
-        // A real flex column between left/right (not an overlay) so the dots
-        // reserve their own space and can't paint over the status label. The dots
-        // are right-aligned (alignItems flex-end), sitting just before the right
-        // section; overflow:hidden clips any residual spill in extreme hierarchies.
+        // The current list context lives between global settings/status and the
+        // right-aligned page indicator. Long names yield before either control.
         centerSection: {
             flex: 1,
-            alignItems: 'flex-end',
+            flexDirection: 'row',
+            alignItems: 'center',
             justifyContent: 'center',
-            paddingHorizontal: t.spacing.xs,
+            gap: t.spacing.sm,
+            paddingHorizontal: t.spacing.sm,
             overflow: 'hidden',
+        },
+        listTitleButton: { flexShrink: 1, minHeight: 44, justifyContent: 'center' },
+        listTitle: {
+            fontSize: t.type.bodyStrong.fontSize,
+            fontWeight: t.type.bodyStrong.fontWeight,
+            color: t.colors.text,
+        },
+        barcodeButton: {
+            width: 36,
+            height: 44,
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
         },
         // Guarantees a 44pt tap target even when the indicator is a lone 8px dot.
         listsButton: {

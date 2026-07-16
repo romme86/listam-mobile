@@ -25,6 +25,7 @@ import {
     RPC_CREATE_INVITE,
     RPC_REMOVE_MEMBER,
     RPC_GET_MEMBERS,
+    RPC_REQUEST_SYNC,
     RPC_GET_OWNER_RECOVERY_CODE,
     RPC_RECOVER_OWNER,
     RPC_CONTROL_PAIR,
@@ -72,7 +73,6 @@ import { AddItemBar } from './components/AddItemBar'
 import { Fab } from './components/Fab'
 import { ListsMenu } from './components/ListsMenu'
 import { MoveItemSheet } from './components/MoveItemSheet'
-import { ListContextBar } from './components/ListContextBar'
 import { ListSwipePager } from './components/ListSwipePager'
 import { BoardView } from './components/board/BoardView'
 import { TicketDetail } from './components/board/TicketDetail'
@@ -214,6 +214,8 @@ function AppInner() {
         isJoiningRef,
         joinPhase,
         networkStatus,
+        baseId,
+        epoch,
         membershipRoster,
         ownerRecoveryCode,
         clearOwnerRecoveryCode,
@@ -226,6 +228,7 @@ function AppInner() {
     const subscription = useSubscription()
     const { apply: applyLearnedCategories, learn: learnCategory } = useLearnedCategories()
     const { lib, currentId, position, commit } = useListPager()
+
     const currentListType = lib.listsById[currentId]?.type
     // The current surface's display name: its synced rename, else the localized
     // built-in fallback (a fresh, un-renamed built-in), else the raw id.
@@ -283,8 +286,8 @@ function AppInner() {
     const [isAdding, setIsAdding] = useState(false)
     const [addText, setAddText] = useState('')
     const [listsMenuVisible, setListsMenuVisible] = useState(false)
-    // Which sub-view the lists menu opens in: the burger jumps to 'settings',
-    // the list-name strip opens the 'lists' switcher.
+    // Which sub-view the lists menu opens in: the header cog jumps to 'settings',
+    // the list title in the same header opens the 'lists' switcher.
     const [menuInitialView, setMenuInitialView] = useState<'lists' | 'settings'>('lists')
     // The day-plan Overview is an OPT-IN capability behind its own preference
     // (preferences.overviewEnabled, general settings). By default the app is just
@@ -737,6 +740,13 @@ function AppInner() {
             appStateRef.current = next
             const cameToForeground = prev.match(/inactive|background/) && next === 'active'
             if (!cameToForeground || !isWorkletReady) return
+            // iOS suspends timers and networking in the background. Force one
+            // durable-view catch-up plus roster refresh immediately on resume;
+            // this also pokes the backend presence heartbeat, so desktop shows
+            // the phone online and the name effect reasserts under the CURRENT
+            // writer key instead of leaving a label attached to an old identity.
+            sendRPC(RPC_REQUEST_SYNC)
+            sendRPC(RPC_GET_MEMBERS)
             if (!backupScheduleEnabledRef.current) return
             sendRPC(RPC_SET_BACKUP_SCHEDULE, JSON.stringify({ enabled: true }))
             // Re-read so the ref (and any open Settings UI) reflects fresh lastAt.
@@ -1629,7 +1639,9 @@ function AppInner() {
             <Paywall
                 state={subscription}
                 onPurchase={subscription.purchase}
+                onSelectPlan={subscription.selectPlan}
                 onRestore={subscription.restore}
+                onDismiss={subscription.dismissPaywall}
             />
         )
     }
@@ -1661,6 +1673,11 @@ function AppInner() {
                 groupSize={position?.groupSize ?? 0}
                 listIndex={position?.indexInGroup ?? 0}
                 groupName={position?.groupName ?? ''}
+                overviewEnabled={overviewEnabled}
+                overviewOpen={overviewOpen}
+                listName={currentListName}
+                showBarcode={!isTodo && !isBoard}
+                onBarcode={() => { const card = loyaltyCards[0]; if (card) { handleSelectCard(card) } else { setScannerVisible(true) } }}
                 onOpenLists={() => { setMenuInitialView('lists'); setPendingListSettingsId(null); setListsMenuVisible(true) }}
             />
 
@@ -1672,16 +1689,6 @@ function AppInner() {
                     onClearPlan={clearPlanRef}
                     onOpenList={openListFromOverview}
                     onMovePlan={movePlanForRef}
-                />
-            )}
-
-            {!overviewOpen && (
-                <ListContextBar
-                    listName={currentListName}
-                    onOpenMenu={() => { setMenuInitialView('lists'); setPendingListSettingsId(null); setListsMenuVisible(true) }}
-                    onBarcode={() => { const card = loyaltyCards[0]; if (card) { handleSelectCard(card) } else { setScannerVisible(true) } }}
-                    showBarcode={!isTodo && !isBoard}
-                    onOpenListSettings={() => { setPendingListSettingsId(currentId); setListsMenuVisible(true) }}
                 />
             )}
 
@@ -1751,6 +1758,8 @@ function AppInner() {
                 isWorkletReady={isWorkletReady}
                 networkStatus={networkStatus}
                 isJoining={isJoining}
+                baseId={baseId}
+                epoch={epoch}
                 onManageMembers={handleManageMembers}
                 onManageOwnedDevices={handleOpenOwnedDevices}
                 onPairLeaf={handleOpenLeafPairing}
