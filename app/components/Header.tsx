@@ -19,8 +19,9 @@ type HeaderProps = {
     isJoining: boolean
     onMenuToggle: () => void
     trialDaysRemaining?: number
-    // You-are-here across the list hierarchy, shown as centered dots: one per
-    // group, the active group expanded into its lists. Tapping opens the tray.
+    // You-are-here across the list hierarchy, shown as a permanent pill button
+    // of dots: one per group, the active group expanded into its lists.
+    // Tapping opens the tray.
     groupCount?: number
     groupIndex?: number
     groupSize?: number
@@ -154,11 +155,10 @@ export function Header(props: HeaderProps) {
 
                 <View style={styles.rightSection}>
                     {(overviewEnabled || groupCount > 1 || groupSize > 1) && (
-                        <TouchableOpacity
+                        <AnimatedIconButton
                             style={styles.listsButton}
                             onPress={onOpenLists}
                             hitSlop={12}
-                            accessibilityRole="button"
                             accessibilityLabel={groupName ? `${i18n.t('lists.menu.title')}, ${groupName}` : i18n.t('lists.menu.title')}
                             accessibilityValue={groupSize > 1 ? { min: 1, max: groupSize, now: listIndex + 1 } : undefined}
                         >
@@ -172,7 +172,7 @@ export function Header(props: HeaderProps) {
                                 overviewOpen={overviewOpen}
                                 overviewLabel={i18n.t('desktop.nav.overview')}
                             />
-                        </TouchableOpacity>
+                        </AnimatedIconButton>
                     )}
                 </View>
             </View>
