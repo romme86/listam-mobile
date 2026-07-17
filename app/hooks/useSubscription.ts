@@ -17,9 +17,13 @@ import {
 } from 'react-native-iap'
 import { useI18n } from '../i18n'
 import { appLogger } from '../logger'
+import { nextPaywallAt } from '../paywallSchedule'
 
 const TRIAL_START_KEY = '@lista_trial_start'
 const TRIAL_DURATION_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
+const PAYWALL_DISMISS_COUNT_KEY = '@lista_paywall_dismiss_count'
+const PAYWALL_DEFER_UNTIL_KEY = '@lista_paywall_defer_until'
+const MAX_TIMEOUT_MS = 2_147_000_000
 
 
 // Store catalog expected by the paywall:
@@ -55,6 +59,8 @@ export type SubscriptionState = {
     selectedPlanId: string | null
     error: string | null
     isPaywallDismissed: boolean
+    paywallDismissCount: number
+    paywallDeferredUntil: number | null
 }
 
 function plansFromProducts(products: ProductOrSubscription[]): PaymentPlan[] {
@@ -109,6 +115,8 @@ export function useSubscription() {
         selectedPlanId: null,
         error: null,
         isPaywallDismissed: false,
+        paywallDismissCount: 0,
+        paywallDeferredUntil: null,
     })
 
     // Initialize IAP connection
@@ -163,7 +171,12 @@ export function useSubscription() {
 
     const checkTrialStatus = async () => {
         try {
-            let trialStart = await AsyncStorage.getItem(TRIAL_START_KEY)
+            const stored = await AsyncStorage.multiGet([
+                TRIAL_START_KEY,
+                PAYWALL_DISMISS_COUNT_KEY,
+                PAYWALL_DEFER_UNTIL_KEY,
+            ])
+            let trialStart = stored[0]?.[1] ?? null
 
             if (!trialStart) {
                 // First time user - start trial
@@ -176,12 +189,21 @@ export function useSubscription() {
             const remaining = TRIAL_DURATION_MS - elapsed
             const daysRemaining = Math.max(0, Math.ceil(remaining / (24 * 60 * 60 * 1000)))
             const isTrialActive = remaining > 0
+            const rawDismissCount = Number.parseInt(stored[1]?.[1] ?? '', 10)
+            const paywallDismissCount = Number.isFinite(rawDismissCount) && rawDismissCount > 0 ? rawDismissCount : 0
+            const rawDeferredUntil = Number.parseInt(stored[2]?.[1] ?? '', 10)
+            const paywallDeferredUntil = Number.isFinite(rawDeferredUntil) && rawDeferredUntil > Date.now()
+                ? rawDeferredUntil
+                : null
 
             setState((prev) => ({
                 ...prev,
                 isTrialActive,
                 trialDaysRemaining: daysRemaining,
                 isLoading: false,
+                paywallDismissCount,
+                paywallDeferredUntil,
+                isPaywallDismissed: paywallDeferredUntil !== null,
             }))
 
             return isTrialActive
@@ -294,8 +316,43 @@ export function useSubscription() {
     }, [])
 
     const dismissPaywall = useCallback(() => {
-        setState((prev) => ({ ...prev, isPaywallDismissed: true, error: null }))
-    }, [])
+        const dismissalNumber = state.paywallDismissCount + 1
+        const deferredUntil = nextPaywallAt(Date.now(), dismissalNumber)
+        setState((prev) => ({
+            ...prev,
+            isPaywallDismissed: true,
+            paywallDismissCount: dismissalNumber,
+            paywallDeferredUntil: deferredUntil,
+            error: null,
+        }))
+        void AsyncStorage.multiSet([
+            [PAYWALL_DISMISS_COUNT_KEY, String(dismissalNumber)],
+            [PAYWALL_DEFER_UNTIL_KEY, String(deferredUntil)],
+        ]).catch((err) => appLogger.warn('Paywall deferral save error', err))
+    }, [state.paywallDismissCount])
+
+    // Long deferrals exceed JavaScript's maximum timeout. Wake in bounded
+    // chunks; once the stored deadline passes, the paywall becomes eligible
+    // again even if the app stayed open (or resumes from suspension).
+    useEffect(() => {
+        const deferredUntil = state.paywallDeferredUntil
+        if (!deferredUntil) return
+
+        let timer: ReturnType<typeof setTimeout> | undefined
+        const scheduleWakeUp = () => {
+            const remaining = deferredUntil - Date.now()
+            if (remaining <= 0) {
+                setState((prev) => ({ ...prev, isPaywallDismissed: false, paywallDeferredUntil: null }))
+                return
+            }
+            timer = setTimeout(scheduleWakeUp, Math.min(remaining, MAX_TIMEOUT_MS))
+        }
+
+        scheduleWakeUp()
+        return () => {
+            if (timer) clearTimeout(timer)
+        }
+    }, [state.paywallDeferredUntil])
 
     const shouldShowPaywall = !state.isLoading && !state.isSubscribed && !state.isTrialActive && !state.isPaywallDismissed
 
