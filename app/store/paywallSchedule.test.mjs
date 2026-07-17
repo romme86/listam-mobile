@@ -34,3 +34,15 @@ test('calendar-month scheduling clamps safely at month end', () => {
     assert.equal(schedule.nextPaywallAt(at(2026, 11, 31), 1), at(2027, 1, 28))
     assert.equal(schedule.nextPaywallAt(at(2024, 1, 29), 3), at(2025, 1, 28))
 })
+
+test('dismiss button delay grows by 30 seconds after every dismissal', () => {
+    assert.equal(schedule.paywallDismissDelaySeconds(0), 30)
+    assert.equal(schedule.paywallDismissDelaySeconds(1), 60)
+    assert.equal(schedule.paywallDismissDelaySeconds(2), 90)
+    assert.equal(schedule.paywallDismissDelaySeconds(9), 300)
+})
+
+test('dismiss button delay safely handles invalid prior counts', () => {
+    assert.equal(schedule.paywallDismissDelaySeconds(-1), 30)
+    assert.equal(schedule.paywallDismissDelaySeconds(Number.NaN), 30)
+})

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
     View,
     Text,
@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
 import type { SubscriptionState } from '../hooks/useSubscription'
+import { paywallDismissDelaySeconds } from '../paywallSchedule'
 
 type PaywallProps = {
     state: SubscriptionState
@@ -27,6 +28,21 @@ export function Paywall({ state, onPurchase, onSelectPlan, onRestore, onDismiss 
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
+    const dismissDelaySeconds = paywallDismissDelaySeconds(state.paywallDismissCount)
+    const [dismissSecondsRemaining, setDismissSecondsRemaining] = useState(dismissDelaySeconds)
+
+    useEffect(() => {
+        const unlockAt = Date.now() + dismissDelaySeconds * 1000
+        setDismissSecondsRemaining(dismissDelaySeconds)
+
+        const updateCountdown = () => {
+            const remaining = Math.max(0, Math.ceil((unlockAt - Date.now()) / 1000))
+            setDismissSecondsRemaining(remaining)
+            if (remaining === 0) clearInterval(timer)
+        }
+        const timer = setInterval(updateCountdown, 250)
+        return () => clearInterval(timer)
+    }, [dismissDelaySeconds])
 
     const fallbackPrice = Platform.select({
         ios: 'CHF 1.00',
@@ -123,12 +139,16 @@ export function Paywall({ state, onPurchase, onSelectPlan, onRestore, onDismiss 
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        style={styles.dismissButton}
+                        style={[styles.dismissButton, dismissSecondsRemaining > 0 && styles.dismissButtonDisabled]}
                         onPress={onDismiss}
-                        disabled={state.isLoading}
+                        disabled={state.isLoading || dismissSecondsRemaining > 0}
                         accessibilityRole="button"
+                        accessibilityState={{ disabled: state.isLoading || dismissSecondsRemaining > 0 }}
                     >
-                        <Text style={styles.dismissButtonText}>{i18n.t('paywall.maybeNextTime')}</Text>
+                        <Text style={styles.dismissButtonText}>
+                            {i18n.t('paywall.maybeNextTime')}
+                            {dismissSecondsRemaining > 0 ? ` (${dismissSecondsRemaining}s)` : ''}
+                        </Text>
                     </TouchableOpacity>
                 </View>
 
@@ -273,6 +293,7 @@ function makeStyles(t: Theme) {
             fontSize: t.type.body.fontSize,
         },
         dismissButton: { paddingVertical: t.spacing.sm, alignItems: 'center' },
+        dismissButtonDisabled: { opacity: 0.55 },
         dismissButtonText: { color: t.colors.textTertiary, fontSize: t.type.body.fontSize },
         footer: {
             marginTop: t.spacing.xl,
