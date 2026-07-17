@@ -7,6 +7,7 @@ type AnimatedIconButtonProps = {
     children: React.ReactNode
     style?: any
     accessibilityLabel?: string
+    accessibilityValue?: { min?: number; max?: number; now?: number; text?: string }
     hitSlop?: number
 }
 
@@ -15,6 +16,7 @@ export function AnimatedIconButton({
     children,
     style,
     accessibilityLabel,
+    accessibilityValue,
     hitSlop = 10,
 }: AnimatedIconButtonProps) {
     const scaleAnim = useRef(new Animated.Value(1)).current
@@ -50,6 +52,7 @@ export function AnimatedIconButton({
             hitSlop={{ top: hitSlop, bottom: hitSlop, left: hitSlop, right: hitSlop }}
             accessibilityRole="button"
             accessibilityLabel={accessibilityLabel}
+            accessibilityValue={accessibilityValue}
         >
             <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
                 {children}
