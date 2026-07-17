@@ -29,6 +29,7 @@ export const DEFAULT_VIEW: RegistryListView = {
 const selectListsState = (state: RootState) => state.lists
 const selectDefaultListId = (state: RootState) => state.preferences.defaultListId
 const selectBoardEnabled = (state: RootState) => state.preferences.boardEnabled
+const selectTodoEnabled = (state: RootState) => state.preferences.features.todo
 const selectCurrentListId = (state: RootState) => state.lists.selectedListId
 // Device-local per-surface view overrides for the built-in surfaces (they can't
 // carry a synced registry meta-item, so this is where their view lives).
@@ -60,7 +61,9 @@ export function isBuiltinSurfaceId(id: string): boolean {
 // COMPOSITE id (= surfaceLabelKey) so the pager can tell them apart, name each
 // from the synced rename channel, and file each into its synced group placement.
 // Board follows desktop's gate: shown when boardEnabled OR a board ticket already
-// exists on 'default' (so an incoming shared board stays reachable).
+// exists on 'default' (so an incoming shared board stays reachable). The To-do
+// surface gates the same way on the todo feature flag — content wins, so a
+// basic-mode device that joins a mesh with todo items still sees them.
 export const selectNavLibrary = createSelector(
     selectListsState,
     selectRegistry,
@@ -68,13 +71,17 @@ export const selectNavLibrary = createSelector(
     selectSurfaceLabels,
     selectBuiltinGroups,
     selectBoardEnabled,
+    selectTodoEnabled,
     selectBuiltinViews,
-    (lists, registry, defaultListId, surfaceLabels, builtinGroups, boardEnabled, builtinViews): NavLibrary => {
+    (lists, registry, defaultListId, surfaceLabels, builtinGroups, boardEnabled, todoEnabled, builtinViews): NavLibrary => {
         const items = Object.values(lists.itemsById)
         const hasBoardOnDefault = items.some((it) => it.listId === DEFAULT_LIST_ID && isBoardType(it.listType))
-        const builtinLists = BUILTIN_SURFACE_TYPES.filter(
-            (type) => !isBoardType(type) || boardEnabled || hasBoardOnDefault,
-        ).map((type, i) => {
+        const hasTodoOnDefault = items.some((it) => it.listId === DEFAULT_LIST_ID && isTodoType(it.listType))
+        const builtinLists = BUILTIN_SURFACE_TYPES.filter((type) => {
+            if (isBoardType(type)) return boardEnabled || hasBoardOnDefault
+            if (isTodoType(type)) return todoEnabled || hasTodoOnDefault
+            return true
+        }).map((type, i) => {
             const key = surfaceLabelKey(DEFAULT_LIST_ID, type)
             return {
                 id: key,

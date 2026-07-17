@@ -67,7 +67,9 @@ function makeState(selectedListId, builtinViews) {
     return {
         lists: { itemsById: {}, listsById: {}, selectedListId },
         labels: { itemsById: {} },
-        preferences: { defaultListId: null, boardEnabled: false, builtinViews },
+        // features.todo on so the built-in To-do surface exists for the clamp
+        // test below (the progressive-disclosure gate hides it otherwise).
+        preferences: { defaultListId: null, boardEnabled: false, features: { todo: true }, builtinViews },
     }
 }
 

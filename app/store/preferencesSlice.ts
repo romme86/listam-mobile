@@ -14,6 +14,47 @@ export const LIST_SPACINGS: ListSpacing[] = ['compact', 'cozy', 'normal', 'relax
 export type ThemeChoice = 'system' | 'light' | 'dark'
 export const THEME_CHOICES: ThemeChoice[] = ['system', 'light', 'dark']
 
+// Progressive disclosure: the app boots in BASIC mode (one grocery list,
+// theme + language) and grows features on demand. 'unset' = the user never
+// decided — a fresh install stays basic, while evidence of prior use (see
+// preferencesHydrated migration + the runtime auto-activation in index.tsx)
+// flips it to 'on' so nothing an existing user relied on disappears.
+export type AdvancedMode = 'unset' | 'on' | 'off'
+export const ADVANCED_MODES: AdvancedMode[] = ['unset', 'on', 'off']
+
+// The individually-toggleable features behind "Activate advanced options".
+// boardEnabled / overviewEnabled predate this scheme and stay as their own
+// top-level fields; everything newer lives here. All device-local, NEVER
+// synced: a phone in basic mode must coexist with a desktop in full mode on
+// the same base. Toggles hide ENTRY POINTS, never data — surfaces that
+// already have content stay reachable (see registrySelectors' content-wins
+// gates).
+export type FeatureFlags = {
+    todo: boolean
+    multiList: boolean
+    listGroups: boolean
+    sharing: boolean
+    peersDevices: boolean
+    backups: boolean
+    voice: boolean
+    loyaltyCards: boolean
+}
+export const FEATURE_KEYS = [
+    'todo', 'multiList', 'listGroups', 'sharing', 'peersDevices', 'backups', 'voice', 'loyaltyCards',
+] as const satisfies ReadonlyArray<keyof FeatureFlags>
+export type FeatureKey = (typeof FEATURE_KEYS)[number]
+
+const FEATURES_ALL_OFF: FeatureFlags = {
+    todo: false,
+    multiList: false,
+    listGroups: false,
+    sharing: false,
+    peersDevices: false,
+    backups: false,
+    voice: false,
+    loyaltyCards: false,
+}
+
 // App-global, per-device preferences. List PRESENTATION settings (grid/list,
 // categories, icons, sizes, spacing, alignment) are NOT here — they are per-list
 // and synced on each list's registry meta-item (see registrySelectors DEFAULT_VIEW).
@@ -35,6 +76,12 @@ export type PreferencesState = {
     // as a synced peer-label (keyed by this device's own writer key) so other
     // peers can tell devices apart in the members screen. '' = unnamed.
     deviceName: string
+    // Progressive disclosure master state. Gating of app surfaces reads the
+    // individual flags (boardEnabled / overviewEnabled / features.*), NOT this —
+    // advancedMode only selects which Settings screen renders (basic screen
+    // with the activation card vs the full sectioned screen).
+    advancedMode: AdvancedMode
+    features: FeatureFlags
     // Device-local view overrides for the BUILT-IN surfaces (Groceries / Board /
     // Todo, which all share listId 'default'). They carry no registry meta-item,
     // so their per-surface view can't ride the synced registry the way user lists
@@ -51,6 +98,8 @@ const initialState: PreferencesState = {
     boardEnabled: false,
     overviewEnabled: false,
     deviceName: '',
+    advancedMode: 'unset',
+    features: FEATURES_ALL_OFF,
     builtinViews: {},
 }
 
@@ -70,8 +119,26 @@ const preferencesSlice = createSlice({
             if (typeof next.boardEnabled === 'boolean') state.boardEnabled = next.boardEnabled
             if (typeof next.overviewEnabled === 'boolean') state.overviewEnabled = next.overviewEnabled
             if (typeof next.deviceName === 'string') state.deviceName = next.deviceName
-            if (next.builtinViews && typeof next.builtinViews === 'object') {
-                state.builtinViews = next.builtinViews
+            if (isAdvancedMode(next.advancedMode)) state.advancedMode = next.advancedMode
+            if (next.features && typeof next.features === 'object') {
+                for (const key of FEATURE_KEYS) {
+                    const value = (next.features as Partial<FeatureFlags>)[key]
+                    if (typeof value === 'boolean') state.features[key] = value
+                }
+            }
+            // Migration: persisted prefs that predate progressive disclosure carry
+            // no advancedMode AND no features blob. A device that had boards or the
+            // Overview switched on was clearly past basic mode — activate advanced
+            // with EVERY feature on (those users had every entry point visible
+            // before this restructure, so a partial set would silently take things
+            // away). A payload that carries features is post-restructure and must
+            // never be re-migrated (it would clobber deliberate offs). Devices with
+            // neither flag stay 'unset' and can still auto-activate at runtime on
+            // content evidence (user lists, peers) once the backend hydrates.
+            if (!isAdvancedMode(next.advancedMode) && !next.features && state.advancedMode === 'unset'
+                && (state.boardEnabled || state.overviewEnabled)) {
+                state.advancedMode = 'on'
+                for (const key of FEATURE_KEYS) state.features[key] = true
             }
         },
         localeChoiceSet(state, action: PayloadAction<LocaleChoice>) {
@@ -91,6 +158,37 @@ const preferencesSlice = createSlice({
         },
         deviceNameSet(state, action: PayloadAction<string>) {
             state.deviceName = typeof action.payload === 'string' ? action.payload : ''
+        },
+        // The "Activate advanced options" button: one tap turns on the standard
+        // set — every list feature plus sharing/peers/backups. Voice input and
+        // loyalty cards stay opt-in (hardware- and camera-adjacent, and absent
+        // from most users' workflows); each can be toggled individually after.
+        advancedActivated(state) {
+            state.advancedMode = 'on'
+            state.boardEnabled = true
+            state.overviewEnabled = true
+            state.features.todo = true
+            state.features.multiList = true
+            state.features.listGroups = true
+            state.features.sharing = true
+            state.features.peersDevices = true
+            state.features.backups = true
+        },
+        // Runtime auto-activation: evidence of real use appeared (synced user
+        // lists, peers, an incoming share) on a device that never chose. Turns
+        // everything on — the content came from a fuller mesh, so hiding any
+        // entry point here would read as data loss. No-op once decided.
+        advancedAutoActivated(state) {
+            if (state.advancedMode !== 'unset') return
+            state.advancedMode = 'on'
+            state.boardEnabled = true
+            state.overviewEnabled = true
+            for (const key of FEATURE_KEYS) state.features[key] = true
+        },
+        featureSet(state, action: PayloadAction<{ feature: FeatureKey; enabled: boolean }>) {
+            const { feature, enabled } = action.payload
+            if (!(FEATURE_KEYS as readonly string[]).includes(feature)) return
+            state.features[feature] = !!enabled
         },
         // Merge a partial view patch onto one built-in surface's device-local view.
         builtinViewPatched(state, action: PayloadAction<{ surfaceId: string; patch: Partial<RegistryListView> }>) {
@@ -121,7 +219,30 @@ export function isThemeChoice(value: unknown): value is ThemeChoice {
     return typeof value === 'string' && (THEME_CHOICES as string[]).includes(value)
 }
 
+export function isAdvancedMode(value: unknown): value is AdvancedMode {
+    return typeof value === 'string' && (ADVANCED_MODES as string[]).includes(value)
+}
+
+/** Parse the persisted features JSON blob; unknown/malformed input → null. */
+export function parseFeatureFlags(raw: string | null): Partial<FeatureFlags> | null {
+    if (!raw) return null
+    try {
+        const parsed: unknown = JSON.parse(raw)
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+        const out: Partial<FeatureFlags> = {}
+        for (const key of FEATURE_KEYS) {
+            const value = (parsed as Record<string, unknown>)[key]
+            if (typeof value === 'boolean') out[key] = value
+        }
+        return out
+    } catch {
+        return null
+    }
+}
+
 export const preferencesActions = preferencesSlice.actions
 export default preferencesSlice.reducer
 
 export const selectPreferences = (state: RootState) => state.preferences
+export const selectFeatures = (state: RootState) => state.preferences.features
+export const selectAdvancedMode = (state: RootState) => state.preferences.advancedMode

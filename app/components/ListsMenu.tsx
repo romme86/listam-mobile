@@ -18,7 +18,7 @@ import { DEFAULT_VIEW, isBuiltinSurfaceId, builtinSurfaceNameKey } from '../stor
 import type { LoyaltyCardHandle } from '../store/loyaltyCardsSlice'
 import type { NetworkStatus } from '../store/syncSlice'
 import { deriveConnectionStatus } from './connectionStatus'
-import { THEME_CHOICES, type ThemeChoice } from '../store/preferencesSlice'
+import type { AdvancedMode, FeatureFlags, FeatureKey, ThemeChoice } from '../store/preferencesSlice'
 import {
     SegmentedSetting,
     SIZE_OPTIONS,
@@ -30,8 +30,8 @@ import {
     alignLabelKey,
     spacingLabelKey,
 } from './SegmentedSetting'
-import { BackupSettings } from './BackupSettings'
 import { CloseDot } from './CloseDot'
+import { SettingsScreen } from './SettingsScreen'
 import { decodeSurface } from '../listProjection'
 
 type Props = {
@@ -59,6 +59,12 @@ type Props = {
     onLocaleChoiceChange: (choice: LocaleChoice) => void
     themeChoice: ThemeChoice
     onThemeChoiceChange: (choice: ThemeChoice) => void
+    // Progressive disclosure: which Settings screen renders (basic vs full),
+    // the activation handler, and the individual feature switches.
+    advancedMode: AdvancedMode
+    onActivateAdvanced: () => void
+    features: FeatureFlags
+    onToggleFeature: (feature: FeatureKey) => void
     // App-global board feature toggle (off by default).
     boardEnabled: boolean
     onToggleBoardEnabled: () => void
@@ -137,6 +143,7 @@ export function ListsMenu(props: Props) {
         peerCount, isWorkletReady, networkStatus, isJoining, onManageMembers, onManageOwnedDevices, onPairLeaf,
         baseId, epoch,
         localeChoice, onLocaleChoiceChange, themeChoice, onThemeChoiceChange,
+        advancedMode, onActivateAdvanced, features, onToggleFeature,
         boardEnabled, onToggleBoardEnabled,
         overviewEnabled, onToggleOverviewEnabled, overviewOpen, overviewTodayCount, onOpenOverview,
         showInOverviewFor, onSetShowInOverview,
@@ -405,173 +412,71 @@ export function ListsMenu(props: Props) {
                                 })}
                             </ScrollView>
 
-                            <View style={styles.utilityRow}>
-                                <TouchableOpacity style={styles.utilityBtn} onPress={() => onCreate('shopping')} accessibilityRole="button">
-                                    <Ionicons name="cart-outline" size={20} color={t.colors.textSecondary} />
-                                    <Text style={styles.utilityLabel} numberOfLines={2}>{i18n.t('lists.menu.createGrocery')}</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.utilityBtn} onPress={() => onCreate(TODO_LIST_TYPE)} accessibilityRole="button">
-                                    <Ionicons name="checkbox-outline" size={20} color={t.colors.textSecondary} />
-                                    <Text style={styles.utilityLabel} numberOfLines={2}>{i18n.t('lists.menu.createTodo')}</Text>
-                                </TouchableOpacity>
-                                {boardEnabled && (
-                                    <TouchableOpacity style={styles.utilityBtn} onPress={() => onCreate(BOARD_WRITE_TYPE)} accessibilityRole="button">
-                                        <Ionicons name="grid-outline" size={20} color={t.colors.textSecondary} />
-                                        <Text style={styles.utilityLabel} numberOfLines={2}>{i18n.t('lists.menu.createBoard')}</Text>
-                                    </TouchableOpacity>
-                                )}
-                                <TouchableOpacity style={styles.utilityBtn} onPress={onCreateGroup} accessibilityRole="button">
-                                    <Ionicons name="add" size={20} color={t.colors.textSecondary} />
-                                    <Text style={styles.utilityLabel} numberOfLines={2}>{i18n.t('lists.menu.newGroup')}</Text>
-                                </TouchableOpacity>
-                            </View>
+                            {/* Creation is progressive-disclosure gated: Multiple lists
+                                unlocks new lists (todo/board tiles additionally need
+                                their own feature), List groups unlocks grouping. With
+                                everything off the whole utility row disappears — the
+                                basic app is just the built-in Groceries. */}
+                            {features.multiList || features.listGroups ? (
+                                <View style={styles.utilityRow}>
+                                    {features.multiList && (
+                                        <TouchableOpacity style={styles.utilityBtn} onPress={() => onCreate('shopping')} accessibilityRole="button">
+                                            <Ionicons name="cart-outline" size={20} color={t.colors.textSecondary} />
+                                            <Text style={styles.utilityLabel} numberOfLines={2}>{i18n.t('lists.menu.createGrocery')}</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                    {features.multiList && features.todo && (
+                                        <TouchableOpacity style={styles.utilityBtn} onPress={() => onCreate(TODO_LIST_TYPE)} accessibilityRole="button">
+                                            <Ionicons name="checkbox-outline" size={20} color={t.colors.textSecondary} />
+                                            <Text style={styles.utilityLabel} numberOfLines={2}>{i18n.t('lists.menu.createTodo')}</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                    {features.multiList && boardEnabled && (
+                                        <TouchableOpacity style={styles.utilityBtn} onPress={() => onCreate(BOARD_WRITE_TYPE)} accessibilityRole="button">
+                                            <Ionicons name="grid-outline" size={20} color={t.colors.textSecondary} />
+                                            <Text style={styles.utilityLabel} numberOfLines={2}>{i18n.t('lists.menu.createBoard')}</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                    {features.listGroups && (
+                                        <TouchableOpacity style={styles.utilityBtn} onPress={onCreateGroup} accessibilityRole="button">
+                                            <Ionicons name="add" size={20} color={t.colors.textSecondary} />
+                                            <Text style={styles.utilityLabel} numberOfLines={2}>{i18n.t('lists.menu.newGroup')}</Text>
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            ) : null}
                         </>
                     ) : menuView === 'settings' ? (
-                        <>
-                            <View style={styles.header}>
-                                <View style={styles.headerLeft}>
-                                    <TouchableOpacity onPress={() => setMenuView('lists')} hitSlop={10} accessibilityLabel={i18n.t('lists.menu.back')}>
-                                        <Ionicons name="chevron-back" size={24} color={t.colors.text} />
-                                    </TouchableOpacity>
-                                    <Text style={styles.title}>{i18n.t('lists.menu.settings')}</Text>
-                                </View>
-                                <CloseDot onPress={close} color={t.colors.text} accessibilityLabel={i18n.t('common.close')} />
-                            </View>
-
-                            <ScrollView style={styles.scroll} contentContainerStyle={styles.settingsContent}>
-                                {/* This device — the name is stored device-local AND published
-                                    to peers via the synced peer-label channel (@listam/domain/
-                                    labels), keyed by this device's writer key, so it shows up
-                                    on other devices. Only theme/locale stay device-local. */}
-                                <Text style={styles.sectionLabel}>{i18n.t('desktop.settings.deviceName.label')}</Text>
-                                <TextInput
-                                    style={styles.nameInput}
-                                    defaultValue={deviceName}
-                                    placeholder={i18n.t('desktop.settings.deviceName.placeholder')}
-                                    placeholderTextColor={t.colors.placeholder}
-                                    returnKeyType="done"
-                                    maxLength={MAX_LABEL_NAME}
-                                    autoCapitalize="words"
-                                    onEndEditing={(e) => onDeviceNameChange(e.nativeEvent.text)}
-                                />
-                                <Text style={styles.sectionNote}>{i18n.t('desktop.settings.deviceName.help')}</Text>
-
-                                {/* This device's own writer key — the public identifier peers
-                                    use to tell devices apart. Read-only + copyable so the user
-                                    can match this device against a row in Members (e.g. to check
-                                    why a name isn't syncing). Null until the base is open. */}
-                                <Text style={styles.sectionLabel}>{i18n.t('desktop.settings.deviceKey.label')}</Text>
-                                {selfWriterKey ? (
-                                    <View style={styles.deviceKeyRow}>
-                                        <Text style={styles.deviceKeyValue} selectable numberOfLines={2}>{selfWriterKey}</Text>
-                                        <TouchableOpacity
-                                            onPress={() => { Clipboard.setString(selfWriterKey); notify(i18n.t('desktop.settings.deviceKey.copied'), 'success') }}
-                                            hitSlop={8}
-                                            accessibilityRole="button"
-                                            accessibilityLabel={i18n.t('desktop.peers.copy')}
-                                            style={styles.deviceKeyCopy}
-                                        >
-                                            <Ionicons name="copy-outline" size={18} color={t.colors.text} />
-                                        </TouchableOpacity>
-                                    </View>
-                                ) : (
-                                    <Text style={styles.sectionNote}>{i18n.t('desktop.settings.deviceKey.pending')}</Text>
-                                )}
-                                <Text style={styles.sectionNote}>{i18n.t('desktop.settings.deviceKey.help')}</Text>
-
-                                {/* Sharing — invite someone to the whole project, or join
-                                    someone else's shared project or list. Sharing ONE list
-                                    lives in that list's settings. */}
-                                <Text style={styles.sectionLabel}>{i18n.t('lists.menu.sectionSharing')}</Text>
-                                <TouchableOpacity style={styles.actionRow} onPress={() => { onShareProject(); close() }} activeOpacity={0.6}>
-                                    <Ionicons name="share-social-outline" size={20} color={t.colors.text} />
-                                    <Text style={styles.actionLabel}>{i18n.t('share.project.button')}</Text>
-                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
-                                </TouchableOpacity>
-                                <Text style={styles.sectionNote}>{i18n.t('share.project.hint')}</Text>
-                                <TouchableOpacity style={styles.actionRow} onPress={() => { onJoin(); close() }} activeOpacity={0.6}>
-                                    <Ionicons name="person-add-outline" size={20} color={t.colors.text} />
-                                    <Text style={styles.actionLabel}>{i18n.t('joinProject.button')}</Text>
-                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.actionRow} onPress={() => { onJoinList(); close() }} activeOpacity={0.6}>
-                                    <Ionicons name="enter-outline" size={20} color={t.colors.text} />
-                                    <Text style={styles.actionLabel}>{i18n.t('joinList.button')}</Text>
-                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
-                                </TouchableOpacity>
-
-                                {/* Appearance — theme + language, both device-local. */}
-                                <Text style={styles.sectionLabel}>{i18n.t('lists.menu.sectionAppearance')}</Text>
-                                <SegmentedSetting
-                                    title={i18n.t('header.setting.appearance')}
-                                    options={THEME_CHOICES}
-                                    value={themeChoice}
-                                    onChange={onThemeChoiceChange}
-                                    labelFor={(o) => i18n.t(themeLabelKey(o))}
-                                />
-                                <SegmentedSetting
-                                    title={i18n.t('header.setting.appLanguage')}
-                                    options={i18n.localeChoices}
-                                    value={localeChoice}
-                                    onChange={onLocaleChoiceChange}
-                                    labelFor={i18n.labelForLocaleChoice}
-                                />
-
-                                {/* Boards — app-global feature toggle (off by default). */}
-                                <Text style={styles.sectionLabel}>{i18n.t('lists.menu.boardFeature')}</Text>
-                                <View style={styles.switchRow}>
-                                    <Ionicons name="grid-outline" size={20} color={t.colors.text} />
-                                    <Text style={styles.switchLabel}>{i18n.t('lists.menu.boardFeatureHint')}</Text>
-                                    <Switch value={boardEnabled} onValueChange={onToggleBoardEnabled} trackColor={{ false: t.colors.border, true: t.colors.primary }} thumbColor={t.colors.surface} />
-                                </View>
-
-                                {/* Overview — app-global day-plan toggle (off by default,
-                                    independent of boards). Gates the surface, the pinned tray
-                                    row, and every capture gesture. */}
-                                <Text style={styles.sectionLabel}>{i18n.t('lists.menu.overviewFeature')}</Text>
-                                <View style={styles.switchRow}>
-                                    <Ionicons name="today-outline" size={20} color={t.colors.text} />
-                                    <Text style={styles.switchLabel}>{i18n.t('lists.menu.overviewFeatureHint')}</Text>
-                                    <Switch value={overviewEnabled} onValueChange={onToggleOverviewEnabled} trackColor={{ false: t.colors.border, true: t.colors.primary }} thumbColor={t.colors.surface} />
-                                </View>
-
-                                {/* People & devices — membership, owned devices, leaf pairing. */}
-                                <Text style={styles.sectionLabel}>{i18n.t('lists.menu.sectionNetwork')}</Text>
-                                <TouchableOpacity style={styles.actionRow} onPress={() => { onManageMembers(); close() }} activeOpacity={0.6}>
-                                    <Ionicons name="people-outline" size={20} color={t.colors.text} />
-                                    <Text style={styles.actionLabel}>{i18n.t('header.action.membersRecovery')}</Text>
-                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.actionRow} onPress={() => { onManageOwnedDevices(); close() }} activeOpacity={0.6}>
-                                    <Ionicons name="hardware-chip-outline" size={20} color={t.colors.text} />
-                                    <Text style={styles.actionLabel}>{i18n.t('control.section')}</Text>
-                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
-                                </TouchableOpacity>
-                                <TouchableOpacity style={styles.actionRow} onPress={() => { onPairLeaf(); close() }} activeOpacity={0.6}>
-                                    <Ionicons name="bluetooth-outline" size={20} color={t.colors.text} />
-                                    <Text style={styles.actionLabel}>{i18n.t('leaf.section')}</Text>
-                                    <Ionicons name="chevron-forward" size={18} color={t.colors.textTertiary} />
-                                </TouchableOpacity>
-
-                                {/* Loyalty cards — scan a new card, tap a saved one to view. */}
-                                <Text style={styles.sectionLabel}>{i18n.t('header.section.loyaltyCards')}</Text>
-                                <TouchableOpacity style={styles.actionRow} onPress={() => { onScanCard(); close() }} activeOpacity={0.6}>
-                                    <Ionicons name="scan-outline" size={20} color={t.colors.text} />
-                                    <Text style={styles.actionLabel}>{i18n.t('header.action.scanLoyaltyCard')}</Text>
-                                </TouchableOpacity>
-                                {loyaltyCards.map((card) => (
-                                    <TouchableOpacity key={card.id} style={styles.actionRow} onPress={() => { onSelectCard(card); close() }} activeOpacity={0.6}>
-                                        <View style={[styles.cardSwatch, { backgroundColor: cardColor(card.name) }]}>
-                                            <Ionicons name="card-outline" size={14} color="#fff" />
-                                        </View>
-                                        <Text style={styles.actionLabel}>{card.name}</Text>
-                                    </TouchableOpacity>
-                                ))}
-
-                                {/* Backup — renders its own section headers (export / auto / scheduled). */}
-                                <BackupSettings sendRPCWithReply={sendRPCWithReply} notify={notify} />
-                            </ScrollView>
-                        </>
+                        <SettingsScreen
+                            onExit={() => setMenuView('lists')}
+                            onClose={close}
+                            advancedMode={advancedMode}
+                            onActivateAdvanced={onActivateAdvanced}
+                            features={features}
+                            onToggleFeature={onToggleFeature}
+                            boardEnabled={boardEnabled}
+                            onToggleBoardEnabled={onToggleBoardEnabled}
+                            overviewEnabled={overviewEnabled}
+                            onToggleOverviewEnabled={onToggleOverviewEnabled}
+                            themeChoice={themeChoice}
+                            onThemeChoiceChange={onThemeChoiceChange}
+                            localeChoice={localeChoice}
+                            onLocaleChoiceChange={onLocaleChoiceChange}
+                            deviceName={deviceName}
+                            onDeviceNameChange={onDeviceNameChange}
+                            selfWriterKey={selfWriterKey}
+                            onShareProject={onShareProject}
+                            onJoin={onJoin}
+                            onJoinList={onJoinList}
+                            onManageMembers={onManageMembers}
+                            onManageOwnedDevices={onManageOwnedDevices}
+                            onPairLeaf={onPairLeaf}
+                            loyaltyCards={loyaltyCards}
+                            onScanCard={onScanCard}
+                            onSelectCard={onSelectCard}
+                            sendRPCWithReply={sendRPCWithReply}
+                            notify={notify}
+                        />
                     ) : (
                         <>
                             <View style={styles.header}>
@@ -740,27 +645,33 @@ export function ListsMenu(props: Props) {
                                     {/* Built-in surfaces share the 'default' base and can't be promoted
                                         to their own shared base — explain that instead of hiding the
                                         section. A shared list can always mint a fresh invite (the
-                                        backend re-mints on demand). */}
-                                    <Text style={styles.sectionLabel}>{i18n.t('shareList.title')}</Text>
-                                    {isBuiltinSurfaceId(settingsList.id) ? (
-                                        <Text style={styles.sectionNote}>{i18n.t('shareList.builtinBlocked')}</Text>
-                                    ) : settingsList.baseKey ? (
+                                        backend re-mints on demand). The whole section is gated on the
+                                        Sharing feature — EXCEPT an already-shared list, whose invite
+                                        stays reachable (content wins over the toggle). */}
+                                    {features.sharing || settingsList.baseKey ? (
                                         <>
-                                            <TouchableOpacity style={styles.actionRow} onPress={() => onShareList(settingsList.id)} activeOpacity={0.6}>
-                                                <Ionicons name="people" size={20} color={t.colors.text} />
-                                                <Text style={styles.actionLabel}>{i18n.t('shareList.showInvite')}</Text>
-                                            </TouchableOpacity>
-                                            <Text style={styles.sectionNote}>{i18n.t('shareList.shared')} — {i18n.t('share.list.hint')}</Text>
+                                            <Text style={styles.sectionLabel}>{i18n.t('shareList.title')}</Text>
+                                            {isBuiltinSurfaceId(settingsList.id) ? (
+                                                <Text style={styles.sectionNote}>{i18n.t('shareList.builtinBlocked')}</Text>
+                                            ) : settingsList.baseKey ? (
+                                                <>
+                                                    <TouchableOpacity style={styles.actionRow} onPress={() => onShareList(settingsList.id)} activeOpacity={0.6}>
+                                                        <Ionicons name="people" size={20} color={t.colors.text} />
+                                                        <Text style={styles.actionLabel}>{i18n.t('shareList.showInvite')}</Text>
+                                                    </TouchableOpacity>
+                                                    <Text style={styles.sectionNote}>{i18n.t('shareList.shared')} — {i18n.t('share.list.hint')}</Text>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <TouchableOpacity style={styles.actionRow} onPress={() => onShareList(settingsList.id)} activeOpacity={0.6}>
+                                                        <Ionicons name="share-social-outline" size={20} color={t.colors.text} />
+                                                        <Text style={styles.actionLabel}>{i18n.t('shareList.button')}</Text>
+                                                    </TouchableOpacity>
+                                                    <Text style={styles.sectionNote}>{i18n.t('share.list.hint')}</Text>
+                                                </>
+                                            )}
                                         </>
-                                    ) : (
-                                        <>
-                                            <TouchableOpacity style={styles.actionRow} onPress={() => onShareList(settingsList.id)} activeOpacity={0.6}>
-                                                <Ionicons name="share-social-outline" size={20} color={t.colors.text} />
-                                                <Text style={styles.actionLabel}>{i18n.t('shareList.button')}</Text>
-                                            </TouchableOpacity>
-                                            <Text style={styles.sectionNote}>{i18n.t('share.list.hint')}</Text>
-                                        </>
-                                    )}
+                                    ) : null}
 
                                     {!settingsIsBoard && (
                                         <TouchableOpacity style={styles.actionRow} onPress={() => onClearDone(settingsList.id)} activeOpacity={0.6}>

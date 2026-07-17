@@ -43,7 +43,11 @@ import {
     preferencesActions,
     selectPreferences,
     isThemeChoice,
+    isAdvancedMode,
+    parseFeatureFlags,
     type ThemeChoice,
+    type FeatureFlags,
+    type FeatureKey,
 } from './store/preferencesSlice'
 import {
     loyaltyCardsActions,
@@ -133,6 +137,10 @@ const PREF_OVERVIEW_OPEN = '@lista_overview_open'
 const PREF_DEVICE_NAME = '@lista_device_name'
 const PREF_BACKUP_PROMPTED = '@lista_backup_prompted'
 const PREF_BUILTIN_VIEWS = '@lista_builtin_views'
+// Progressive disclosure: the advanced-mode decision + the feature flags as one
+// JSON blob (all device-local, never synced — see preferencesSlice).
+const PREF_ADVANCED_MODE = '@lista_advanced_mode'
+const PREF_FEATURES = '@lista_features'
 
 // Parse the persisted built-in-surface view map; tolerate absent/corrupt JSON.
 // Keep only well-formed per-surface entries so one corrupt value can't shadow a
@@ -170,7 +178,7 @@ function AppInner() {
     const snackbar = useSnackbar()
     const reduceMotion = useReduceMotion()
     const dispatch = useAppDispatch()
-    const { localeChoice, themeChoice, defaultListId, boardEnabled, overviewEnabled, deviceName, builtinViews } = useAppSelector(selectPreferences)
+    const { localeChoice, themeChoice, defaultListId, boardEnabled, overviewEnabled, deviceName, builtinViews, advancedMode, features } = useAppSelector(selectPreferences)
     const peerLabels = useAppSelector(selectPeerLabels)
     const presence = useAppSelector(selectPresence)
     const valueReturnMap = useAppSelector(selectValueReturnEnabled)
@@ -461,8 +469,11 @@ function AppInner() {
             PREF_OVERVIEW_OPEN,
             PREF_DEVICE_NAME,
             PREF_BUILTIN_VIEWS,
-        ]).then(([[, localeChoice], [, themeChoice], [, defaultList], [, boardEnabled], [, overviewEnabledRaw], [, overviewOpenRaw], [, deviceName], [, builtinViewsRaw]]) => {
+            PREF_ADVANCED_MODE,
+            PREF_FEATURES,
+        ]).then(([[, localeChoice], [, themeChoice], [, defaultList], [, boardEnabled], [, overviewEnabledRaw], [, overviewOpenRaw], [, deviceName], [, builtinViewsRaw], [, advancedModeRaw], [, featuresRaw]]) => {
             const parsedBuiltinViews = parseBuiltinViews(builtinViewsRaw)
+            const parsedFeatures = parseFeatureFlags(featuresRaw)
             dispatch(preferencesActions.preferencesHydrated({
                 ...(isLocaleChoice(localeChoice) ? { localeChoice } : {}),
                 ...(isThemeChoice(themeChoice) ? { themeChoice } : {}),
@@ -471,6 +482,8 @@ function AppInner() {
                 ...(overviewEnabledRaw === '1' || overviewEnabledRaw === '0' ? { overviewEnabled: overviewEnabledRaw === '1' } : {}),
                 ...(deviceName !== null ? { deviceName } : {}),
                 ...(parsedBuiltinViews ? { builtinViews: parsedBuiltinViews } : {}),
+                ...(isAdvancedMode(advancedModeRaw) ? { advancedMode: advancedModeRaw } : {}),
+                ...(parsedFeatures ? { features: parsedFeatures as FeatureFlags } : {}),
             }))
             // Land back on the Overview when the user left it open. Decided here,
             // with both persisted values in hand, so it can't race the hydration
@@ -568,6 +581,58 @@ function AppInner() {
         dispatch(preferencesActions.boardEnabledSet(next))
         AsyncStorage.setItem(PREF_BOARD_ENABLED, next ? '1' : '0')
     }, [boardEnabled, dispatch])
+
+    // "Activate advanced options": flips the master switch and turns on the
+    // standard set (everything except voice + loyalty — see preferencesSlice).
+    // Persists the exact post-activation values so a relaunch can't re-migrate.
+    const handleActivateAdvanced = useCallback(() => {
+        dispatch(preferencesActions.advancedActivated())
+        AsyncStorage.multiSet([
+            [PREF_ADVANCED_MODE, 'on'],
+            [PREF_FEATURES, JSON.stringify({
+                ...features,
+                todo: true, multiList: true, listGroups: true,
+                sharing: true, peersDevices: true, backups: true,
+            })],
+            [PREF_BOARD_ENABLED, '1'],
+            [PREF_OVERVIEW_ENABLED, '1'],
+        ])
+    }, [features, dispatch])
+
+    const handleToggleFeature = useCallback((feature: FeatureKey) => {
+        const next = !features[feature]
+        dispatch(preferencesActions.featureSet({ feature, enabled: next }))
+        // Mode rides along on every write: a features blob without a persisted
+        // mode would leave the next launch guessing (see the hydration migration).
+        AsyncStorage.multiSet([
+            [PREF_FEATURES, JSON.stringify({ ...features, [feature]: next })],
+            [PREF_ADVANCED_MODE, advancedMode === 'unset' ? 'on' : advancedMode],
+        ])
+    }, [features, advancedMode, dispatch])
+
+    // Runtime auto-activation: a device that never chose a mode but shows real
+    // evidence of a fuller mesh — connected peers, or synced user lists beyond
+    // the built-in surfaces — gets everything switched on. Basic mode hiding
+    // content that just synced in would read as data loss (the deep-link join
+    // path is also covered: peers appear right after the join completes).
+    const autoActivatedRef = useRef(false)
+    useEffect(() => {
+        if (advancedMode !== 'unset' || autoActivatedRef.current) return
+        const hasUserLists = Object.keys(lib.listsById).some((id) => !isBuiltinSurfaceId(id))
+        if (peerCount > 0 || hasUserLists) {
+            autoActivatedRef.current = true
+            dispatch(preferencesActions.advancedAutoActivated())
+            AsyncStorage.multiSet([
+                [PREF_ADVANCED_MODE, 'on'],
+                [PREF_FEATURES, JSON.stringify({
+                    todo: true, multiList: true, listGroups: true, sharing: true,
+                    peersDevices: true, backups: true, voice: true, loyaltyCards: true,
+                })],
+                [PREF_BOARD_ENABLED, '1'],
+                [PREF_OVERVIEW_ENABLED, '1'],
+            ])
+        }
+    }, [advancedMode, peerCount, lib, dispatch])
 
     // Show/hide the Overview surface AND persist it, so relaunches land where
     // the user left off. Persisting happens ONLY here (never from an effect —
@@ -1676,7 +1741,7 @@ function AppInner() {
                 overviewEnabled={overviewEnabled}
                 overviewOpen={overviewOpen}
                 listName={currentListName}
-                showBarcode={!isTodo && !isBoard}
+                showBarcode={!isTodo && !isBoard && features.loyaltyCards}
                 onBarcode={() => { const card = loyaltyCards[0]; if (card) { handleSelectCard(card) } else { setScannerVisible(true) } }}
                 onOpenLists={() => { setMenuInitialView('lists'); setPendingListSettingsId(null); setListsMenuVisible(true) }}
             />
@@ -1767,6 +1832,10 @@ function AppInner() {
                 onLocaleChoiceChange={handleLocaleChoiceChange}
                 themeChoice={themeChoice}
                 onThemeChoiceChange={handleThemeChoiceChange}
+                advancedMode={advancedMode}
+                onActivateAdvanced={handleActivateAdvanced}
+                features={features}
+                onToggleFeature={handleToggleFeature}
                 boardEnabled={boardEnabled}
                 onToggleBoardEnabled={handleToggleBoardEnabled}
                 overviewEnabled={overviewEnabled}
