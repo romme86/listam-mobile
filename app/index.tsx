@@ -168,8 +168,34 @@ const DOUBLE_TAP_MS = 300
 // further taps keep flipping in place and a third tap becomes a capture; only
 // after it does the row reorder + the write go out (see handleToggleDone).
 const TAP_SETTLE_MS = 300
+// A normal add either commits or is explicitly refused within the backend's
+// four-second flushability window. Keep a little transport headroom, but do not
+// leave the input looking successful forever if the worklet has stopped replying.
+const ADD_REPLY_TIMEOUT_MS = 10_000
 // Identity for a pending toggle (same shape as the plan item ref's payload).
 const toggleKeyOf = (item: ListEntry) => `${item.listId ?? ''}::${item.id ?? ''}`
+
+type AddMutationResult = 'saved' | 'refused' | 'unresponsive'
+
+async function waitForAddMutation(request: Promise<string | null>): Promise<AddMutationResult> {
+    let timeout: ReturnType<typeof setTimeout> | null = null
+    try {
+        const reply = await Promise.race([
+            request,
+            new Promise<null>((resolve) => {
+                timeout = setTimeout(() => resolve(null), ADD_REPLY_TIMEOUT_MS)
+            }),
+        ])
+        if (reply === null) return 'unresponsive'
+        try {
+            return JSON.parse(reply)?.ok === true ? 'saved' : 'refused'
+        } catch {
+            return 'refused'
+        }
+    } finally {
+        if (timeout) clearTimeout(timeout)
+    }
+}
 
 function AppInner() {
     const t = useTheme()
@@ -293,6 +319,7 @@ function AppInner() {
     const [selectedCard, setSelectedCard] = useState<LoyaltyCard | null>(null)
     const [isAdding, setIsAdding] = useState(false)
     const [addText, setAddText] = useState('')
+    const addWritePendingRef = useRef(false)
     const [listsMenuVisible, setListsMenuVisible] = useState(false)
     // Which sub-view the lists menu opens in: the header cog jumps to 'settings',
     // the list title in the same header opens the 'lists' switcher.
@@ -980,7 +1007,10 @@ function AppInner() {
         sendRPC(RPC_DELETE, JSON.stringify({ item: deletedItem }))
     }, [animate, dataList, dispatch, sendRPC])
 
-    const handleInsert = useCallback((_index: number, text: string, rates?: { valueRate: number; delayRate: number }) => {
+    const handleInsert = useCallback(async (_index: number, text: string, rates?: { valueRate: number; delayRate: number }): Promise<boolean> => {
+        // onSubmitEditing can fire more than once while a slow write is pending.
+        // One in-flight request prevents duplicate rows with distinct backend ids.
+        if (addWritePendingRef.current) return false
         // Scope the add to the list currently in view. With a bare-string payload
         // the backend files every item under DEFAULT_LIST_ID, so additions to any
         // other list silently land in (and only ever show up on) the default list.
@@ -992,8 +1022,21 @@ function AppInner() {
         // be written to the REAL 'default' bucket (with the surface's listType),
         // never to a 'default:type' listId.
         const listId = decodeSurface(currentId).listId
-        sendRPC(RPC_ADD, JSON.stringify({ text, listId, listType, baseKey, ...(rates ? { valueRate: rates.valueRate, delayRate: rates.delayRate } : {}) }))
-    }, [sendRPC, lib, currentId])
+        addWritePendingRef.current = true
+        try {
+            const result = await waitForAddMutation(sendRPCWithReply(
+                RPC_ADD,
+                JSON.stringify({ text, listId, listType, baseKey, ...(rates ? { valueRate: rates.valueRate, delayRate: rates.delayRate } : {}) }),
+            ))
+            if (result === 'saved') return true
+            snackbar.show(i18n.t(result === 'unresponsive'
+                ? 'main.notification.writeBackendUnresponsive'
+                : 'main.notification.writeRefused'), 'error')
+            return false
+        } finally {
+            addWritePendingRef.current = false
+        }
+    }, [sendRPCWithReply, lib, currentId, snackbar, i18n])
 
     const handleEditItem = useCallback((index: number, newText: string) => {
         const old = dataList[index]
@@ -1401,7 +1444,7 @@ function AppInner() {
         sendRPC(RPC_UPDATE, JSON.stringify({ item: meta }))
     }, [lib, groupedLists, sendRPC])
 
-    const handleSubmitAdd = useCallback(() => {
+    const handleSubmitAdd = useCallback(async () => {
         const value = addText.trim()
         if (!value) return
         if (dataList.some((item) => item.text === value)) {
@@ -1417,9 +1460,11 @@ function AppInner() {
             setAddText('')
             return
         }
-        handleInsert(0, value)
+        const saved = await handleInsert(0, value)
+        if (!saved) return
         haptics.toggleOn()
-        setAddText('')
+        // Do not erase text the user started typing while the write was pending.
+        setAddText((current) => current.trim() === value ? '' : current)
     }, [addText, dataList, handleInsert, i18n, snackbar, currentId, lib, isValueOn])
 
     // Double-tap an empty part of the list to open the add bar. The handler runs
@@ -1967,7 +2012,14 @@ function AppInner() {
             <ValueRateSheet
                 visible={valueRateAdd !== null}
                 text={valueRateAdd ?? undefined}
-                onConfirm={(valueRate, delayRate) => { handleInsert(0, valueRateAdd ?? '', { valueRate, delayRate }); haptics.toggleOn(); setValueRateAdd(null) }}
+                onConfirm={(valueRate, delayRate) => {
+                    const text = valueRateAdd ?? ''
+                    void handleInsert(0, text, { valueRate, delayRate }).then((saved) => {
+                        if (!saved) return
+                        haptics.toggleOn()
+                        setValueRateAdd(null)
+                    })
+                }}
                 onClose={() => setValueRateAdd(null)}
             />
             <MoveItemSheet

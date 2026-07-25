@@ -17,7 +17,7 @@ type Props = {
 // The board surface: a horizontal status-chip filter over a vertical list of
 // ticket cards (one status at a time), per the phone design. Status names/colors
 // come from the board config, so custom boards work unchanged.
-export function BoardView({ tickets, config, onOpenTicket, onTripleTapTicket }: Props) {
+function BoardViewComponent({ tickets, config, onOpenTicket, onTripleTapTicket }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
@@ -70,6 +70,10 @@ export function BoardView({ tickets, config, onOpenTicket, onTripleTapTicket }: 
         </View>
     )
 }
+
+// Opening app-shell overlays must not force the unchanged board through another
+// render before React Native can present the overlay.
+export const BoardView = React.memo(BoardViewComponent)
 
 function makeStyles(t: Theme) {
     return StyleSheet.create({

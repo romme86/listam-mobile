@@ -14,6 +14,12 @@ export type PresenceState = {
     itemsById: Record<string, ListEntry>
 }
 
+type PresenceSnapshotPayload = {
+    listId: string
+    listType: string
+    items: ListEntry[]
+}
+
 const initialState: PresenceState = {
     itemsById: {},
 }
@@ -25,6 +31,31 @@ const presenceSlice = createSlice({
         presenceApplied(state, action: PayloadAction<ListEntry[]>) {
             for (const item of action.payload) {
                 if (isPresenceItem(item) && item.id) state.itemsById[item.id] = item
+            }
+        },
+        // Exact structured snapshot for the reserved presence channel. Legacy
+        // bare-array SYNC_LIST events remain additive via presenceApplied.
+        presenceSnapshotApplied(state, action: PayloadAction<PresenceSnapshotPayload>) {
+            const { listId, listType, items } = action.payload
+            if (!isPresenceItem({ listType })) return
+
+            for (const [itemId, item] of Object.entries(state.itemsById)) {
+                if (isPresenceItem(item)) delete state.itemsById[itemId]
+            }
+            for (const item of items) {
+                const normalized = {
+                    ...item,
+                    listId: item.listId || listId,
+                    listType: item.listType || listType,
+                }
+                if (
+                    isPresenceItem(normalized)
+                    && normalized.listId === listId
+                    && normalized.listType === listType
+                    && normalized.id
+                ) {
+                    state.itemsById[normalized.id] = normalized
+                }
             }
         },
         presenceItemApplied(state, action: PayloadAction<ListEntry>) {

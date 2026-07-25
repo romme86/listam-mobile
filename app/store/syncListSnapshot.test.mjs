@@ -1,0 +1,114 @@
+import { test, after } from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import ts from 'typescript'
+import {
+    buildPeerLabelItem,
+    buildPresenceItem,
+    buildSurfaceLabelItem,
+    PEER_LABEL_LIST_ID,
+    PEER_LABEL_LIST_TYPE,
+    PRESENCE_LIST_ID,
+    PRESENCE_LIST_TYPE,
+} from '@listam/domain'
+
+const STORE_DIR = path.dirname(fileURLToPath(import.meta.url))
+const buildDir = path.join(STORE_DIR, `.test-build-sync-snapshot-${process.pid}`)
+
+function transpile(srcPath) {
+    return ts.transpileModule(fs.readFileSync(srcPath, 'utf8'), {
+        compilerOptions: {
+            module: ts.ModuleKind.ESNext,
+            target: ts.ScriptTarget.ES2020,
+            isolatedModules: true,
+            esModuleInterop: true,
+        },
+        fileName: srcPath,
+    }).outputText
+}
+
+let decoder
+let labels
+let presence
+try {
+    fs.mkdirSync(buildDir, { recursive: true })
+    for (const name of ['syncListSnapshot', 'labelsSlice', 'presenceSlice']) {
+        fs.writeFileSync(path.join(buildDir, `${name}.mjs`), transpile(path.join(STORE_DIR, `${name}.ts`)))
+    }
+    decoder = await import(pathToFileURL(path.join(buildDir, 'syncListSnapshot.mjs')).href)
+    labels = await import(pathToFileURL(path.join(buildDir, 'labelsSlice.mjs')).href)
+    presence = await import(pathToFileURL(path.join(buildDir, 'presenceSlice.mjs')).href)
+} catch (err) {
+    fs.rmSync(buildDir, { recursive: true, force: true })
+    throw err
+}
+after(() => fs.rmSync(buildDir, { recursive: true, force: true }))
+
+test('SYNC_LIST decoder accepts legacy arrays and exact bucket envelopes', () => {
+    const legacy = [{ id: 'milk' }]
+    assert.deepEqual(decoder.decodeSyncListSnapshot(legacy), {
+        mode: 'legacy',
+        items: legacy,
+    })
+
+    const list = [{ id: 'planned' }]
+    assert.deepEqual(decoder.decodeSyncListSnapshot({
+        list,
+        listId: '__plan__',
+        listType: 'plan',
+    }), {
+        mode: 'bucket',
+        items: list,
+        listId: '__plan__',
+        listType: 'plan',
+    })
+
+    assert.equal(decoder.decodeSyncListSnapshot({ list }), null, 'bucket identity is required')
+    assert.equal(decoder.decodeSyncListSnapshot({ list: {}, listId: 'x', listType: 'todo' }), null)
+})
+
+test('structured label snapshot replaces only its named reserved bucket', () => {
+    const { default: reducer, labelsActions } = labels
+    let state = reducer(undefined, { type: '@@INIT' })
+    const oldA = buildPeerLabelItem({ writerKey: 'writer-a', name: 'Old A', updatedAt: 1 })
+    const oldB = buildPeerLabelItem({ writerKey: 'writer-b', name: 'Old B', updatedAt: 1 })
+    const surface = buildSurfaceLabelItem({ listId: 'default', type: 'shopping', name: 'Groceries', updatedAt: 1 })
+    state = reducer(state, labelsActions.labelsApplied([oldA, oldB, surface]))
+
+    const current = buildPeerLabelItem({ writerKey: 'writer-a', name: 'Current A', updatedAt: 2 })
+    state = reducer(state, labelsActions.labelsSnapshotApplied({
+        listId: PEER_LABEL_LIST_ID,
+        listType: PEER_LABEL_LIST_TYPE,
+        items: [current],
+    }))
+
+    assert.equal(state.itemsById['writer-a'].labelName, 'Current A')
+    assert.equal(state.itemsById['writer-b'], undefined, 'stale peer label was removed')
+    assert.ok(state.itemsById[surface.id], 'the independent surface-label bucket survives')
+})
+
+test('structured presence snapshot removes stale peers, including when empty', () => {
+    const { default: reducer, presenceActions } = presence
+    let state = reducer(undefined, { type: '@@INIT' })
+    const oldA = buildPresenceItem({ writerKey: 'writer-a', lastActiveAt: 1 })
+    const oldB = buildPresenceItem({ writerKey: 'writer-b', lastActiveAt: 1 })
+    state = reducer(state, presenceActions.presenceApplied([oldA, oldB]))
+
+    const current = buildPresenceItem({ writerKey: 'writer-a', lastActiveAt: 2 })
+    state = reducer(state, presenceActions.presenceSnapshotApplied({
+        listId: PRESENCE_LIST_ID,
+        listType: PRESENCE_LIST_TYPE,
+        items: [current],
+    }))
+    assert.deepEqual(Object.keys(state.itemsById), ['writer-a'])
+    assert.equal(state.itemsById['writer-a'].lastActiveAt, 2)
+
+    state = reducer(state, presenceActions.presenceSnapshotApplied({
+        listId: PRESENCE_LIST_ID,
+        listType: PRESENCE_LIST_TYPE,
+        items: [],
+    }))
+    assert.deepEqual(state.itemsById, {})
+})

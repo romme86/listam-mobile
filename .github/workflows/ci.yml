@@ -7,31 +7,45 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  gates:
-    name: Phase 0 gates (install, lint, deps, secrets, test)
+  ci:
+    name: lint + typecheck + deps + secrets + i18n + test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # This app depends on @listam/* via `file:../listam-packages/packages/*`.
+      # A single-repo checkout has no sibling directory, so npm cannot resolve
+      # them and every test importing a @listam package dies with
+      # ERR_MODULE_NOT_FOUND — which is why every run of this workflow failed
+      # (10 pass / 17 fail in ~0.7s) before the sibling checkout below existed.
+      # Recreate the local layout: $GITHUB_WORKSPACE/listam-mobile +
+      # $GITHUB_WORKSPACE/listam-packages.
+      - name: Checkout listam-mobile
+        uses: actions/checkout@v4
+        with:
+          path: listam-mobile
+
+      - name: Checkout listam-packages (file: sibling dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: romme86/listam-packages
+          path: listam-packages
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
-      # Reproducible install straight from the committed lockfile.
-      # --legacy-peer-deps matches how the lockfile was resolved (a pre-existing
-      # react-native-screens peer requires RN >=0.82 while the app pins 0.81).
-      - name: Install from lockfile
-        run: npm ci --legacy-peer-deps
+      # --legacy-peer-deps is REQUIRED: react-native-screens wants RN >=0.82
+      # while the app pins 0.81.
+      # `npm install`, not `npm ci`: listam-packages is checked out at its own
+      # HEAD, which need not match the revision this lockfile was resolved
+      # against. install reconciles the file: links; ci would fail on the drift.
+      - name: Install
+        working-directory: listam-mobile
+        run: npm install --legacy-peer-deps --no-audit --no-fund
 
-      - name: Lint (no-console for production code)
-        run: npm run lint
-
-      - name: Dependency hygiene (no undeclared imports)
-        run: npm run check:deps
-
-      - name: Secret/log grep gate
-        run: npm run check:secrets
-
-      - name: Tests
-        run: npm run test
+      # Single entry point: CI runs exactly what a developer runs locally.
+      # The previous version reimplemented a partial list here and silently
+      # skipped `typecheck` and `check:i18n`. Never reimplement the gate list —
+      # change package.json instead.
+      - name: Gates
+        working-directory: listam-mobile
+        run: npm run ci

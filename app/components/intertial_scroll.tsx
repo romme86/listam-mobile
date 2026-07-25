@@ -53,7 +53,7 @@ function getListSpacing(spacing: ListSpacing) {
     return SPACING
 }
 
-export default function InertialElasticList({
+function InertialElasticList({
     data,
     onToggleDone,
     onDelete,
@@ -63,8 +63,8 @@ export default function InertialElasticList({
     onPlanFor,
     onTripleTap,
     isPlanned,
-    categoriesEnabled = true,
-    categoryHeadersVisible = true,
+    categoriesEnabled = false,
+    categoryHeadersVisible = false,
     listTextSize = 'normal',
     listAlignment = 'left',
     listItemSpacing = 'normal',
@@ -196,6 +196,10 @@ export default function InertialElasticList({
         </View>
     )
 }
+
+// App-shell state (for example, opening the lists menu) should not make the
+// active list rebuild before the modal can be committed to the native view.
+export default React.memo(InertialElasticList)
 
 function makeStyles(t: Theme) {
     return StyleSheet.create({

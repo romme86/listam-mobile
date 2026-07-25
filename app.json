@@ -2,7 +2,7 @@
   "expo": {
     "name": "listam",
     "slug": "listam-expo",
-    "version": "1.2.5",
+    "version": "1.2.6",
     "newArchEnabled": true,
     "orientation": "portrait",
     "scheme": "ch.saynode.listam",
@@ -22,7 +22,7 @@
       }
     },
     "android": {
-      "versionCode": 1,
+      "versionCode": 13,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"

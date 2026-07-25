@@ -41,3 +41,7 @@ autobase-key.txt
 encryption-key.txt
 local-writer-key.txt
 invite.json
+
+# Design mockups are tracked in listam-desktop/design-guide/ (single copy);
+# keeping a duplicate here would add ~4 MB of PNGs to this repo.
+docs/feature_activation_mockups/

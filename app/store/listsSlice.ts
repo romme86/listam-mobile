@@ -119,19 +119,24 @@ const listsSlice = createSlice({
             state.selectedListId = navId
         },
         selectedListItemsSynced(state, action: PayloadAction<ListEntry[] | ReplaceListItemsPayload>) {
-            const payload = Array.isArray(action.payload)
-                ? { items: action.payload }
-                : action.payload
             // The backend's SYNC_LIST always carries the DEFAULT list (every other
             // list replicates per-item via add-from-backend), so fold it into the
             // default bucket — NOT the currently-selected list. Folding into the
             // selection would wipe a non-default list the user is viewing whenever
             // a startup/peer-connect rebuild sync lands.
+            //
+            // Newer backends may instead send an exact {listId,listType,items}
+            // bucket snapshot during repair. Unlike the legacy array, that shape
+            // has enough identity to replace reserved overlay buckets as well.
+            if (!Array.isArray(action.payload)) {
+                applyExactBucketSnapshot(state, action.payload)
+                return
+            }
             replaceListItems(
                 state,
-                payload.listId || DEFAULT_LIST_ID,
-                payload.listType || DEFAULT_LIST_TYPE,
-                payload.items,
+                DEFAULT_LIST_ID,
+                DEFAULT_LIST_TYPE,
+                action.payload,
             )
         },
         selectedListItemsReplaced(state, action: PayloadAction<ListEntry[] | ReplaceListItemsPayload>) {
@@ -310,6 +315,51 @@ function replaceListItems(
     }
 
     list.itemIds = itemIds
+}
+
+// Apply a structured SYNC_LIST bucket. Returns true when the bucket is an
+// internal channel whose projection is fully handled here (plan) or by another
+// slice (labels/presence), so the caller must not materialize a phantom list.
+function applyExactBucketSnapshot(state: ListsState, payload: ReplaceListItemsPayload): boolean {
+    const listId = payload.listId || DEFAULT_LIST_ID
+    const listType = payload.listType || DEFAULT_LIST_TYPE
+
+    // The day plan is retained in itemsById but deliberately has no ListRecord.
+    // An exact snapshot is authoritative: remove old refs before inserting the
+    // current set, including when the snapshot is empty.
+    if (isPlanItem({ listType })) {
+        for (const [itemKey, item] of Object.entries(state.itemsById)) {
+            if (isPlanItem(item)) delete state.itemsById[itemKey]
+        }
+
+        const normalized = normalizeListEntries(payload.items.map((entry) => ({
+            ...entry,
+            listId: entry.listId || listId,
+            listType: entry.listType || listType,
+        })))
+        for (const item of normalized) {
+            if (!isPlanItem(item) || item.listId !== listId) continue
+            state.itemsById[identityKey(item)] = item
+        }
+        return true
+    }
+
+    // Labels and presence have dedicated slices. isLabelItem includes presence;
+    // suppressing them here keeps reserved snapshot envelopes from creating
+    // empty '__peers__' / '__presence__' ListRecords.
+    if (isLabelItem({ listType })) return true
+
+    // Built-in surfaces share the physical 'default' list id. A structured
+    // snapshot names one logical bucket, so replace only its type and retain the
+    // sibling grocery/board/todo surfaces. Named lists remain whole-list buckets.
+    replaceListItems(
+        state,
+        listId,
+        listType,
+        payload.items,
+        listId === DEFAULT_LIST_ID ? listType : undefined,
+    )
+    return true
 }
 
 function applyItemProjection(

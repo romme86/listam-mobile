@@ -18,7 +18,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import ts from 'typescript'
-import { buildPeerLabelItem, buildSurfaceLabelItem } from '@listam/domain'
+import {
+    buildItemPlanEntry,
+    buildPeerLabelItem,
+    buildSurfaceLabelItem,
+    isPlanItem,
+    PLAN_LIST_ID,
+    PLAN_LIST_TYPE,
+} from '@listam/domain'
 
 const STORE_DIR = path.dirname(fileURLToPath(import.meta.url))
 const APP_DIR = path.resolve(STORE_DIR, '..')
@@ -56,7 +63,7 @@ try {
 }
 after(() => fs.rmSync(buildDir, { recursive: true, force: true }))
 
-const { default: reducer, listsActions, selectSelectedListItems, selectItemsForList } = slice
+const { default: reducer, listsActions, selectSelectedListItems, selectItemsForList, selectAllItems } = slice
 const { selectedListChanged, listItemAdded, selectedListItemsSynced, selectedListItemsReplaced, listRemoved } = listsActions
 
 let seq = 0
@@ -162,6 +169,51 @@ test('label items in a SYNC_LIST snapshot are filtered, real items still land', 
     // Only the genuine grocery item lands; neither label leaks into the list.
     assert.deepEqual(texts(selectItemsForList(store.getState(), 'default')), ['Milk'])
     assert.deepEqual(selectItemsForList(store.getState(), '__surfacenames__'), [])
+})
+
+test('structured plan snapshot replaces stale plan meta-items exactly', () => {
+    const store = makeStore()
+    const keepRow = makeEntry({ id: 'source-keep', text: 'Keep row', listId: 'default' })
+    const staleA = buildItemPlanEntry({ listId: 'default', itemId: 'stale-a', plannedFor: '2026-07-16', planOrder: 1, updatedAt: 1 })
+    const staleB = buildItemPlanEntry({ listId: 'default', itemId: 'stale-b', plannedFor: '2026-07-17', planOrder: 2, updatedAt: 2 })
+    const current = buildItemPlanEntry({ listId: 'default', itemId: 'current', plannedFor: '2026-07-18', planOrder: 3, updatedAt: 3 })
+
+    store.dispatch(listItemAdded(keepRow))
+    store.dispatch(listItemAdded(staleA))
+    store.dispatch(listItemAdded(staleB))
+    store.dispatch(selectedListItemsSynced({
+        listId: PLAN_LIST_ID,
+        listType: PLAN_LIST_TYPE,
+        items: [current],
+    }))
+
+    const all = selectAllItems(store.getState())
+    assert.deepEqual(all.filter(isPlanItem).map((item) => item.id), [current.id])
+    assert.deepEqual(texts(selectItemsForList(store.getState(), 'default')), ['Keep row'])
+
+    // An empty exact bucket must clear the final plan ref as well.
+    store.dispatch(selectedListItemsSynced({
+        listId: PLAN_LIST_ID,
+        listType: PLAN_LIST_TYPE,
+        items: [],
+    }))
+    assert.deepEqual(selectAllItems(store.getState()).filter(isPlanItem), [])
+})
+
+test('legacy bare-array SYNC_LIST keeps its additive reserved-meta behavior', () => {
+    const store = makeStore()
+    const existingPlan = buildItemPlanEntry({ listId: 'default', itemId: 'old', plannedFor: '2026-07-17', planOrder: 1, updatedAt: 1 })
+    store.dispatch(listItemAdded(existingPlan))
+
+    // Bare arrays still mean "replace default rows". Their embedded plan items
+    // are filtered from rows and do not claim to be an exact plan snapshot.
+    store.dispatch(selectedListItemsSynced([
+        makeEntry({ text: 'Legacy row', listId: 'default' }),
+        buildItemPlanEntry({ listId: 'default', itemId: 'ignored', plannedFor: '2026-07-18', planOrder: 2, updatedAt: 2 }),
+    ]))
+
+    assert.deepEqual(texts(selectItemsForList(store.getState(), 'default')), ['Legacy row'])
+    assert.deepEqual(selectAllItems(store.getState()).filter(isPlanItem).map((item) => item.id), [existingPlan.id])
 })
 
 // The built-in surfaces (Groceries/Board/Todo) all live on the shared 'default'

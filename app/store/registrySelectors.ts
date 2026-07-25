@@ -11,8 +11,8 @@ import type { RootState } from './store'
 // (Lifted from the former global preferences defaults — now per-list & synced.)
 export const DEFAULT_VIEW: RegistryListView = {
     isGridView: false,
-    categoriesEnabled: true,
-    categoryHeadersVisible: true,
+    categoriesEnabled: false,
+    categoryHeadersVisible: false,
     showFab: false,
     gridIconSize: 'normal',
     listTextSize: 'normal',

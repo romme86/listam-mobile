@@ -42,14 +42,14 @@ type Props = {
     reduceMotion?: boolean
 }
 
-export function VisualGridList({
+function VisualGridListComponent({
     data,
     onToggleDone,
     onDelete,
     onRequestMove,
     onRequestAdd,
-    categoriesEnabled = true,
-    categoryHeadersVisible = true,
+    categoriesEnabled = false,
+    categoryHeadersVisible = false,
     gridIconSize = 'normal',
     itemIconVariant = 'illustrated',
     reduceMotion = false,
@@ -143,6 +143,11 @@ export function VisualGridList({
         </View>
     )
 }
+
+// Modal visibility and other app-shell state live above the active list screen.
+// Keep an unchanged grid from rebuilding every (non-virtualized) card when one
+// of those unrelated controls changes, especially while presenting a menu.
+export const VisualGridList = React.memo(VisualGridListComponent)
 
 function makeStyles(t: Theme) {
     return StyleSheet.create({

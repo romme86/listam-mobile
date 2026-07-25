@@ -80,13 +80,15 @@ test('builtinViewPatched merges a partial patch without dropping prior keys', ()
     assert.deepEqual(state.builtinViews[SHOPPING_SURFACE], { isGridView: true, categoriesEnabled: false })
 })
 
-test('selectCurrentListView reflects a built-in grocery override (Spesa categories off)', () => {
+test('grocery views default to categories and category titles off, but honor an override', () => {
     const off = selectCurrentListView(makeState(SHOPPING_SURFACE, { [SHOPPING_SURFACE]: { categoriesEnabled: false } }))
     assert.equal(off.categoriesEnabled, false)
-    // With no override it falls back to the default (categories on).
+    // With no override it falls back to the lean grocery default.
     const fallback = selectCurrentListView(makeState(SHOPPING_SURFACE, {}))
     assert.equal(fallback.categoriesEnabled, DEFAULT_VIEW.categoriesEnabled)
-    assert.equal(DEFAULT_VIEW.categoriesEnabled, true)
+    assert.equal(fallback.categoryHeadersVisible, DEFAULT_VIEW.categoryHeadersVisible)
+    assert.equal(DEFAULT_VIEW.categoriesEnabled, false)
+    assert.equal(DEFAULT_VIEW.categoryHeadersVisible, false)
 })
 
 test('a built-in to-do surface still clamps categories/grid off despite an override', () => {

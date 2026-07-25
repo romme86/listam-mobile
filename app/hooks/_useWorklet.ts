@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, useCallback, type MutableRefObject } from 'react'
-import { Alert } from 'react-native'
+import { Alert, Platform } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { haptics } from '../feedback'
 import * as FileSystemExpo from 'expo-file-system'
 import { toByteArray } from 'base64-js'
 import { Worklet } from 'react-native-bare-kit'
 import RPC from 'bare-rpc'
-import backendBundleB64 from '../app.ios.bundle.mjs'
-// import backendBundleB64 from '../assets/backend.android.bundle.mjs'
+import backendIOSBundleB64 from '../app.ios.bundle.mjs'
+import backendAndroidBundleB64 from '../assets/backend.android.bundle.mjs'
 import { decodeBackendRequest, dataToString } from '@listam/client'
 import {
     prepareBackendSecretPayload,
@@ -25,6 +25,7 @@ import {
 import { boardConfigActions } from '../store/boardConfigSlice'
 import { labelsActions } from '../store/labelsSlice'
 import { presenceActions } from '../store/presenceSlice'
+import { decodeSyncListSnapshot } from '../store/syncListSnapshot'
 import { useI18n } from '../i18n'
 import {
     RPC_UPDATE,
@@ -226,6 +227,9 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         workletSingleton = worklet
         workletRef.current = worklet
 
+        const backendBundleB64 = Platform.OS === 'android'
+            ? backendAndroidBundleB64
+            : backendIOSBundleB64
         const bundleBytes = toByteArray(backendBundleB64)
 
         worklet.start('/app.bundle', bundleBytes, [
@@ -433,15 +437,32 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                     dispatch(presenceActions.presenceCleared())
                     return
                 case 'sync-list':
-                    if (Array.isArray(event.items)) {
+                    {
+                        const snapshot = decodeSyncListSnapshot(event.items)
+                        if (!snapshot) {
+                            appLogger.warn('Invalid SYNC_LIST snapshot payload', event.items)
+                            return
+                        }
+                        if (snapshot.mode === 'legacy') {
                         // Peer/surface name labels ride the same item stream; the
                         // labels slice retains them while listsSlice filters them
                         // out of list rows. SYNC_LIST is default-list-only, so labels
                         // (reserved buckets) actually arrive via *-from-backend below
                         // — fold any present here additively, never clearing.
-                        dispatch(listsActions.selectedListItemsSynced(event.items as ListEntry[]))
-                        dispatch(labelsActions.labelsApplied(event.items as ListEntry[]))
-                        dispatch(presenceActions.presenceApplied(event.items as ListEntry[]))
+                            dispatch(listsActions.selectedListItemsSynced(snapshot.items))
+                            dispatch(labelsActions.labelsApplied(snapshot.items))
+                            dispatch(presenceActions.presenceApplied(snapshot.items))
+                            return
+                        }
+
+                        const bucket = {
+                            listId: snapshot.listId,
+                            listType: snapshot.listType,
+                            items: snapshot.items,
+                        }
+                        dispatch(listsActions.selectedListItemsSynced(bucket))
+                        dispatch(labelsActions.labelsSnapshotApplied(bucket))
+                        dispatch(presenceActions.presenceSnapshotApplied(bucket))
                     }
                     return
                 case 'delete-from-backend':

@@ -30,6 +30,12 @@ export type LabelsState = {
     itemsById: Record<string, ListEntry>
 }
 
+type LabelsSnapshotPayload = {
+    listId: string
+    listType: string
+    items: ListEntry[]
+}
+
 const initialState: LabelsState = {
     itemsById: {},
 }
@@ -44,6 +50,34 @@ const labelsSlice = createSlice({
         labelsApplied(state, action: PayloadAction<ListEntry[]>) {
             for (const item of action.payload) {
                 if (isLabelOnly(item) && item.id) state.itemsById[item.id] = item
+            }
+        },
+        // A structured SYNC_LIST envelope is an exact snapshot of one reserved
+        // label bucket. Clear only that channel, leaving the other independent
+        // label channels intact, then install the owner's current contents.
+        labelsSnapshotApplied(state, action: PayloadAction<LabelsSnapshotPayload>) {
+            const { listId, listType, items } = action.payload
+            if (!isLabelOnly({ listType } as ListEntry)) return
+
+            for (const [itemId, item] of Object.entries(state.itemsById)) {
+                if (item.listId === listId || (!item.listId && item.listType === listType)) {
+                    delete state.itemsById[itemId]
+                }
+            }
+            for (const item of items) {
+                const normalized = {
+                    ...item,
+                    listId: item.listId || listId,
+                    listType: item.listType || listType,
+                }
+                if (
+                    isLabelOnly(normalized)
+                    && normalized.listId === listId
+                    && normalized.listType === listType
+                    && normalized.id
+                ) {
+                    state.itemsById[normalized.id] = normalized
+                }
             }
         },
         // Fold a single incremental item (add/update). Non-label items are ignored.
