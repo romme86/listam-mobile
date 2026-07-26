@@ -309,3 +309,60 @@ test('the base guard fails open for a list the registry has not described', () =
     }))
     assert.equal(Object.values(state.itemsById).some((i) => i.id === 'y1'), true)
 })
+
+// --- selector memoization -------------------------------------------------
+// Both selectors used to memoize on the WHOLE lists slice, so ANY lists action —
+// selecting a different list, a registry meta-item, a label landing in a
+// reserved bucket — returned a fresh array identity and re-rendered every
+// consumer, including the 1,800-line AppInner. These pin the narrower keys.
+
+test('selectAllItems is stable when only the SELECTION changes', () => {
+    const store = makeStore()
+    store.dispatch(listItemAdded(makeEntry({ text: 'Milk', listId: 'list-abc' })))
+    const before = selectAllItems(store.getState())
+
+    store.dispatch(selectedListChanged({ listId: 'list-xyz' }))
+
+    assert.equal(selectAllItems(store.getState()), before, 'selecting a list does not change which items exist')
+})
+
+test('selectAllItems DOES change when an item is added', () => {
+    const store = makeStore()
+    store.dispatch(listItemAdded(makeEntry({ text: 'Milk', listId: 'list-abc' })))
+    const before = selectAllItems(store.getState())
+
+    store.dispatch(listItemAdded(makeEntry({ text: 'Bread', listId: 'list-abc' })))
+
+    assert.notEqual(selectAllItems(store.getState()), before)
+})
+
+test('selectSelectedListItems survives a write to a reserved bucket', () => {
+    const store = makeStore()
+    store.dispatch(selectedListChanged({ listId: 'list-abc' }))
+    store.dispatch(listItemAdded(makeEntry({ text: 'Milk', listId: 'list-abc' })))
+    const before = selectSelectedListItems(store.getState())
+
+    // A peer label: reserved bucket, dropped by the projection, so the selected
+    // list's contents cannot have changed.
+    store.dispatch(listItemAdded({
+        id: 'peer-1', listId: '__peers__', listType: 'peer', labelName: 'Laptop',
+        text: 'Laptop', isDone: false, timeOfCompletion: 0, updatedAt: 2,
+    }))
+
+    assert.equal(
+        selectSelectedListItems(store.getState()),
+        before,
+        'a reserved-bucket write must not re-render the list',
+    )
+})
+
+test('selectSelectedListItems recomputes when its own list changes', () => {
+    const store = makeStore()
+    store.dispatch(selectedListChanged({ listId: 'list-abc' }))
+    store.dispatch(listItemAdded(makeEntry({ text: 'Milk', listId: 'list-abc' })))
+    const before = selectSelectedListItems(store.getState())
+
+    store.dispatch(listItemAdded(makeEntry({ text: 'Bread', listId: 'list-abc' })))
+
+    assert.notEqual(selectSelectedListItems(store.getState()), before)
+})

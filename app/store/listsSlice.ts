@@ -457,17 +457,26 @@ export const selectItemsForList = (state: RootState, navId: string): ListEntry[]
 
 // Items of the selected list in display order: insertion order with the user's
 // manual `order` (set by reordering) layered on top via sortByOrder.
+// Memo inputs are deliberately NARROW. Keying on the whole lists slice meant any
+// lists action at all — selecting a list, a registry meta-item, a label landing
+// in a reserved bucket — produced a new array identity and re-rendered every
+// consumer, including the 1,800-line AppInner. These three are the only inputs
+// the projection actually reads.
 export const selectSelectedListItems = createSelector(
-    selectListsState,
-    (state) => {
+    [
+        (state: RootState) => state.lists.selectedListId,
+        (state: RootState) => state.lists.listsById,
+        (state: RootState) => state.lists.itemsById,
+    ],
+    (selectedListId, listsById, itemsById) => {
         // For a built-in surface the selection is a composite id over the shared
         // 'default' bucket — read the real bucket and keep only this surface's
         // typed items so grocery/board/todo never bleed into one another.
-        const { listId, listType } = decodeSurface(state.selectedListId)
-        const list = state.listsById[listId]
+        const { listId, listType } = decodeSurface(selectedListId)
+        const list = listsById[listId]
         if (!list) return []
         const items = list.itemIds
-            .map((itemId) => state.itemsById[itemId])
+            .map((itemId) => itemsById[itemId])
             .filter((item): item is ListEntry => Boolean(item))
         const scoped = listId === DEFAULT_LIST_ID
             ? items.filter((item) => matchesSurfaceType(listType, item))
@@ -479,9 +488,11 @@ export const selectSelectedListItems = createSelector(
 // Every materialized item across every bucket (real rows + reserved meta-items
 // like the plan channel). The Overview reduces the plan entries out of this and
 // joins them back to their source rows.
+// Keyed on itemsById alone: selecting a different list does not change which
+// items EXIST, so it must not invalidate this.
 export const selectAllItems = createSelector(
-    selectListsState,
-    (state) => Object.values(state.itemsById),
+    (state: RootState) => state.lists.itemsById,
+    (itemsById) => Object.values(itemsById),
 )
 
 export const selectListLibrary = createSelector(
