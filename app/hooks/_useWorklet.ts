@@ -14,6 +14,8 @@ import {
     persistBackendSecretFromPayload,
 } from '../secrets'
 import { appLogger } from '../logger'
+import { i18nRef, isJoiningRef, notifyRef, rpcRef, workletRef } from './workletHolders'
+import type { NotifyFn } from './workletHolders'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { listsActions, selectSelectedListItems } from '../store/listsSlice'
 import { selectSyncState, syncActions, type JoinPhase, type NetworkStatus } from '../store/syncSlice'
@@ -62,6 +64,11 @@ const GLOBAL_KEY = '__LISTAM_WORKLET_SINGLETON__' as const
 let workletSingleton: Worklet | null = null
 let workletStarted = false
 
+// The RPC object, the worklet and the three per-mount value holders live in
+// their own module (workletHolders.ts) so the lifecycle contract is unit-testable
+// without react-native. See that file for why hoisting them out of useRef is
+// what fixes commands being dropped after a remount.
+
 type GlobalWorkletState = {
     started: boolean
     worklet: Worklet | null
@@ -93,8 +100,7 @@ type UseWorkletResult = {
     sendRPCWithReply: (command: number, payload?: string) => Promise<string | null>
 }
 
-export type NotifyType = 'info' | 'success' | 'error'
-export type NotifyFn = (message: string, type?: NotifyType) => void
+export type { NotifyFn, NotifyType } from './workletHolders'
 
 export type OwnerControlServer = {
     serverPublicKeyHex: string
@@ -142,11 +148,9 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         lastResult: null,
     })
 
-    const rpcRef = useRef<any>(null)
-    const workletRef = useRef<Worklet | null>(null)
-    const isJoiningRef = useRef(false)
-    const notifyRef = useRef<NotifyFn | undefined>(onNotify)
-    const i18nRef = useRef(i18n)
+    // The holders themselves are module-level (see the top of this file); the
+    // hook only keeps them pointing at the CURRENT mount's values on every
+    // render, so a handler created by an earlier mount never talks to a dead one.
     notifyRef.current = onNotify
     i18nRef.current = i18n
 
@@ -516,19 +520,24 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                     }
                 })
         } else if (workletSingleton || g.worklet) {
-            if (workletSingleton)
-            {
-                workletRef.current = workletSingleton
-            } else if (g.worklet)     {
-                workletRef.current = g.worklet
-            }
-            dispatch(syncActions.workletReadySet(true))
+            // Remount onto the worklet a previous mount started. The RPC is
+            // module-level so it is still here; this branch only re-points the
+            // worklet handle.
+            workletRef.current = workletSingleton ?? g.worklet
+            // Report ready only if there is actually an RPC to send on. This
+            // branch used to declare ready unconditionally, which is how the app
+            // came to look connected while every command hit the null-rpc guard
+            // in sendRPC. If the worklet exists without an RPC, startWorklet
+            // failed partway; stay not-ready so the failure is visible.
+            const ready = rpcRef.current != null
+            if (!ready) appLogger.warn('worklet present but RPC missing on remount; staying not-ready')
+            dispatch(syncActions.workletReadySet(ready))
         }
 
-        return () => {
-            workletRef.current = null
-            rpcRef.current = null
-        }
+        // Nothing to tear down on unmount: the worklet, the RPC and the value
+        // holders are module-level and outlive this component on purpose.
+        // Nulling rpcRef here is what broke every command after a remount.
+        return undefined
     }, [dispatch, startWorklet])
 
     // Initial catch-up is explicit: backend startup can emit its first snapshot
