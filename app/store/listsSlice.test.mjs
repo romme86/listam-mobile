@@ -268,3 +268,44 @@ test('a freshly created non-default list accepts items', () => {
     assert.deepEqual(texts(selectSelectedListItems(store.getState())), ['First task'])
     assert.deepEqual(texts(selectItemsForList(store.getState(), 'list-new1')), ['First task'])
 })
+
+// Sharing a list PROMOTES it: items are re-seeded into a new base with the SAME
+// ids, then the personal copies are tombstoned. The two bases replicate
+// independently, so the delete can land AFTER the seed — and identityKey
+// (listId + itemId, no base) makes it match, emptying the list just shared.
+test('a late personal tombstone cannot empty a list that was just shared', () => {
+    const SHARED = 'a1b2c3'
+    let state = reducer(undefined, { type: '@@init' })
+
+    state = reducer(state, listsActions.listItemAdded({
+        id: 'holiday', listId: '__registry__', listType: 'registry',
+        regKind: 'list', regName: 'Holiday', regType: 'todo', regBaseKey: SHARED,
+        text: 'Holiday', isDone: false, timeOfCompletion: 0, updatedAt: 1,
+    }))
+
+    state = reducer(state, listsActions.listItemAdded({
+        id: 'x1', text: 'Passports', listId: 'holiday', listType: 'todo',
+        baseKey: SHARED, isDone: false, timeOfCompletion: 0, updatedAt: 2,
+    }))
+    assert.equal(Object.values(state.itemsById).some((i) => i.id === 'x1'), true, 'seeded item present')
+
+    state = reducer(state, listsActions.listItemDeleted({
+        id: 'x1', text: 'Passports', listId: 'holiday', listType: 'todo',
+        isDone: false, timeOfCompletion: 0, updatedAt: 3,
+    }))
+
+    assert.equal(
+        Object.values(state.itemsById).some((i) => i.id === 'x1'),
+        true,
+        'an event from the base this list was promoted away from must be ignored',
+    )
+})
+
+test('the base guard fails open for a list the registry has not described', () => {
+    let state = reducer(undefined, { type: '@@init' })
+    state = reducer(state, listsActions.listItemAdded({
+        id: 'y1', text: 'Milk', listId: 'not-in-registry', listType: 'shopping',
+        baseKey: 'ffff', isDone: false, timeOfCompletion: 0, updatedAt: 1,
+    }))
+    assert.equal(Object.values(state.itemsById).some((i) => i.id === 'y1'), true)
+})
