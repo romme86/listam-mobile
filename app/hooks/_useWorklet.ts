@@ -290,8 +290,37 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                         dispatch(syncActions.joinPhaseSet(payload.phase || null))
                     } else if (payload.type === 'not-writable') {
                         const msg = payload.message || i18nRef.current.t('backend.notWritable')
+                        dispatch(syncActions.writeBlocked('not-writable'))
                         if (notifyRef.current) notifyRef.current(msg, 'info')
                         else Alert.alert(i18nRef.current.t('backend.notWritable.title'), msg)
+                    } else if (payload.type === 'sync-stalled') {
+                        // The backend REFUSED a mutation: the local writer cannot
+                        // flush, so the change was never appended. It used to be
+                        // logged and dropped here, which is why an edit could
+                        // simply vanish with no signal at all.
+                        dispatch(syncActions.writeBlocked('sync-stalled'))
+                        const msg = payload.message || i18nRef.current.t('main.notification.writeSyncStalled')
+                        if (notifyRef.current) notifyRef.current(msg, 'error')
+                    } else if (payload.type === 'epoch-key-stale') {
+                        // This device is missing the current encryption grant, so
+                        // its writes cannot be decrypted by peers. Silent until
+                        // now — and the cause of "green dot but nothing syncs".
+                        dispatch(syncActions.writeBlocked('epoch-key-stale'))
+                        const msg = payload.message || i18nRef.current.t('main.notification.writeEpochStale')
+                        if (notifyRef.current) notifyRef.current(msg, 'error')
+                    } else if (payload.type === 'storage-fenced') {
+                        // Terminal: another process owns this data directory and
+                        // the backend has torn itself down. Only relaunching
+                        // recovers, so this block is never cleared.
+                        dispatch(syncActions.writeBlocked('storage-fenced'))
+                        const msg = payload.message || i18nRef.current.t('main.notification.writeStorageFenced')
+                        if (notifyRef.current) notifyRef.current(msg, 'error')
+                        else Alert.alert(i18nRef.current.t('backend.notWritable.title'), msg)
+                    } else if (payload.type === 'move-rigor-missing') {
+                        // A board move was rejected by the board's rigor rules.
+                        if (notifyRef.current) {
+                            notifyRef.current(payload.message || i18nRef.current.t('main.notification.writeRefused'), 'error')
+                        }
                     } else if (payload.type === 'join-success') {
                         dispatch(syncActions.joinPhaseSet(null))
                         if (isJoiningRef.current) {
@@ -425,7 +454,11 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                             notifyRef.current(i18nRef.current.t('control.commandFailed'), 'error')
                         }
                     } else {
-                        appLogger.info('Unhandled backend message payload', payload)
+                        // Warn, not info: every type the backend emits should be
+                        // handled above. This chain silently ignoring refusals is
+                        // exactly how dropped writes went unnoticed, so an
+                        // unhandled type is a defect to see, not a routine event.
+                        appLogger.warn('Unhandled backend message payload', payload)
                     }
                     return
                 }
@@ -483,6 +516,10 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                     dispatch(listsActions.listItemAdded(event.item as ListEntry))
                     dispatch(labelsActions.labelItemApplied(event.item as ListEntry))
                     dispatch(presenceActions.presenceItemApplied(event.item as ListEntry))
+                    // An item coming back from the backend proves the write path
+                    // is working again, so drop any refusal banner. Exempts
+                    // 'storage-fenced', which is terminal (see syncSlice).
+                    dispatch(syncActions.writeBlockCleared())
                     return
                 case 'invite-key':
                     if (event.key != null) {

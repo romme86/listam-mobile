@@ -9,6 +9,16 @@ export type JoinPhase = 'pairing' | 'permission' | 'syncing' | null
 //   'offline'    — DHT unreachable, e.g. no connection (header dot: grey)
 export type NetworkStatus = 'connecting' | 'online' | 'offline'
 
+// Why the backend refused a mutation. 'storage-fenced' is TERMINAL — another
+// process took over this data directory and the backend has torn down, so
+// nothing short of relaunching recovers. The others clear when a write lands.
+export type WriteBlock =
+    | 'not-writable'
+    | 'sync-stalled'
+    | 'epoch-key-stale'
+    | 'storage-fenced'
+    | null
+
 export type SyncState = {
     autobaseInviteKey: string
     peerCount: number
@@ -18,6 +28,7 @@ export type SyncState = {
     networkStatus: NetworkStatus
     baseId: string | null
     epoch: number | null
+    writeBlock: WriteBlock
 }
 
 const initialState: SyncState = {
@@ -29,6 +40,7 @@ const initialState: SyncState = {
     networkStatus: 'connecting',
     baseId: null,
     epoch: null,
+    writeBlock: null,
 }
 
 const syncSlice = createSlice({
@@ -43,6 +55,18 @@ const syncSlice = createSlice({
         },
         workletReadySet(state, action: PayloadAction<boolean>) {
             state.isWorkletReady = action.payload
+        },
+        // The backend refused a mutation and said why. Mobile used to log these
+        // and move on, so a change the user made just vanished with no signal.
+        writeBlocked(state, action: PayloadAction<WriteBlock>) {
+            state.writeBlock = action.payload
+            if (action.payload === 'storage-fenced') state.isWorkletReady = false
+        },
+        // A write went through again. 'storage-fenced' is exempt: the backend has
+        // torn down, so a stray later success must never imply writes are
+        // flowing again.
+        writeBlockCleared(state) {
+            if (state.writeBlock !== 'storage-fenced') state.writeBlock = null
         },
         joiningSet(state, action: PayloadAction<boolean>) {
             state.isJoining = action.payload
