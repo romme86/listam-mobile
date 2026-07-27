@@ -15,6 +15,7 @@ import {
     updateListEntry as sharedUpdateListEntry,
     deleteListEntry as sharedDeleteListEntry,
     sameListEntry as sharedSameListEntry,
+    isStaleUpdate as sharedIsStaleUpdate,
 } from '@listam/domain/identity'
 import { isBoardType as sharedIsBoardType } from '@listam/domain/board'
 
@@ -75,6 +76,13 @@ export function deleteListEntry(entries: ListEntry[], entry: ListEntry): ListEnt
 
 export function sameListEntry(left: ListEntry, right: ListEntry): boolean {
     return sharedSameListEntry(left, right)
+}
+
+// Last-write-wins comparison, shared verbatim with the backend reducer. The
+// keyed projection in listsSlice needs it directly now that a single-item update
+// no longer routes through updateListEntry.
+export function isStaleUpdate(existing: ListEntry | null | undefined, incoming: ListEntry | null | undefined): boolean {
+    return sharedIsStaleUpdate(existing, incoming)
 }
 
 export function identityKey(entry: ListEntry): string {

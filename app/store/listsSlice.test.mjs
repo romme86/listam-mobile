@@ -366,3 +366,61 @@ test('selectSelectedListItems recomputes when its own list changes', () => {
 
     assert.notEqual(selectSelectedListItems(store.getState()), before)
 })
+
+// --- keyed projection semantics -------------------------------------------
+// applyItemProjection now mutates itemsById/itemIds directly instead of
+// rebuilding the bucket through the shared list-entry helpers. That means their
+// semantics are reimplemented inline — these pin them so the two cannot drift.
+const entryFor = (id, text, over = {}) => ({
+    id, text, listId: 'list-abc', listType: 'shopping',
+    isDone: false, timeOfCompletion: 0, updatedAt: 10, timestamp: 10, ...over,
+})
+const textsOf = (store) => selectSelectedListItems(store.getState()).map((i) => i.text)
+
+test('add prepends a new row and moves an existing one to the front', () => {
+    const store = makeStore()
+    store.dispatch(selectedListChanged({ listId: 'list-abc' }))
+    store.dispatch(listItemAdded(entryFor('a', 'Milk')))
+    store.dispatch(listItemAdded(entryFor('b', 'Bread')))
+    assert.deepEqual(textsOf(store), ['Bread', 'Milk'], 'a new add goes to the front')
+
+    store.dispatch(listItemAdded(entryFor('a', 'Oat milk')))
+    assert.deepEqual(textsOf(store), ['Oat milk', 'Bread'], 'an existing id merges and moves to the front')
+})
+
+test('update keeps position, and appends when the row is new', () => {
+    const store = makeStore()
+    store.dispatch(selectedListChanged({ listId: 'list-abc' }))
+    store.dispatch(listItemAdded(entryFor('a', 'Milk')))
+    store.dispatch(listItemAdded(entryFor('b', 'Bread')))
+
+    store.dispatch(listsActions.listItemUpdated(entryFor('a', 'Oat milk', { updatedAt: 99 })))
+    assert.deepEqual(textsOf(store), ['Bread', 'Oat milk'], 'position preserved')
+
+    store.dispatch(listsActions.listItemUpdated(entryFor('z', 'Late', { updatedAt: 99 })))
+    assert.deepEqual(textsOf(store), ['Bread', 'Oat milk', 'Late'], 'an unknown row appends')
+})
+
+test('a stale update is ignored, but a stale ADD still wins', () => {
+    const store = makeStore()
+    store.dispatch(selectedListChanged({ listId: 'list-abc' }))
+    store.dispatch(listItemAdded(entryFor('a', 'Current', { updatedAt: 500 })))
+
+    store.dispatch(listsActions.listItemUpdated(entryFor('a', 'Older', { updatedAt: 100 })))
+    assert.deepEqual(textsOf(store), ['Current'], 'LWW rejects the older update')
+
+    // upsertListEntry with 'front' placement has no staleness check — an
+    // explicit add always wins. Reproduced deliberately.
+    store.dispatch(listItemAdded(entryFor('a', 'Forced', { updatedAt: 100 })))
+    assert.deepEqual(textsOf(store), ['Forced'], 'an add is not staleness-gated')
+})
+
+test('delete removes the row and its bucket entry', () => {
+    const store = makeStore()
+    store.dispatch(selectedListChanged({ listId: 'list-abc' }))
+    store.dispatch(listItemAdded(entryFor('a', 'Milk')))
+    store.dispatch(listItemAdded(entryFor('b', 'Bread')))
+
+    store.dispatch(listsActions.listItemDeleted(entryFor('a', 'Milk')))
+    assert.deepEqual(textsOf(store), ['Bread'])
+})
