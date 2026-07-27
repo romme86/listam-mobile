@@ -12,8 +12,17 @@ npm-debug.*
 *.key
 *.mobileprovision
 *.orig.*
+# Bare backend bundles are BUILD ARTIFACTS produced by `npm run bundle:backend:*`
+# (run for you by `npm run ios` / `npm run android`). They were committed until
+# 2026-07-27; two ~3.2 MB base64 blobs regenerated on every backend change had
+# grown this repo's .git to 167 MB. app/bundles.d.ts declares their module shape
+# so typecheck and CI work on a clean checkout without generating them.
 *.bundle
 *.bundle.js
+app/app.ios.bundle
+app/app.ios.bundle.mjs
+app/assets/backend.android.bundle
+app/assets/backend.android.bundle.mjs
 web-build/
 
 # OS / editor / tooling junk

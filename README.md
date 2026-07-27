@@ -61,11 +61,24 @@ live in the sibling `../listam-packages` npm workspace and are linked in via
 
 ```bash
 npm install
+npm run bundle:backend:ios          # generates the Bare backend bundle
 (cd ios && LANG=en_US.UTF-8 pod install)
 LANG=en_US.UTF-8 npx expo run:ios
 ```
 
+`npm run ios` / `npm run android` already run the bundle step for you; it is
+spelled out above only because the manual `expo run:ios` path skips it.
+
 Notes:
+
+- **The backend bundle is a build artifact and is NOT in git.** `npm run
+  bundle:backend:ios` (or `:android`) produces it with `bare-pack`. Two ~3.2 MB
+  base64 blobs regenerated on every backend change had grown this repo's `.git`
+  to 167 MB, so they were removed in 2026-07. `app/bundles.d.ts` declares their
+  module shape, so `npm run typecheck`, `npm test` and CI all work on a clean
+  checkout without generating them — only a native build needs the bytes. If the
+  app starts but the backend never becomes ready, a stale or missing bundle is
+  the first thing to check.
 
 - **CocoaPods needs a UTF-8 locale.** Without it, `pod install` aborts with
   `Encoding::CompatibilityError`. Export `LANG=en_US.UTF-8` (and/or
