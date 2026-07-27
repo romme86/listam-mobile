@@ -62,3 +62,30 @@ test('a later refusal replaces a recoverable one', () => {
     state = reducer(state, syncActions.writeBlocked('epoch-key-stale'))
     assert.equal(state.writeBlock, 'epoch-key-stale')
 })
+
+// A write the backend could not flush is now KEPT in its outbox and replayed
+// later. That is not a failure — the row exists and will sync — so it must mark
+// the row rather than raise a block or imply the edit landed.
+test('a queued write marks the row pending and raises NO block', () => {
+    const state = reducer(init(), syncActions.writeQueued('x1'))
+    assert.deepEqual(state.pendingWriteIds, ['x1'])
+    assert.equal(state.writeBlock, null, 'a kept write is not a blocked write')
+})
+
+test('queued ids do not duplicate when the same row is refused twice', () => {
+    let state = init()
+    for (let i = 0; i < 3; i++) state = reducer(state, syncActions.writeQueued('x1'))
+    assert.deepEqual(state.pendingWriteIds, ['x1'])
+})
+
+test('a successful replay clears the pending marks', () => {
+    let state = reducer(init(), syncActions.writeQueued('x1'))
+    state = reducer(state, syncActions.writeQueued('x2'))
+    state = reducer(state, syncActions.writesReplayed())
+    assert.deepEqual(state.pendingWriteIds, [])
+})
+
+test('write-needs-decision is a block, since only the user can resolve it', () => {
+    const state = reducer(init(), syncActions.writeBlocked('write-needs-decision'))
+    assert.equal(state.writeBlock, 'write-needs-decision')
+})

@@ -293,6 +293,23 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                         dispatch(syncActions.writeBlocked('not-writable'))
                         if (notifyRef.current) notifyRef.current(msg, 'info')
                         else Alert.alert(i18nRef.current.t('backend.notWritable.title'), msg)
+                    } else if (payload.type === 'write-queued') {
+                        // NOT a failure: the backend kept this mutation and will
+                        // replay it when a peer is reachable. Mark the row so the
+                        // user sees it has not synced; do not raise a write block.
+                        dispatch(syncActions.writeQueued(payload.id))
+                        if (notifyRef.current) {
+                            notifyRef.current(payload.message || i18nRef.current.t('main.notification.writeQueued'), 'info')
+                        }
+                    } else if (payload.type === 'write-replayed') {
+                        dispatch(syncActions.writesReplayed())
+                    } else if (payload.type === 'write-needs-decision') {
+                        // Queued edits whose world moved on (epoch rotated, list
+                        // moved base). Still held; only the user can decide.
+                        dispatch(syncActions.writeBlocked('write-needs-decision'))
+                        if (notifyRef.current) {
+                            notifyRef.current(i18nRef.current.t('main.notification.writeNeedsDecision'), 'error')
+                        }
                     } else if (payload.type === 'sync-stalled') {
                         // The backend REFUSED a mutation: the local writer cannot
                         // flush, so the change was never appended. It used to be

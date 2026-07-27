@@ -17,6 +17,7 @@ export type WriteBlock =
     | 'sync-stalled'
     | 'epoch-key-stale'
     | 'storage-fenced'
+    | 'write-needs-decision'
     | null
 
 export type SyncState = {
@@ -29,6 +30,10 @@ export type SyncState = {
     baseId: string | null
     epoch: number | null
     writeBlock: WriteBlock
+    // Ids of mutations the backend kept in its durable outbox because the writer
+    // could not flush. The row exists locally and will sync later — the UI marks
+    // it rather than pretending the edit was lost or that it landed.
+    pendingWriteIds: string[]
 }
 
 const initialState: SyncState = {
@@ -41,6 +46,7 @@ const initialState: SyncState = {
     baseId: null,
     epoch: null,
     writeBlock: null,
+    pendingWriteIds: [],
 }
 
 const syncSlice = createSlice({
@@ -58,6 +64,18 @@ const syncSlice = createSlice({
         },
         // The backend refused a mutation and said why. Mobile used to log these
         // and move on, so a change the user made just vanished with no signal.
+        writeQueued(state, action: PayloadAction<string>) {
+            const id = action.payload
+            if (typeof id === 'string' && id && !state.pendingWriteIds.includes(id)) {
+                state.pendingWriteIds.push(id)
+            }
+        },
+        // The outbox drained. It reports a count rather than ids, so clear the
+        // whole set: anything still queued re-announces itself on the next
+        // refusal, and a stale badge is worse than briefly showing none.
+        writesReplayed(state) {
+            if (state.pendingWriteIds.length) state.pendingWriteIds = []
+        },
         writeBlocked(state, action: PayloadAction<WriteBlock>) {
             state.writeBlock = action.payload
             if (action.payload === 'storage-fenced') state.isWorkletReady = false
