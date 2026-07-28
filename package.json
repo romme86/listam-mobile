@@ -17,10 +17,11 @@
     "check:secrets": "node scripts/check-secrets.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run lint && npm run typecheck && npm run check:deps && npm run check:secrets && npm run check:i18n && npm run test",
+    "ci": "npm run lint && npm run typecheck && npm run check:deps && npm run check:secrets && npm run check:i18n && npm run check:bundles && npm run test",
     "bundle:backend:ios": "npx bare-pack --target ios --linked backend/backend.mjs --encoding base64 --out app/app.ios.bundle && node scripts/wrap-bare-bundle.mjs app/app.ios.bundle app/app.ios.bundle.mjs",
     "bundle:backend:android": "npx bare-pack --target android --linked backend/backend.mjs --encoding base64 --out app/assets/backend.android.bundle && node scripts/wrap-bare-bundle.mjs app/assets/backend.android.bundle app/assets/backend.android.bundle.mjs",
-    "test:hooks": "node --test app/hooks/*.test.mjs"
+    "test:hooks": "node --test app/hooks/*.test.mjs",
+    "check:bundles": "node scripts/check-bundles.mjs"
   },
   "dependencies": {
     "@10play/tentap-editor": "^1.0.1",
