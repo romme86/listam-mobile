@@ -72,7 +72,7 @@ import { VisualGridList } from './components/VisualGridList'
 import { CategoryDragProvider } from './components/CategoryDrag'
 import { getDisplayCategoryName, groupByCategory } from './components/categoryGrouping'
 import { computeReorder, sortByOrder } from '@listam/domain/ordering'
-import { identityKey, DEFAULT_LIST_TYPE, DEFAULT_LIST_ID, decodeSurface, isTodoType } from './listProjection'
+import { baseScopedKey, DEFAULT_LIST_TYPE, DEFAULT_LIST_ID, decodeSurface, isTodoType } from './listProjection'
 import { AddItemBar } from './components/AddItemBar'
 import { Fab } from './components/Fab'
 import { ListsMenu } from './components/ListsMenu'
@@ -1172,8 +1172,8 @@ function AppInner() {
     // reducer round-trip and replicates to peers. We also remember the choice by
     // item name, so the next time the same item is added it lands here too.
     const handleAssignCategory = useCallback((item: ListEntry, canonicalKey: string) => {
-        const target = identityKey(item)
-        const current = dataList.find((entry) => identityKey(entry) === target)
+        const target = baseScopedKey(item)
+        const current = dataList.find((entry) => baseScopedKey(entry) === target)
         if (!current || current.categoryOverride === canonicalKey) return
         animate()
         const updatedItem = { ...current, categoryOverride: canonicalKey, updatedAt: Date.now() }
@@ -1189,8 +1189,8 @@ function AppInner() {
 
     // Drag-to-delete: dropping a picked-up item on the trash zone removes it.
     const handleDeleteDragged = useCallback((item: ListEntry) => {
-        const target = identityKey(item)
-        const current = dataList.find((entry) => identityKey(entry) === target)
+        const target = baseScopedKey(item)
+        const current = dataList.find((entry) => baseScopedKey(entry) === target)
         if (!current) return
         animate()
         dispatch(listsActions.listItemDeleted(current))
@@ -1204,16 +1204,16 @@ function AppInner() {
     // category section (groupByCategory reorders, so re-apply sortByOrder); else
     // it's the whole list. Each changed item rides the normal LWW update path.
     const handleReorderToEdge = useCallback((item: ListEntry, edge: 'top' | 'bottom') => {
-        const target = identityKey(item)
+        const target = baseScopedKey(item)
         let group: ListEntry[]
         if (categoriesEnabled) {
             const section = groupByCategory(dataList, i18n.groceryLocale)
-                .find((s) => s.items.some((x) => identityKey(x.entry) === target))
+                .find((s) => s.items.some((x) => baseScopedKey(x.entry) === target))
             group = sortByOrder(section ? section.items.map((x) => x.entry) : dataList)
         } else {
             group = dataList
         }
-        const fromIndex = group.findIndex((entry) => identityKey(entry) === target)
+        const fromIndex = group.findIndex((entry) => baseScopedKey(entry) === target)
         if (fromIndex < 0) return
         const { updates } = computeReorder(group, fromIndex, edge === 'top' ? 0 : group.length - 1)
         if (updates.length === 0) return

@@ -9,6 +9,7 @@ import {
     TODO_LIST_TYPE as SHARED_TODO_LIST_TYPE,
     isTodoType as sharedIsTodoType,
     identityKey as sharedIdentityKey,
+    baseScopedKey as sharedBaseScopedKey,
     normalizeListEntry as sharedNormalizeListEntry,
     normalizeListEntries as sharedNormalizeListEntries,
     upsertListEntry as sharedUpsertListEntry,
@@ -87,4 +88,11 @@ export function isStaleUpdate(existing: ListEntry | null | undefined, incoming: 
 
 export function identityKey(entry: ListEntry): string {
     return sharedIdentityKey(entry)
+}
+
+// Item identity for this client: (baseKey, listId, itemId). See the note on
+// baseScopedKey in @listam/domain/identity — a personal tombstone and the shared
+// copy of the same row must not be the same key, or sharing a list empties it.
+export function baseScopedKey(entry: ListEntry): string {
+    return sharedBaseScopedKey(entry)
 }

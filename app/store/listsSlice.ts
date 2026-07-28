@@ -9,7 +9,7 @@ import {
     DEFAULT_LIST_TYPE,
     decodeSurface,
     deleteListEntry,
-    identityKey,
+    baseScopedKey,
     isStaleUpdate,
     matchesSurfaceType,
     normalizeListEntries,
@@ -316,7 +316,7 @@ function replaceListItems(
 
     const itemIds: string[] = [...keptIds]
     for (const item of normalized) {
-        const itemId = identityKey(item)
+        const itemId = baseScopedKey(item)
         state.itemsById[itemId] = item
         if (!itemIds.includes(itemId)) itemIds.push(itemId)
     }
@@ -346,7 +346,7 @@ function applyExactBucketSnapshot(state: ListsState, payload: ReplaceListItemsPa
         })))
         for (const item of normalized) {
             if (!isPlanItem(item) || item.listId !== listId) continue
-            state.itemsById[identityKey(item)] = item
+            state.itemsById[baseScopedKey(item)] = item
         }
         return true
     }
@@ -381,7 +381,7 @@ function applyItemProjection(
     // A SHARED single-list base seeds its OWN self-describing registry meta-item,
     // which the backend pushes here tagged with a top-level baseKey. The personal
     // registry is authoritative for the nav, so drop it — otherwise it collides
-    // by identityKey with the personal entry and clobbers its regBaseKey
+    // by identity with the personal entry and clobbers its regBaseKey
     // (→ writes mis-route to the personal base).
     if (isSharedRegistryItem(entry)) return
 
@@ -395,9 +395,11 @@ function applyItemProjection(
 
     // Sharing a list re-seeds its items into a new base with the SAME ids and
     // then tombstones the personal copies. Those bases replicate independently,
-    // so the delete can land AFTER the seed — and identityKey (listId + itemId,
-    // no base) makes it match, emptying the list that was just shared. Ignore
-    // events from a base this list was promoted away from; fail open for lists
+    // so the delete can land AFTER the seed. Ignore events from a base this list
+    // was promoted away from; fail open for lists — which is the window the race
+    // lives in, so it is NOT the whole fix: rows are keyed by baseScopedKey
+    // below, making the tombstone and the shared copy different rows outright.
+    // Fail open for lists
     // the registry has not described yet.
     if (!routing && !isFromAuthoritativeBase(normalized, state.baseByListId)) return
 
@@ -405,7 +407,7 @@ function applyItemProjection(
     // a cross-list overlay, not list rows: keep them in itemsById (so the
     // Overview can read them) but never file them under a list bucket.
     if (isPlanItem(normalized)) {
-        const planKey = identityKey(normalized)
+        const planKey = baseScopedKey(normalized)
         if (operation === 'delete') delete state.itemsById[planKey]
         else state.itemsById[planKey] = normalized
         return
@@ -414,7 +416,7 @@ function applyItemProjection(
     const listId = normalized.listId || DEFAULT_LIST_ID
     const listType = normalized.listType || DEFAULT_LIST_TYPE
     const list = ensureList(state, listId, listType)
-    const itemId = identityKey(normalized)
+    const itemId = baseScopedKey(normalized)
 
     // Keyed mutation, not a bucket rewrite.
     //

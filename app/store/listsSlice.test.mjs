@@ -310,6 +310,40 @@ test('the base guard fails open for a list the registry has not described', () =
     assert.equal(Object.values(state.itemsById).some((i) => i.id === 'y1'), true)
 })
 
+// The same promotion race, inside the window the GUARD cannot cover.
+//
+// isFromAuthoritativeBase fails open for a list the registry has not described
+// yet — deliberately, because dropping items while the registry is still
+// replicating would turn a slow sync into data loss. That fail-open window is
+// exactly when the seed/tombstone race happens, so the guard alone never closed
+// it. Base-scoped keys do: the personal tombstone and the shared copy are not
+// the same row, so the delete cannot reach across.
+test('a personal tombstone deletes only the personal row, not the shared copy', () => {
+    const SHARED = 'a1b2c3'
+    const row = {
+        id: 'x1', text: 'Passports', listId: 'holiday', listType: 'todo',
+        isDone: false, timeOfCompletion: 0,
+    }
+    // No registry meta-item at all: the list is unknown, so the guard accepts
+    // everything and cannot be what saves the row below.
+    let state = reducer(undefined, { type: '@@init' })
+    state = reducer(state, listsActions.listItemAdded({ ...row, updatedAt: 1 }))
+    state = reducer(state, listsActions.listItemAdded({ ...row, baseKey: SHARED, updatedAt: 2 }))
+    assert.equal(
+        Object.values(state.itemsById).filter((i) => i.id === 'x1').length, 2,
+        'the personal and shared copies are distinct rows while both bases are believed to hold them',
+    )
+
+    state = reducer(state, listsActions.listItemDeleted({ ...row, updatedAt: 3 }))
+
+    const survivors = Object.values(state.itemsById).filter((i) => i.id === 'x1')
+    assert.equal(survivors.length, 1, 'the tombstone must remove exactly one row')
+    assert.equal(
+        survivors[0].baseKey, SHARED,
+        'the row it removed must be the personal one — the shared copy is what the user just shared',
+    )
+})
+
 // --- selector memoization -------------------------------------------------
 // Both selectors used to memoize on the WHOLE lists slice, so ANY lists action —
 // selecting a different list, a registry meta-item, a label landing in a
