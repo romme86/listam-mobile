@@ -4,7 +4,7 @@ import { isOnlineNow, averageOnlineMs, type PresenceEntry } from '@listam/domain
 import { makeDialogStyles } from './_styles'
 import { useTheme } from '../theme'
 import { useI18n } from '../i18n'
-import { formatAgo, formatUptime } from '../util/relativeTime'
+import { formatAgo, formatUptime, shortKey } from '@listam/domain/peer-display'
 import type { MembershipRoster } from '../store/devicesSlice'
 
 type MembersDialogProps = {
@@ -23,11 +23,6 @@ type MembersDialogProps = {
     onDismissRecoveryCode: () => void
     onRecoverOwnership: () => void
     onClose: () => void
-}
-
-function shortKey(writerKey: string): string {
-    if (writerKey.length <= 14) return writerKey
-    return `${writerKey.slice(0, 8)}…${writerKey.slice(-4)}`
 }
 
 export function MembersDialog({
