@@ -34,7 +34,7 @@ import {
     RPC_GET_BOARD_CONFIG,
     type NotifyType,
 } from './hooks/_useWorklet'
-import { RPC_LIST_BACKUPS, RPC_SET_BACKUP_SCHEDULE, RPC_SHARE_LIST, RPC_JOIN_LIST } from '@listam/protocol'
+import { RPC_COMPACT_HISTORY, RPC_LIST_BACKUPS, RPC_SET_BACKUP_SCHEDULE, RPC_SHARE_LIST, RPC_JOIN_LIST } from '@listam/protocol'
 import { store } from './store/store'
 import { syncActions } from './store/syncSlice'
 import { useAppDispatch, useAppSelector } from './store/hooks'
@@ -123,6 +123,7 @@ import {
     type JoinConfirmationRequest,
 } from './invite-confirmation'
 import type { ListEntry } from './components/_types'
+import type { CompactionInfo } from './store/devicesSlice'
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -1584,10 +1585,49 @@ function AppInner() {
         setJoinDialogVisible(true)
     }, [])
 
+    // Owner-only history compaction. The readiness answer is a DRY RUN, so
+    // opening the dialog never writes anything; the real run is a second call.
+    const [compaction, setCompaction] = useState<CompactionInfo | null>(null)
+
+    const refreshCompaction = useCallback(async () => {
+        try {
+            const reply = await sendRPCWithReply(RPC_COMPACT_HISTORY, JSON.stringify({ dryRun: true }))
+            const res = reply ? JSON.parse(reply) : null
+            setCompaction(res && res.readiness ? res : null)
+        } catch {
+            setCompaction(null)
+        }
+    }, [sendRPCWithReply])
+
+    const handleCompact = useCallback(async () => {
+        try {
+            const reply = await sendRPCWithReply(RPC_COMPACT_HISTORY, JSON.stringify({}))
+            const res = reply ? JSON.parse(reply) : null
+            if (res?.ok) {
+                snackbar.show(i18n.t('compaction.done', { items: res.items ?? 0, lists: res.buckets ?? 0 }), 'success')
+            } else {
+                // Every refusal the user can act on gets its own line; anything
+                // else falls back to the generic one rather than leaking a wire
+                // string into the UI.
+                const key = res?.reason === 'mesh-not-ready' ? 'compaction.error.meshNotReady'
+                    : res?.reason === 'not-owner' ? 'compaction.error.notOwner'
+                        : res?.reason === 'not-writable' ? 'compaction.error.notWritable'
+                            : res?.reason === 'nothing-to-compact' ? 'compaction.error.nothingToCompact'
+                                : (res?.reason === 'snapshot-failed' || res?.reason === 'barrier-failed') ? 'compaction.error.writeFailed'
+                                    : 'compaction.error.generic'
+                snackbar.show(i18n.t(key), 'error')
+            }
+        } catch {
+            snackbar.show(i18n.t('compaction.error.generic'), 'error')
+        }
+        void refreshCompaction()
+    }, [sendRPCWithReply, snackbar, i18n, refreshCompaction])
+
     const handleManageMembers = useCallback(() => {
         setMembersDialogVisible(true)
         sendRPC(RPC_GET_MEMBERS)
-    }, [sendRPC])
+        void refreshCompaction()
+    }, [sendRPC, refreshCompaction])
 
     const handleRemoveMember = useCallback((writerKey: string) => {
         sendRPC(RPC_REMOVE_MEMBER, JSON.stringify({ writerKey }))
@@ -1831,6 +1871,8 @@ function AppInner() {
                 onRevealRecoveryCode={handleRevealRecoveryCode}
                 onDismissRecoveryCode={clearOwnerRecoveryCode}
                 onRecoverOwnership={handleRecoverOwnership}
+                compaction={compaction}
+                onCompact={handleCompact}
                 onClose={handleCloseMembers}
             />
             <OwnedDevicesDialog

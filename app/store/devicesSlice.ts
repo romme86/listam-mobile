@@ -20,6 +20,18 @@ export type MembershipRoster = {
     writers: MembershipMember[]
 }
 
+/** The backend's dry-run answer to "can the owner flatten history yet?" */
+export type CompactionInfo = {
+    canCompact: boolean
+    compacted: boolean
+    readiness: {
+        ready: boolean
+        total: number
+        readyCount: number
+        blockers: Array<{ writerKey: string, reason: string }>
+    }
+}
+
 export type DevicesState = {
     hasRoster: boolean
     currentEpoch: number

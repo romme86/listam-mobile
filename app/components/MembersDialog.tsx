@@ -5,7 +5,7 @@ import { makeDialogStyles } from './_styles'
 import { useTheme } from '../theme'
 import { useI18n } from '../i18n'
 import { formatAgo, formatUptime, shortKey } from '@listam/domain/peer-display'
-import type { MembershipRoster } from '../store/devicesSlice'
+import type { CompactionInfo, MembershipRoster } from '../store/devicesSlice'
 
 type MembersDialogProps = {
     visible: boolean
@@ -22,6 +22,12 @@ type MembersDialogProps = {
     onRevealRecoveryCode: () => void
     onDismissRecoveryCode: () => void
     onRecoverOwnership: () => void
+    // Owner-only history compaction. `compaction` is the backend's dry-run
+    // readiness answer; null until it replies, in which case the section is not
+    // rendered at all — its whole value is naming the device holding the flatten
+    // back, so an unanswered one says nothing worth showing.
+    compaction: CompactionInfo | null
+    onCompact: () => void
     onClose: () => void
 }
 
@@ -37,6 +43,8 @@ export function MembersDialog({
     onRevealRecoveryCode,
     onDismissRecoveryCode,
     onRecoverOwnership,
+    compaction,
+    onCompact,
     onClose,
 }: MembersDialogProps) {
     const t = useTheme()
@@ -55,6 +63,32 @@ export function MembersDialog({
     const writers = roster?.writers ?? []
     const canAdminister = roster?.canAdminister ?? false
     const hasOwner = !!roster?.ownerWriterKey
+
+    // Name the blockers with the same synced labels the roster rows use; a raw
+    // 64-char writer key here would be unactionable.
+    const compactionStatus = useMemo(() => {
+        if (!compaction) return ''
+        const r = compaction.readiness
+        if (r?.ready) return i18n.t('compaction.ready')
+        const names = (r?.blockers ?? []).map(({ writerKey }) => peerLabels.get(writerKey) || shortKey(writerKey))
+        if (!names.length) return i18n.t('compaction.notReadyUnknown')
+        return i18n.t('compaction.notReady', {
+            ready: r?.readyCount ?? 0,
+            total: r?.total ?? 0,
+            devices: names.join(', '),
+        })
+    }, [compaction, peerLabels, i18n])
+
+    const confirmCompaction = () => {
+        Alert.alert(
+            i18n.t('compaction.title'),
+            i18n.t('compaction.confirm'),
+            [
+                { text: i18n.t('common.cancel'), style: 'cancel' },
+                { text: i18n.t('compaction.action'), style: 'destructive', onPress: onCompact },
+            ],
+        )
+    }
 
     const confirmRemove = (writerKey: string) => {
         Alert.alert(
@@ -211,6 +245,36 @@ export function MembersDialog({
                                 accessibilityRole="button"
                             >
                                 <Text style={d.submitButtonText}>{i18n.t('members.recovery.action')}</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : null}
+
+    {/* Flatten history. Owner-only, and gated on every device reporting that it
+        understands the barrier — the readiness line names whichever ones do not,
+        because a disabled button with no reason is an unverifiable claim. */}
+                    {canAdminister && compaction ? (
+                        <View style={{ marginTop: 18 }}>
+                            <Text style={[d.subtitle, { fontWeight: '600' }]}>{i18n.t('compaction.title')}</Text>
+                            <Text style={[d.subtitle, { marginTop: 4 }]}>{i18n.t('compaction.explain')}</Text>
+                            <Text
+                                style={{
+                                    marginTop: 8,
+                                    fontSize: 12,
+                                    color: compaction.canCompact ? t.colors.placeholder : t.colors.danger,
+                                }}
+                            >
+                                {compactionStatus}
+                            </Text>
+                            <TouchableOpacity
+                                style={[d.button, d.cancelButton, { marginTop: 10, opacity: compaction.canCompact ? 1 : 0.5 }]}
+                                onPress={confirmCompaction}
+                                disabled={!compaction.canCompact}
+                                accessibilityRole="button"
+                                accessibilityState={{ disabled: !compaction.canCompact }}
+                            >
+                                <Text style={[d.cancelButtonText, { color: t.colors.danger }]}>
+                                    {i18n.t('compaction.action')}
+                                </Text>
                             </TouchableOpacity>
                         </View>
                     ) : null}
