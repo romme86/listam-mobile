@@ -2,7 +2,7 @@
   "expo": {
     "name": "listam",
     "slug": "listam-expo",
-    "version": "1.2.6",
+    "version": "1.3.0",
     "newArchEnabled": true,
     "orientation": "portrait",
     "scheme": "ch.saynode.listam",
@@ -16,13 +16,14 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "ch.saynode.listam",
+      "buildNumber": "20",
       "appleTeamId": "LFTCG79Q9A",
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to scan loyalty card barcodes and QR codes."
       }
     },
     "android": {
-      "versionCode": 13,
+      "versionCode": 17,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
