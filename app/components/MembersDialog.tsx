@@ -66,17 +66,25 @@ export function MembersDialog({
 
     // Name the blockers with the same synced labels the roster rows use; a raw
     // 64-char writer key here would be unactionable.
+    //
+    // Split by REASON. The first version of this message said "update them first"
+    // for every blocker, which is wrong advice for a device that is perfectly up
+    // to date and has simply not published a heartbeat yet (offline, or only just
+    // started). 'attested' — the owner vouching for a device that never spoke for
+    // itself — is the same situation as silence from the user's side.
     const compactionStatus = useMemo(() => {
         if (!compaction) return ''
         const r = compaction.readiness
         if (r?.ready) return i18n.t('compaction.ready')
-        const names = (r?.blockers ?? []).map(({ writerKey }) => peerLabels.get(writerKey) || shortKey(writerKey))
-        if (!names.length) return i18n.t('compaction.notReadyUnknown')
-        return i18n.t('compaction.notReady', {
-            ready: r?.readyCount ?? 0,
-            total: r?.total ?? 0,
-            devices: names.join(', '),
-        })
+        const blockers = r?.blockers ?? []
+        if (!blockers.length) return i18n.t('compaction.notReadyUnknown')
+        const name = ({ writerKey }: { writerKey: string }) => peerLabels.get(writerKey) || shortKey(writerKey)
+        const outdated = blockers.filter((b) => b.reason === 'outdated').map(name)
+        const silent = blockers.filter((b) => b.reason !== 'outdated').map(name)
+        const lines = [i18n.t('compaction.notReady', { ready: r?.readyCount ?? 0, total: r?.total ?? 0 })]
+        if (outdated.length) lines.push(i18n.t('compaction.notReady.outdated', { devices: outdated.join(', ') }))
+        if (silent.length) lines.push(i18n.t('compaction.notReady.silent', { devices: silent.join(', ') }))
+        return lines.join(' ')
     }, [compaction, peerLabels, i18n])
 
     const confirmCompaction = () => {
