@@ -34,7 +34,14 @@ import {
     RPC_GET_BOARD_CONFIG,
     type NotifyType,
 } from './hooks/_useWorklet'
-import { RPC_COMPACT_HISTORY, RPC_LIST_BACKUPS, RPC_SET_BACKUP_SCHEDULE, RPC_SHARE_LIST, RPC_JOIN_LIST } from '@listam/protocol'
+import {
+    RPC_COMPACT_HISTORY,
+    RPC_LIST_BACKUPS,
+    RPC_SET_BACKUP_SCHEDULE,
+    RPC_SHARE_LIST,
+    RPC_JOIN_LIST,
+    type InviteQrScope,
+} from '@listam/protocol'
 import { store } from './store/store'
 import { syncActions } from './store/syncSlice'
 import { useAppDispatch, useAppSelector } from './store/hooks'
@@ -59,6 +66,9 @@ import { useReduceMotion } from './hooks/useReduceMotion'
 import { useLearnedCategories } from './hooks/useLearnedCategories'
 import { Header } from './components/Header'
 import { JoinDialog } from './components/JoinDialog'
+import { BackupPasswordDialog } from './components/BackupPasswordDialog'
+import { InviteQrScanner } from './components/InviteQrScanner'
+import { InviteShareDialog } from './components/InviteShareDialog'
 import { MembersDialog } from './components/MembersDialog'
 import { OwnedDevicesDialog } from './components/OwnedDevicesDialog'
 import { LeafPairingDialog } from './components/LeafPairingDialog'
@@ -305,12 +315,15 @@ function AppInner() {
     // Whether a backup password is set. Joins are gated on it so the pre-join
     // auto-backup can always run. null = not yet queried.
     const [backupPasswordSet, setBackupPasswordSet] = useState<boolean | null>(null)
+    const [backupPasswordDialogReason, setBackupPasswordDialogReason] = useState<'startup' | 'join' | null>(null)
     // Latest known rolling-backup schedule.enabled (from RPC_LIST_BACKUPS). The
     // foreground catch-up re-asserts this on background→active so the backend
     // scheduler restarts and writes any tier that came due while suspended. The
     // backend stays the source of truth; this is just the value to re-send.
     const backupScheduleEnabledRef = useRef(true)
     const [joinKeyInput, setJoinKeyInput] = useState('')
+    const [inviteScannerVisible, setInviteScannerVisible] = useState(false)
+    const [shareInvite, setShareInvite] = useState<{ scope: InviteQrScope; invite: string } | null>(null)
     const [membersDialogVisible, setMembersDialogVisible] = useState(false)
     const [ownedDevicesVisible, setOwnedDevicesVisible] = useState(false)
     const [leafPairingVisible, setLeafPairingVisible] = useState(false)
@@ -362,6 +375,10 @@ function AppInner() {
 
     const pendingConfirmedInviteRef = useRef('')
     const pendingJoinConfirmationInviteRef = useRef('')
+    // A project invite that has already passed the destructive-join confirmation
+    // but is waiting for first-time backup-password setup. Keeping this separate
+    // prevents a second link/manual request from replacing it.
+    const pendingBackupJoinInviteRef = useRef('')
     const initialDeepLinkHandledRef = useRef(false)
 
     const joinConfirmationCopy = useMemo(() => ({
@@ -402,6 +419,17 @@ function AppInner() {
         } catch { /* leave as-is on failure */ }
     }, [sendRPCWithReply])
 
+    const executeConfirmedJoin = useCallback((invite: string) => {
+        if (!isWorkletReady) {
+            pendingConfirmedInviteRef.current = invite
+            return
+        }
+        setIsJoining(true)
+        setCurrentP2PMessage(0)
+        isJoiningRef.current = true
+        sendRPC(RPC_JOIN_KEY, JSON.stringify({ key: invite }))
+    }, [isJoiningRef, isWorkletReady, sendRPC, setIsJoining])
+
     const beginJoinWithInvite = useCallback((rawInvite: string) => {
         const invite = extractInviteFromInput(rawInvite)
         if (!invite) {
@@ -411,26 +439,28 @@ function AppInner() {
         // Require a backup password before joining, so the current lists are
         // backed up first. (null = not yet known → don't block.)
         if (backupPasswordSet === false) {
-            Alert.alert(
-                i18n.t('backup.auto.setPassword'),
-                i18n.t('backup.auto.joinNeedsPassword'),
-                [
-                    { text: i18n.t('common.cancel'), style: 'cancel' },
-                    { text: i18n.t('lists.menu.title'), onPress: () => { setMenuInitialView('lists'); setPendingListSettingsId(null); setListsMenuVisible(true) } },
-                ],
-            )
-            return false
-        }
-        if (!isWorkletReady) {
-            pendingConfirmedInviteRef.current = invite
+            pendingBackupJoinInviteRef.current = invite
+            setBackupPasswordDialogReason('join')
             return true
         }
-        setIsJoining(true)
-        setCurrentP2PMessage(0)
-        isJoiningRef.current = true
-        sendRPC(RPC_JOIN_KEY, JSON.stringify({ key: invite }))
+        executeConfirmedJoin(invite)
         return true
-    }, [backupPasswordSet, i18n, isJoiningRef, isWorkletReady, sendRPC, setIsJoining, snackbar])
+    }, [backupPasswordSet, executeConfirmedJoin, i18n, snackbar])
+
+    const handleBackupPasswordSaved = useCallback(() => {
+        const invite = pendingBackupJoinInviteRef.current
+        pendingBackupJoinInviteRef.current = ''
+        setBackupPasswordSet(true)
+        setBackupPasswordDialogReason(null)
+        snackbar.show(i18n.t('backup.auto.passwordSaved'), 'success')
+        void refreshBackupPasswordSet()
+        if (invite) executeConfirmedJoin(invite)
+    }, [executeConfirmedJoin, i18n, refreshBackupPasswordSet, snackbar])
+
+    const handleBackupPasswordCancel = useCallback(() => {
+        pendingBackupJoinInviteRef.current = ''
+        setBackupPasswordDialogReason(null)
+    }, [])
 
     const presentJoinConfirmation = useCallback((request: JoinConfirmationRequest) => {
         if (request.status === 'invalid') {
@@ -481,7 +511,7 @@ function AppInner() {
     const requestJoinConfirmation = useCallback((rawInvite: string, source: 'link' | 'manual') => {
         return presentJoinConfirmation(createJoinConfirmationRequest(rawInvite, {
             source,
-            pendingInvite: pendingJoinConfirmationInviteRef.current,
+            pendingInvite: pendingJoinConfirmationInviteRef.current || pendingBackupJoinInviteRef.current,
             isJoining: isJoiningRef.current,
             copy: joinConfirmationCopy,
         }))
@@ -781,7 +811,7 @@ function AppInner() {
         const handleIncomingUrl = (url: string | null) => {
             if (!url) return
             const request = planIncomingLinkJoin(url, {
-                pendingInvite: pendingJoinConfirmationInviteRef.current,
+                pendingInvite: pendingJoinConfirmationInviteRef.current || pendingBackupJoinInviteRef.current,
                 isJoining: isJoiningRef.current,
                 copy: joinConfirmationCopy,
             })
@@ -848,8 +878,9 @@ function AppInner() {
         return () => sub.remove()
     }, [isWorkletReady, sendRPC, refreshBackupPasswordSet])
 
-    // Prompt once (ever) to set a backup password when none is set — it's
-    // required before joining a shared list, to protect the current lists.
+    // Prompt once (ever) to set a backup password when none is set. The same
+    // self-contained dialog is used by the project-join gate below; never replace
+    // a join-specific prompt (and its confirmed invite) with this reminder.
     const backupPromptShownRef = useRef(false)
     useEffect(() => {
         if (backupPasswordSet !== false || backupPromptShownRef.current) return
@@ -857,16 +888,9 @@ function AppInner() {
         AsyncStorage.getItem(PREF_BACKUP_PROMPTED).then((seen) => {
             if (seen === '1') return
             void AsyncStorage.setItem(PREF_BACKUP_PROMPTED, '1')
-            Alert.alert(
-                i18n.t('backup.auto.setPassword'),
-                i18n.t('backup.auto.required'),
-                [
-                    { text: i18n.t('common.cancel'), style: 'cancel' },
-                    { text: i18n.t('lists.menu.title'), onPress: () => { setMenuInitialView('lists'); setPendingListSettingsId(null); setListsMenuVisible(true) } },
-                ],
-            )
+            setBackupPasswordDialogReason((current) => current ?? 'startup')
         }).catch(() => { /* non-fatal */ })
-    }, [backupPasswordSet, i18n])
+    }, [backupPasswordSet])
 
     // Open the user's default list once on launch (per-device preference). A
     // legacy bare 'default' maps to the grocery built-in surface's composite id so
@@ -1520,11 +1544,8 @@ function AppInner() {
     useEffect(() => {
         if (!shareProjectPendingRef.current || !autobaseInviteKey) return
         shareProjectPendingRef.current = false
-        void Share.share({
-            title: i18n.t('invite.share.title'),
-            message: i18n.t('invite.share.message', { inviteKey: autobaseInviteKey }),
-        }).catch(() => snackbar.show(i18n.t('invite.share.failed'), 'error'))
-    }, [autobaseInviteKey, i18n, snackbar])
+        setShareInvite({ scope: 'project', invite: autobaseInviteKey })
+    }, [autobaseInviteKey])
 
     // Promote ONE list to its own shared base and offer its co-edit invite via
     // the OS share sheet. Others who join this invite get only this list.
@@ -1544,15 +1565,22 @@ function AppInner() {
             snackbar.show(i18n.t('shareList.failed'), 'error')
             return
         }
-        try {
-            await Share.share({
-                message: `${i18n.t('shareList.message')}\n\n${result.invite}`,
-                title: i18n.t('shareList.title'),
-            })
-        } catch {
-            snackbar.show(i18n.t('shareList.failed'), 'error')
-        }
+        setShareInvite({ scope: 'list', invite: result.invite })
     }, [sendRPCWithReply, i18n, snackbar])
+
+    const handleShareInvite = useCallback(() => {
+        if (!shareInvite) return
+        const isProject = shareInvite.scope === 'project'
+        void Share.share({
+            title: i18n.t(isProject ? 'invite.share.title' : 'shareList.title'),
+            message: isProject
+                ? i18n.t('invite.share.message', { inviteKey: shareInvite.invite })
+                : `${i18n.t('shareList.message')}\n\n${shareInvite.invite}`,
+        }).catch(() => snackbar.show(
+            i18n.t(isProject ? 'invite.share.failed' : 'shareList.failed'),
+            'error',
+        ))
+    }, [i18n, shareInvite, snackbar])
 
     // Additively join ONE shared list via its invite (NOT the destructive
     // whole-project join). The rest of your lists stay private.
@@ -1693,8 +1721,25 @@ function AppInner() {
 
     const handleJoinCancel = useCallback(() => {
         setJoinDialogVisible(false)
+        setInviteScannerVisible(false)
         setJoinKeyInput('')
     }, [])
+
+    const handleInviteScanned = useCallback((invite: string) => {
+        setInviteScannerVisible(false)
+        setJoinKeyInput(invite)
+        if (joinMode === 'list') {
+            void handleJoinList(invite)
+            setJoinDialogVisible(false)
+            setJoinKeyInput('')
+            return
+        }
+
+        const didRequestJoin = requestJoinConfirmation(invite, 'manual')
+        if (!didRequestJoin) return
+        setJoinDialogVisible(false)
+        setJoinKeyInput('')
+    }, [handleJoinList, joinMode, requestJoinConfirmation])
 
     const handleJoiningCancel = useCallback(() => {
         setIsJoining(false)
@@ -1852,12 +1897,33 @@ function AppInner() {
             )}
 
             <JoinDialog
-                visible={joinDialogVisible}
+                visible={joinDialogVisible && !inviteScannerVisible}
                 mode={joinMode}
                 joinKeyInput={joinKeyInput}
                 setJoinKeyInput={setJoinKeyInput}
+                onScan={() => setInviteScannerVisible(true)}
                 onSubmit={handleJoinSubmit}
                 onCancel={handleJoinCancel}
+            />
+            <BackupPasswordDialog
+                visible={backupPasswordDialogReason !== null}
+                reason={backupPasswordDialogReason ?? 'startup'}
+                sendRPCWithReply={sendRPCWithReply}
+                onSaved={handleBackupPasswordSaved}
+                onCancel={handleBackupPasswordCancel}
+            />
+            <InviteQrScanner
+                visible={inviteScannerVisible}
+                expectedScope={joinMode}
+                onInviteScanned={handleInviteScanned}
+                onClose={() => setInviteScannerVisible(false)}
+            />
+            <InviteShareDialog
+                visible={shareInvite !== null}
+                scope={shareInvite?.scope ?? 'project'}
+                invite={shareInvite?.invite ?? ''}
+                onShare={handleShareInvite}
+                onClose={() => setShareInvite(null)}
             />
             <MembersDialog
                 visible={membersDialogVisible}
@@ -1962,7 +2028,7 @@ function AppInner() {
 
             {!overviewOpen && (
             <ListSwipePager
-                canPage={!isAdding && !listsMenuVisible && !joinDialogVisible && !membersDialogVisible && !ownedDevicesVisible && !leafPairingVisible && !isJoining && boardTicketId === null && !createTicketVisible}
+                canPage={!isAdding && !listsMenuVisible && !joinDialogVisible && backupPasswordDialogReason === null && !membersDialogVisible && !ownedDevicesVisible && !leafPairingVisible && !isJoining && boardTicketId === null && !createTicketVisible}
                 reduceMotion={reduceMotion}
                 onCommit={commit}
             >

@@ -655,7 +655,7 @@ export function ListsMenu(props: Props) {
                                                 <Text style={styles.sectionNote}>{i18n.t('shareList.builtinBlocked')}</Text>
                                             ) : settingsList.baseKey ? (
                                                 <>
-                                                    <TouchableOpacity style={styles.actionRow} onPress={() => onShareList(settingsList.id)} activeOpacity={0.6}>
+                                                    <TouchableOpacity style={styles.actionRow} onPress={() => { onShareList(settingsList.id); close() }} activeOpacity={0.6}>
                                                         <Ionicons name="people" size={20} color={t.colors.text} />
                                                         <Text style={styles.actionLabel}>{i18n.t('shareList.showInvite')}</Text>
                                                     </TouchableOpacity>
@@ -663,7 +663,7 @@ export function ListsMenu(props: Props) {
                                                 </>
                                             ) : (
                                                 <>
-                                                    <TouchableOpacity style={styles.actionRow} onPress={() => onShareList(settingsList.id)} activeOpacity={0.6}>
+                                                    <TouchableOpacity style={styles.actionRow} onPress={() => { onShareList(settingsList.id); close() }} activeOpacity={0.6}>
                                                         <Ionicons name="share-social-outline" size={20} color={t.colors.text} />
                                                         <Text style={styles.actionLabel}>{i18n.t('shareList.button')}</Text>
                                                     </TouchableOpacity>
