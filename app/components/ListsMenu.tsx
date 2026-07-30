@@ -117,6 +117,7 @@ type Props = {
     onSelectCard: (card: LoyaltyCardHandle) => void
     // Encrypted backup / restore: request-with-reply RPC + a snackbar notifier.
     sendRPCWithReply: (command: number, payload?: string) => Promise<string | null>
+    onDeleteLocalData: () => Promise<void>
     notify: (message: string, type?: 'info' | 'success' | 'error') => void
 }
 
@@ -150,7 +151,7 @@ export function ListsMenu(props: Props) {
         deviceName, onDeviceNameChange, selfWriterKey,
         onChangeListView, valueReturnFor, onSetValueReturn, onRenameList, onDeleteListItems, onDeleteList, onClearDone, onShareList, onShareProject, onJoin, onJoinList,
         initialListSettingsId, initialView, loyaltyCards, onScanCard, onSelectCard,
-        sendRPCWithReply, notify,
+        sendRPCWithReply, onDeleteLocalData, notify,
     } = props
 
     const t = useTheme()
@@ -475,6 +476,7 @@ export function ListsMenu(props: Props) {
                             onScanCard={onScanCard}
                             onSelectCard={onSelectCard}
                             sendRPCWithReply={sendRPCWithReply}
+                            onDeleteLocalData={onDeleteLocalData}
                             notify={notify}
                         />
                     ) : (

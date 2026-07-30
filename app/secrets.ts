@@ -20,6 +20,12 @@ import {
     type SecretName,
     type SecureSecretStore,
 } from '@listam/secrets'
+import {
+    LOCAL_DATA_MANIFEST_KEYS,
+    localDataDocumentUris,
+    localSecretKeys,
+    localStorageKeysToDelete,
+} from './localDataResetPlan'
 
 const KEYCHAIN_SERVICE = 'listam.secrets.v1'
 
@@ -145,6 +151,57 @@ export function deleteLoyaltyCard(card: LoyaltyCardHandle | string) {
         legacyStore: asyncStorageStore,
         metadataStore,
     })
+}
+
+/**
+ * Permanently remove every Listam-owned secret, preference and database from
+ * this app sandbox. The caller must stop the backend worklet first so it cannot
+ * keep a database file open or immediately persist fresh key material.
+ */
+export async function deleteAllLocalData(baseDirUri: string): Promise<void> {
+    const failures: string[] = []
+    let handlesRaw: string | null = null
+    let legacyCardsRaw: string | null = null
+
+    try {
+        [handlesRaw, legacyCardsRaw] = await AsyncStorage.multiGet([
+            LOCAL_DATA_MANIFEST_KEYS.loyaltyCardHandles,
+            LOCAL_DATA_MANIFEST_KEYS.legacyLoyaltyCards,
+        ]).then((entries) => entries.map(([, value]) => value) as [string | null, string | null])
+    } catch {
+        failures.push('loyalty-card manifest')
+    }
+
+    for (const key of localSecretKeys(handlesRaw, legacyCardsRaw)) {
+        try {
+            await SecureStore.deleteItemAsync(key, secureStoreOptions)
+            if (await SecureStore.getItemAsync(key, secureStoreOptions) !== null) {
+                failures.push(`secure:${key}`)
+            }
+        } catch {
+            failures.push(`secure:${key}`)
+        }
+    }
+    sessionSecrets.clear()
+
+    try {
+        const keys = localStorageKeysToDelete(await AsyncStorage.getAllKeys())
+        if (keys.length > 0) await AsyncStorage.multiRemove(keys)
+    } catch {
+        failures.push('preferences')
+    }
+
+    for (const uri of localDataDocumentUris(baseDirUri)) {
+        try {
+            await deleteAsync(uri, { idempotent: true })
+        } catch {
+            failures.push(`file:${uri}`)
+        }
+    }
+
+    if (failures.length > 0) {
+        throw new Error(`Could not delete all local Listam data: ${failures.join(', ')}`)
+    }
 }
 
 function legacyFileUri(baseDirUri: string, filename: string): string {

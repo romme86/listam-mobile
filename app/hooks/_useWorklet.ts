@@ -10,6 +10,7 @@ import backendIOSBundleB64 from '../app.ios.bundle.mjs'
 import backendAndroidBundleB64 from '../assets/backend.android.bundle.mjs'
 import { decodeBackendRequest, dataToString } from '@listam/client'
 import {
+    deleteAllLocalData,
     prepareBackendSecretPayload,
     persistBackendSecretFromPayload,
 } from '../secrets'
@@ -17,6 +18,7 @@ import { appLogger } from '../logger'
 import { i18nRef, isJoiningRef, notifyRef, rpcRef, workletRef } from './workletHolders'
 import type { NotifyFn } from './workletHolders'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
+import { appReset } from '../store/store'
 import { listsActions, selectSelectedListItems } from '../store/listsSlice'
 import { selectSyncState, syncActions, type JoinPhase, type NetworkStatus } from '../store/syncSlice'
 import {
@@ -98,6 +100,7 @@ type UseWorkletResult = {
     ownerControl: OwnerControlState
     sendRPC: (command: number, payload?: string) => void
     sendRPCWithReply: (command: number, payload?: string) => Promise<string | null>
+    deleteLocalData: () => Promise<void>
 }
 
 export type { NotifyFn, NotifyType } from './workletHolders'
@@ -123,6 +126,14 @@ const PREF_OWNED_DEVICES = '@lista_owned_devices'
 const persistOwnedDevices = (servers: OwnerControlServer[]) => {
     if (!Array.isArray(servers) || servers.length === 0) return
     void AsyncStorage.setItem(PREF_OWNED_DEVICES, JSON.stringify(servers)).catch(() => {})
+}
+
+function mobileDataRootUri(): string {
+    return String(
+        FileSystemExpo.Paths.document.uri ??
+        FileSystemExpo.Paths.cache.uri ??
+        '',
+    )
 }
 
 export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
@@ -215,10 +226,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
 
     const startWorklet = useCallback(async () => {
         appLogger.info('Starting worklet singleton')
-        const baseDir =
-            FileSystemExpo.Paths.document.uri ??
-            FileSystemExpo.Paths.cache.uri ??
-            ''
+        const baseDir = mobileDataRootUri()
         const preparedSecrets = await prepareBackendSecretPayload(String(baseDir))
         if (preparedSecrets.mode !== 'secure-store') {
             const msg = preparedSecrets.mode === 'plaintext-recovery'
@@ -555,6 +563,47 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         dispatch(syncActions.workletReadySet(true))
     }, [dispatch, setIsJoining])
 
+    const deleteLocalData = useCallback(async () => {
+        const g = getGlobalState()
+        const activeWorklet = workletSingleton ?? g.worklet ?? workletRef.current
+
+        // Stop the writer before touching its Corestore or key material. Reset
+        // every singleton pointer as one operation so a React remount cannot
+        // accidentally reconnect to the terminated worklet.
+        dispatch(syncActions.workletReadySet(false))
+        activeWorklet?.terminate()
+        workletSingleton = null
+        workletStarted = false
+        g.worklet = null
+        g.started = false
+        rpcRef.current = null
+        workletRef.current = null
+        isJoiningRef.current = false
+
+        // Give the native worklet teardown a turn to release its file handles.
+        await new Promise<void>((resolve) => setTimeout(resolve, 50))
+        await deleteAllLocalData(mobileDataRootUri())
+
+        setOwnerRecoveryCode(null)
+        setOwnerControl({ deviceId: null, servers: [], lastResult: null })
+        ownedDevicesHydratedRef.current = false
+        dispatch(appReset())
+
+        // Start a genuinely new local project immediately. This avoids leaving
+        // stale list contents visible or requiring the user to force-quit.
+        g.started = true
+        workletStarted = true
+        try {
+            await startWorklet()
+            g.worklet = workletRef.current
+        } catch (error) {
+            g.started = false
+            workletStarted = false
+            dispatch(syncActions.workletReadySet(false))
+            throw error
+        }
+    }, [dispatch, startWorklet])
+
     useEffect(() => {
         const g = getGlobalState()
 
@@ -621,6 +670,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         ownerControl,
         sendRPC,
         sendRPCWithReply,
+        deleteLocalData,
     }
 }
 

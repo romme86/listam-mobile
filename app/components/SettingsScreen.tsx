@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { View, Text, ScrollView, Switch, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
+import { Alert, View, Text, ScrollView, Switch, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import Clipboard from '@react-native-clipboard/clipboard'
 import { useTheme, cardColor, type Theme } from '../theme'
@@ -59,6 +59,7 @@ type Props = {
     onScanCard: () => void
     onSelectCard: (card: LoyaltyCardHandle) => void
     sendRPCWithReply: (command: number, payload?: string) => Promise<string | null>
+    onDeleteLocalData: () => Promise<void>
     notify: (message: string, type?: 'info' | 'success' | 'error') => void
 }
 
@@ -72,13 +73,14 @@ export function SettingsScreen(props: Props) {
         onShareProject, onJoin, onJoinList,
         onManageMembers, onManageOwnedDevices, onPairLeaf,
         loyaltyCards, onScanCard, onSelectCard,
-        sendRPCWithReply, notify,
+        sendRPCWithReply, onDeleteLocalData, notify,
     } = props
 
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
     const [subView, setSubView] = useState<SubView>('root')
+    const [deletingLocalData, setDeletingLocalData] = useState(false)
     const advancedOn = advancedMode === 'on'
 
     const subViewTitle: Record<SubView, string> = {
@@ -128,6 +130,72 @@ export function SettingsScreen(props: Props) {
 
     const themeLabel = i18n.t(themeLabelKey(themeChoice))
     const languageLabel = i18n.labelForLocaleChoice(localeChoice)
+
+    const performLocalDataDeletion = async () => {
+        if (deletingLocalData) return
+        setDeletingLocalData(true)
+        try {
+            await onDeleteLocalData()
+            onClose()
+            notify(i18n.t('settings.localData.deleted'), 'success')
+        } catch {
+            notify(i18n.t('settings.localData.failed'), 'error')
+        } finally {
+            setDeletingLocalData(false)
+        }
+    }
+
+    const confirmLocalDataDeletion = () => {
+        if (deletingLocalData) return
+        Alert.alert(
+            i18n.t('settings.localData.confirmTitle'),
+            i18n.t('settings.localData.confirmMessage'),
+            [
+                { text: i18n.t('common.cancel'), style: 'cancel' },
+                {
+                    text: i18n.t('common.continue'),
+                    style: 'destructive',
+                    onPress: () => {
+                        Alert.alert(
+                            i18n.t('settings.localData.finalTitle'),
+                            i18n.t('settings.localData.finalMessage'),
+                            [
+                                { text: i18n.t('common.cancel'), style: 'cancel' },
+                                {
+                                    text: i18n.t('settings.localData.deleteAction'),
+                                    style: 'destructive',
+                                    onPress: () => { void performLocalDataDeletion() },
+                                },
+                            ],
+                        )
+                    },
+                },
+            ],
+        )
+    }
+
+    const localDataDangerSection = (
+        <>
+            <Text style={styles.sectionLabel}>{i18n.t('settings.localData.section')}</Text>
+            <View style={[styles.card, styles.dangerCard]}>
+                <TouchableOpacity
+                    style={styles.row}
+                    onPress={confirmLocalDataDeletion}
+                    activeOpacity={0.6}
+                    disabled={deletingLocalData}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: deletingLocalData }}
+                    accessibilityLabel={i18n.t('settings.localData.deleteAction')}
+                >
+                    <Ionicons name="trash-outline" size={20} color={t.colors.danger} style={styles.rowIcon} />
+                    <Text style={[styles.rowLabel, styles.dangerLabel]}>
+                        {i18n.t(deletingLocalData ? 'settings.localData.deleting' : 'settings.localData.deleteAction')}
+                    </Text>
+                </TouchableOpacity>
+            </View>
+            <Text style={styles.sectionNote}>{i18n.t('settings.localData.note')}</Text>
+        </>
+    )
 
     return (
         <>
@@ -244,6 +312,7 @@ export function SettingsScreen(props: Props) {
                                 <Text style={styles.activateNote}>{i18n.t('settings.activate.note')}</Text>
                             </View>
                         </View>
+                        {localDataDangerSection}
                     </>
                 ) : (
                     <>
@@ -344,6 +413,7 @@ export function SettingsScreen(props: Props) {
                                 </>
                             ) : null}
                         </View>
+                        {localDataDangerSection}
                     </>
                 )}
             </ScrollView>
@@ -414,6 +484,10 @@ function makeStyles(t: Theme) {
             marginBottom: t.spacing.sm,
             overflow: 'hidden',
         },
+        dangerCard: {
+            backgroundColor: t.colors.dangerSurface,
+            borderColor: t.colors.danger,
+        },
         cardPad: { padding: t.spacing.md },
         cardLabel: {
             fontSize: t.type.caption.fontSize,
@@ -442,6 +516,7 @@ function makeStyles(t: Theme) {
             fontWeight: '500',
             color: t.colors.text,
         },
+        dangerLabel: { color: t.colors.danger, fontWeight: '600' },
         rowValue: {
             fontSize: 15,
             color: t.colors.textTertiary,

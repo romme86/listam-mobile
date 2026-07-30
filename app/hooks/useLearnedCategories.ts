@@ -19,6 +19,8 @@ export type LearnedCategories = {
      * length-preserving, so callers can keep using the original indices.
      */
     apply: (entries: ListEntry[]) => ListEntry[]
+    /** Clear the in-memory map after the persisted app data has been erased. */
+    reset: () => void
 }
 
 /**
@@ -78,5 +80,10 @@ export function useLearnedCategories(): LearnedCategories {
         return changed ? next : entries
     }, [map])
 
-    return { learn, apply }
+    const reset = useCallback(() => {
+        mapRef.current = {}
+        setMap({})
+    }, [])
+
+    return { learn, apply, reset }
 }

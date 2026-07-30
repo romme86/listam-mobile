@@ -268,10 +268,15 @@ function AppInner() {
         autobaseInviteKey,
         sendRPC,
         sendRPCWithReply,
+        deleteLocalData,
     } = useWorklet(notify)
 
     const subscription = useSubscription()
-    const { apply: applyLearnedCategories, learn: learnCategory } = useLearnedCategories()
+    const {
+        apply: applyLearnedCategories,
+        learn: learnCategory,
+        reset: resetLearnedCategories,
+    } = useLearnedCategories()
     const { lib, currentId, position, commit } = useListPager()
 
     const currentListType = lib.listsById[currentId]?.type
@@ -365,6 +370,17 @@ function AppInner() {
     // When set, the next create-ticket submit MOVES this source item into the
     // target board (id preserved) instead of adding a brand-new ticket.
     const pendingMoveRef = useRef<{ item: ListEntry; targetListId: string } | null>(null)
+
+    const handleDeleteLocalData = useCallback(async () => {
+        await deleteLocalData()
+        resetLearnedCategories()
+        setOverviewVisible(false)
+        setSelectedCard(null)
+        setPlanSheetItem(null)
+        setBoardTicketId(null)
+        setCreateTicketVisible(false)
+        setMoveTarget(null)
+    }, [deleteLocalData, resetLearnedCategories])
 
     // The board ticket currently open in the detail editor (live from the store,
     // so edits reflect immediately).
@@ -2023,6 +2039,7 @@ function AppInner() {
                 onScanCard={() => setScannerVisible(true)}
                 onSelectCard={handleSelectCard}
                 sendRPCWithReply={sendRPCWithReply}
+                onDeleteLocalData={handleDeleteLocalData}
                 notify={notify}
             />
 
