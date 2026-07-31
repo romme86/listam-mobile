@@ -228,6 +228,20 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         appLogger.info('Starting worklet singleton')
         const baseDir = mobileDataRootUri()
         const preparedSecrets = await prepareBackendSecretPayload(String(baseDir))
+        // Keys that exist but could not be READ must not start the backend.
+        // Booting keyless is not a fresh start — the Corestore is still on disk,
+        // so the backend adopts whatever identity it points at (for a joined
+        // device: its own pre-join base, writable, replicating to nobody) and
+        // the loss is silent. Failing the start is recoverable; the keychain is
+        // readable again after the device is unlocked, and the boot effect
+        // surfaces this as backend.startFailed.
+        const secretReadFailures = preparedSecrets.readFailures ?? []
+        if (secretReadFailures.length > 0) {
+            appLogger.error('Refusing to start the backend: key material unreadable', {
+                readFailures: secretReadFailures,
+            })
+            throw new Error(`Key material could not be read: ${secretReadFailures.join(', ')}`)
+        }
         if (preparedSecrets.mode !== 'secure-store') {
             const msg = preparedSecrets.mode === 'plaintext-recovery'
                 ? i18nRef.current.t('backend.secureStorage.legacy')
