@@ -26,6 +26,7 @@ fs.writeFileSync(out, ts.transpileModule(fs.readFileSync(src, 'utf8'), {
 
 const {
     CORE_LOCAL_SECRET_KEYS,
+    listamDataEntryNames,
     localSecretKeys,
     localDataDocumentUris,
     localStorageKeysToDelete,
@@ -64,6 +65,48 @@ test('reset targets only Listam files beneath the selected app data root', () =>
     assert.ok(uris.includes('file:///app/Documents/lista-autobase-key.txt'))
     assert.ok(uris.every((uri) => uri.startsWith('file:///app/Documents/')))
     assert.deepEqual(localDataDocumentUris(''), [])
+})
+
+// The regression this file exists for: the backend's storage root is
+// `<data>/lista`, but the Corestore holding the personal base is the SIBLING
+// `<data>/lista-local` (backend.mjs derives it as `${storagePath}-local`).
+// Deleting only the root left the whole project database in place, so the app
+// rebooted back into the base — and the shared lists — it had just "deleted".
+test('reset deletes the personal-base Corestore, not just the storage root beside it', () => {
+    const uris = localDataDocumentUris('file:///app/Documents')
+    assert.ok(uris.includes('file:///app/Documents/lista-local'))
+    assert.ok(uris.includes('file:///app/Documents/lista-healed-orphans.json'))
+})
+
+test('reset also sweeps backend siblings discovered in the data root', () => {
+    const uris = localDataDocumentUris('file:///app/Documents', [
+        'lista',
+        'lista-local',
+        'lista-local.quarantine-1784315132495',
+        'lista.quarantine-1782561901310-1',
+    ])
+    assert.ok(uris.includes('file:///app/Documents/lista-local.quarantine-1784315132495'))
+    assert.ok(uris.includes('file:///app/Documents/lista.quarantine-1782561901310-1'))
+    assert.equal(new Set(uris).size, uris.length, 'known and discovered entries must not duplicate')
+})
+
+test('reset leaves non-Listam entries in the shared app data root alone', () => {
+    assert.deepEqual(
+        listamDataEntryNames([
+            'lista',
+            'lista-local',
+            'RCTAsyncLocalStorage_V1',
+            'ExponentExperienceData',
+            'listaria-notes',
+            'lista_export.json',
+            'notlista',
+        ]),
+        ['lista', 'lista-local'],
+    )
+})
+
+test('reset refuses directory entries that could escape the data root', () => {
+    assert.deepEqual(listamDataEntryNames(['..', 'lista-local/../../Library', 'lista-x\\..\\y']), [])
 })
 
 test('reset preserves trial and paywall eligibility while deleting user content', () => {

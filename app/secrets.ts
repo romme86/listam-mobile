@@ -4,6 +4,7 @@ import {
     deleteAsync,
     getInfoAsync,
     readAsStringAsync,
+    readDirectoryAsync,
 } from 'expo-file-system/legacy'
 import {
     LEGACY_SECRET_FILES,
@@ -191,11 +192,36 @@ export async function deleteAllLocalData(baseDirUri: string): Promise<void> {
         failures.push('preferences')
     }
 
-    for (const uri of localDataDocumentUris(baseDirUri)) {
+    // Enumerating the data root catches backend artifacts the fixed list does not
+    // know about (recovery quarantines, and whatever the next derived sibling
+    // path is called). It is the safety net, not the contract: a listing that
+    // fails is reported, but must not stop the known roots from being deleted.
+    let entryNames: string[] = []
+    try {
+        entryNames = await readDirectoryAsync(baseDirUri)
+    } catch {
+        failures.push('data-directory listing')
+    }
+
+    const documentUris = localDataDocumentUris(baseDirUri, entryNames)
+    for (const uri of documentUris) {
         try {
             await deleteAsync(uri, { idempotent: true })
         } catch {
             failures.push(`file:${uri}`)
+        }
+    }
+
+    // deleteAsync is idempotent, so it stays silent both when a path was never
+    // there and when it is still there afterwards. Only re-reading can tell a
+    // real deletion from a no-op — without this, a reset that missed the
+    // Corestore root reported success just as loudly as one that cleared it.
+    for (const uri of documentUris) {
+        try {
+            const info = await getInfoAsync(uri)
+            if (info.exists) failures.push(`left-behind:${uri}`)
+        } catch {
+            failures.push(`verify:${uri}`)
         }
     }
 

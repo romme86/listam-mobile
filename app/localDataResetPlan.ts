@@ -35,14 +35,49 @@ export function localSecretKeys(handlesRaw: string | null, legacyCardsRaw: strin
     return [...keys]
 }
 
-export function localDataDocumentUris(baseDirUri: string): string[] {
+// Every backend on-disk artifact is named `lista`, or `lista` + a separator.
+// Matching the family rather than listing members is deliberate: the backend
+// derives sibling paths from its storage root at runtime (`${storagePath}-local`
+// for the personal Corestore, `${storagePath}-healed-orphans.json`, and
+// `.quarantine-<stamp>` copies from storage recovery), and a fixed list silently
+// falls behind the next one that is added. The separator class keeps unrelated
+// app files (and anything merely starting with "lista") out of a destructive
+// sweep.
+export const LISTAM_DATA_ENTRY_PATTERN = /^lista($|[-.])/
+
+// Deleted whether or not the directory listing is available, so a reset still
+// clears the known roots when enumeration fails. `lista-local` belongs here
+// above all: it is the Corestore holding the personal base, and while it
+// survived, a reset only cleared the storage root beside it — so the backend
+// rebooted straight back into the project (Autobase re-adopts the base key and
+// encryption key from that store's local-core user data, keychain or not),
+// re-joining every shared list from the credentials the personal base carries.
+export const CORE_LOCAL_DATA_ENTRIES = Object.freeze([
+    'lista',                        // storage root: shared list bases, auto-backups, outbox
+    'lista-local',                  // personal base Corestore — the project database itself
+    'lista.lock',                   // storage lease
+    'lista-healed-orphans.json',    // orphan-heal bookkeeping, written beside the root
+    ...Object.values(LEGACY_SECRET_FILES),
+])
+
+// Entry names come from a directory listing, so they are plain names — but this
+// feeds a recursive delete, so reject anything that could climb out of the app
+// data root rather than trusting that.
+export function listamDataEntryNames(entryNames: readonly string[]): string[] {
+    return entryNames.filter((name) => (
+        typeof name === 'string' &&
+        !name.includes('/') &&
+        !name.includes('\\') &&
+        LISTAM_DATA_ENTRY_PATTERN.test(name)
+    ))
+}
+
+export function localDataDocumentUris(baseDirUri: string, entryNames: readonly string[] = []): string[] {
     if (!baseDirUri) return []
     const root = baseDirUri.endsWith('/') ? baseDirUri : `${baseDirUri}/`
-    return [
-        `${root}lista`,
-        `${root}lista.lock`,
-        ...Object.values(LEGACY_SECRET_FILES).map((filename) => `${root}${filename}`),
-    ]
+    const names = new Set<string>(CORE_LOCAL_DATA_ENTRIES)
+    for (const name of listamDataEntryNames(entryNames)) names.add(name)
+    return [...names].map((name) => `${root}${name}`)
 }
 
 export const LOCAL_DATA_MANIFEST_KEYS = {
