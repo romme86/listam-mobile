@@ -64,8 +64,8 @@ export type PreferencesState = {
     // Per-device: which list the app opens to on launch (null = first list).
     defaultListId: string | null
     // Per-device switch for the opt-in board capability (off by default — the
-    // app is a grocery + to-do list app out of the box). When off, the "New
-    // board" create tile is hidden; existing boards stay visible.
+    // app starts with one grocery list). When off, the "New board" create tile
+    // is hidden; existing boards stay visible.
     boardEnabled: boolean
     // Per-device master switch for the day-plan Overview AND every plan
     // behavior that feeds it (triple-tap capture, swipe-right flag, long-press

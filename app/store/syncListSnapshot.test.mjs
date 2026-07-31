@@ -7,6 +7,7 @@ import ts from 'typescript'
 import {
     buildPeerLabelItem,
     buildPresenceItem,
+    buildBuiltinVisibilityItem,
     buildSurfaceLabelItem,
     PEER_LABEL_LIST_ID,
     PEER_LABEL_LIST_TYPE,
@@ -84,9 +85,24 @@ test('structured label snapshot replaces only its named reserved bucket', () => 
         items: [current],
     }))
 
-    assert.equal(state.itemsById['writer-a'].labelName, 'Current A')
-    assert.equal(state.itemsById['writer-b'], undefined, 'stale peer label was removed')
-    assert.ok(state.itemsById[surface.id], 'the independent surface-label bucket survives')
+    const rows = Object.values(state.itemsById)
+    assert.equal(rows.find((item) => item.listId === PEER_LABEL_LIST_ID)?.labelName, 'Current A')
+    assert.equal(rows.some((item) => item.writerKey === 'writer-b'), false, 'stale peer label was removed')
+    assert.ok(rows.some((item) => item.listId === surface.listId && item.id === surface.id), 'the independent surface-label bucket survives')
+})
+
+test('metadata channels that reuse a surface id coexist in the label store', () => {
+    const { default: reducer, labelsActions } = labels
+    let state = reducer(undefined, { type: '@@INIT' })
+    const surface = buildSurfaceLabelItem({ listId: 'default', type: 'shopping', name: 'Weekly shop', updatedAt: 1 })
+    const visibility = buildBuiltinVisibilityItem({ listId: 'default', type: 'shopping', hidden: true, updatedAt: 2 })
+
+    state = reducer(state, labelsActions.labelsApplied([surface, visibility]))
+
+    const rows = Object.values(state.itemsById)
+    assert.equal(rows.length, 2)
+    assert.ok(rows.some((item) => item.listId === surface.listId && item.labelName === 'Weekly shop'))
+    assert.ok(rows.some((item) => item.listId === visibility.listId && item.builtinHidden === true))
 })
 
 test('structured presence snapshot removes stale peers, including when empty', () => {

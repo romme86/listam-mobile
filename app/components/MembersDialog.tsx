@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { View, Text, Modal, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native'
-import { isOnlineNow, averageOnlineMs, type PresenceEntry } from '@listam/domain'
+import { averageOnlineMs, type PresenceEntry } from '@listam/domain'
 import { makeDialogStyles } from './_styles'
 import { useTheme } from '../theme'
 import { useI18n } from '../i18n'
-import { formatAgo, formatUptime, shortKey } from '@listam/domain/peer-display'
+import { formatAgo, formatUptime, isDeviceOnline, shortKey } from '@listam/domain/peer-display'
 import type { CompactionInfo, MembershipRoster } from '../store/devicesSlice'
 
 type MembersDialogProps = {
@@ -123,7 +123,8 @@ export function MembersDialog({
                     <ScrollView style={{ maxHeight: 220 }} showsVerticalScrollIndicator={false}>
                         {writers.map((m) => {
                             const p = presence.get(m.writerKey)
-                            const online = isOnlineNow(p, nowTick)
+                            const isSelf = m.isSelf || m.writerKey === roster?.localWriterKey
+                            const online = isDeviceOnline({ isSelf, presence: p, now: nowTick })
                             const lastActiveAt = p?.lastActiveAt ?? 0
                             const lastInteractionAt = p?.lastInteractionAt ?? 0
                             const avgMs = averageOnlineMs(p)
@@ -164,7 +165,7 @@ export function MembersDialog({
                                             {peerLabels.get(m.writerKey) || shortKey(m.writerKey)}
                                         </Text>
                                         <Text style={{ color: t.colors.placeholder, fontSize: 12, marginTop: 2 }}>
-                                            {[m.isOwner ? i18n.t('members.role.owner') : null, m.isSelf ? i18n.t('members.role.self') : null]
+                                            {[m.isOwner ? i18n.t('members.role.owner') : null, isSelf ? i18n.t('members.role.self') : null]
                                                 .filter(Boolean)
                                                 .join(' - ') || i18n.t('members.role.member')}
                                         </Text>
@@ -179,7 +180,7 @@ export function MembersDialog({
                                             </Text>
                                         ) : null}
                                     </View>
-                                    {canAdminister && !m.isOwner && !m.isSelf ? (
+                                    {canAdminister && !m.isOwner && !isSelf ? (
                                         <TouchableOpacity
                                             onPress={() => confirmRemove(m.writerKey)}
                                             accessibilityRole="button"

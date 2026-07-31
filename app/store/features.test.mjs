@@ -7,16 +7,16 @@
 //   - hydration migration: legacy prefs with boards/overview on activate
 //     advanced with every feature (nothing an existing user had disappears)
 //   - parseFeatureFlags: persisted-JSON hardening
-//   - nav library: the To-do surface gates on features.todo with content-wins
-//     (mirrors the Board gate), so synced todo items are never hidden.
+//   - nav library: feature switches expose creation actions, but do not
+//     synthesize empty Board/Todo defaults; legacy content remains reachable.
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import ts from 'typescript'
-import { surfaceLabelKey } from '@listam/domain'
-import { DEFAULT_LIST_ID, TODO_LIST_TYPE } from '@listam/domain/identity'
+import { buildBuiltinVisibilityItem, surfaceLabelKey } from '@listam/domain'
+import { DEFAULT_LIST_ID, DEFAULT_LIST_TYPE, TODO_LIST_TYPE } from '@listam/domain/identity'
 import { BOARD_LIST_TYPE } from '@listam/domain/board'
 
 const STORE_DIR = path.dirname(fileURLToPath(import.meta.url))
@@ -58,6 +58,7 @@ const { selectNavLibrary } = selectors
 
 const TODO_SURFACE = surfaceLabelKey(DEFAULT_LIST_ID, TODO_LIST_TYPE)
 const BOARD_SURFACE = surfaceLabelKey(DEFAULT_LIST_ID, BOARD_LIST_TYPE)
+const GROCERY_SURFACE = surfaceLabelKey(DEFAULT_LIST_ID, DEFAULT_LIST_TYPE)
 
 const initial = () => reducer(undefined, { type: '@@INIT' })
 
@@ -146,12 +147,12 @@ test('parseFeatureFlags hardens the persisted blob', () => {
     assert.deepEqual(parseFeatureFlags('{"todo":"yes"}'), {})
 })
 
-// ---- nav library: To-do surface gate (content wins) ----
+// ---- nav library: Board/Todo are content-only legacy surfaces ----
 
-function navState({ todoEnabled, boardEnabled = false, items = {} }) {
+function navState({ todoEnabled, boardEnabled = false, items = {}, labels = {} }) {
     return {
         lists: { itemsById: items, listsById: {}, selectedListId: TODO_SURFACE },
-        labels: { itemsById: {} },
+        labels: { itemsById: labels },
         preferences: {
             defaultListId: null,
             boardEnabled,
@@ -167,9 +168,11 @@ test('todo surface hidden in basic mode when default carries no todo items', () 
     assert.equal(lib.listsById[BOARD_SURFACE], undefined)
 })
 
-test('todo surface shown when the feature is on', () => {
+test('creation features do not synthesize empty Board/Todo defaults', () => {
     const lib = selectNavLibrary(navState({ todoEnabled: true }))
-    assert.ok(lib.listsById[TODO_SURFACE])
+    assert.equal(lib.listsById[TODO_SURFACE], undefined)
+    const boards = selectNavLibrary(navState({ todoEnabled: true, boardEnabled: true }))
+    assert.equal(boards.listsById[BOARD_SURFACE], undefined)
 })
 
 test('content wins: synced todo items keep the surface reachable with the flag off', () => {
@@ -178,4 +181,27 @@ test('content wins: synced todo items keep the surface reachable with the flag o
         items: { t1: { id: 't1', listId: DEFAULT_LIST_ID, listType: TODO_LIST_TYPE, text: 'call mum' } },
     }))
     assert.ok(lib.listsById[TODO_SURFACE])
+})
+
+test('a synced deletion hides Groceries until newer default content resurrects it', () => {
+    const hidden = buildBuiltinVisibilityItem({
+        listId: DEFAULT_LIST_ID,
+        type: DEFAULT_LIST_TYPE,
+        hidden: true,
+        updatedAt: 10,
+    })
+    const withoutContent = selectNavLibrary(navState({
+        todoEnabled: false,
+        labels: { [hidden.id]: hidden },
+    }))
+    assert.equal(withoutContent.listsById[GROCERY_SURFACE], undefined)
+
+    const resurrected = selectNavLibrary(navState({
+        todoEnabled: false,
+        labels: { [hidden.id]: hidden },
+        items: {
+            milk: { id: 'milk', listId: DEFAULT_LIST_ID, listType: DEFAULT_LIST_TYPE, text: 'Milk', updatedAt: 11 },
+        },
+    }))
+    assert.ok(resurrected.listsById[GROCERY_SURFACE])
 })

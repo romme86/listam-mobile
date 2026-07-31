@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import {
     View,
+    Text,
+    TouchableOpacity,
     Share,
     Alert,
     AppState,
@@ -95,11 +97,19 @@ import { ValueRateSheet } from './components/ValueRateSheet'
 import { useListPager } from './nav/useListPager'
 import { selectGroupedLists, selectCurrentListView, DEFAULT_VIEW, isBuiltinSurfaceId, builtinSurfaceNameKey } from './store/registrySelectors'
 import { selectBoardConfig } from './store/boardConfigSlice'
-import { selectPeerLabels, selectValueReturnEnabled } from './store/labelsSlice'
+import { labelsActions, selectPeerLabels, selectValueReturnEnabled } from './store/labelsSlice'
 import { selectPresence } from './store/presenceSlice'
 import { buildListMetaItem, buildGroupMetaItem, type RegistryListView } from '@listam/domain/list-registry'
 import { UNGROUPED_GROUP_ID } from '@listam/domain/list-nav'
-import { buildPeerLabelItem, buildSurfaceLabelItem, buildBuiltinGroupItem, buildValueReturnItem, surfaceLabelKey, MAX_LABEL_NAME } from '@listam/domain'
+import {
+    buildPeerLabelItem,
+    buildSurfaceLabelItem,
+    buildBuiltinGroupItem,
+    buildBuiltinVisibilityItem,
+    buildValueReturnItem,
+    surfaceLabelKey,
+    MAX_LABEL_NAME,
+} from '@listam/domain'
 import { BOARD_WRITE_TYPE, BOARD_LIST_TYPE, isBoardType, buildStatusChange, validateTicketDraft } from '@listam/domain/board'
 import {
     reducePlan,
@@ -280,10 +290,12 @@ function AppInner() {
     const { lib, currentId, position, commit } = useListPager()
 
     const currentListType = lib.listsById[currentId]?.type
+    const hasCurrentList = !!lib.listsById[currentId]
     // The current surface's display name: its synced rename, else the localized
     // built-in fallback (a fresh, un-renamed built-in), else the raw id.
     const currentListName = useMemo(() => {
         const rec = lib.listsById[currentId]
+        if (!rec) return i18n.t('desktop.noList.title')
         if (rec?.name) return rec.name
         if (isBuiltinSurfaceId(currentId)) return i18n.t(builtinSurfaceNameKey(decodeSurface(currentId).listType))
         return currentId
@@ -345,7 +357,7 @@ function AppInner() {
     const [menuInitialView, setMenuInitialView] = useState<'lists' | 'settings'>('lists')
     // The day-plan Overview is an OPT-IN capability behind its own preference
     // (preferences.overviewEnabled, general settings). By default the app is just
-    // a grocery + to-do list app: no Overview surface, and none of the plan
+    // one grocery list: no Overview surface, and none of the plan
     // gestures (triple-tap, swipe-right flag, long-press sheet) are wired.
     // overviewVisible is whether the surface is currently shown; it is persisted
     // (PREF_OVERVIEW_OPEN) via setOverviewShown so an opted-in user relaunches
@@ -1386,6 +1398,12 @@ function AppInner() {
     }, [selectedTicket, dispatch, sendRPC])
 
     const handleRequestAdd = useCallback(() => {
+        if (!hasCurrentList) {
+            setMenuInitialView('lists')
+            setPendingListSettingsId(null)
+            setListsMenuVisible(true)
+            return
+        }
         // A board ticket needs its rigor fields, so the plain add bar can't create
         // one — route every add entry point (FAB, empty-state, double-tap) to the
         // ticket create form instead.
@@ -1395,7 +1413,7 @@ function AppInner() {
         }
         setAddText('')
         setIsAdding(true)
-    }, [isBoard])
+    }, [hasCurrentList, isBoard])
 
     const handleSelectList = useCallback((listId: string, type: string) => {
         dispatch(listsActions.selectedListChanged({ listId, listType: type }))
@@ -1565,24 +1583,44 @@ function AppInner() {
 
     // Promote ONE list to its own shared base and offer its co-edit invite via
     // the OS share sheet. Others who join this invite get only this list.
-    const handleShareList = useCallback(async (listId: string) => {
-        // The built-in surfaces share the 'default' base and can't be promoted to
-        // their own shared base (desktop blocks this too).
-        if (decodeSurface(listId).listId === DEFAULT_LIST_ID) {
-            snackbar.show(i18n.t('shareList.failed'), 'error')
+    const handleShareList = useCallback(async (surfaceId: string, type?: string, name?: string) => {
+        const decoded = decodeSurface(surfaceId)
+        const listType = type || decoded.listType || lib.listsById[surfaceId]?.type || DEFAULT_LIST_TYPE
+        // Legacy default Board/Todo surfaces remain multiplexed and cannot be
+        // promoted safely. The default grocery is handled specially by the
+        // backend: it is re-identified as a normal shared list so a recipient
+        // sees it alongside their own starter grocery.
+        if (decoded.listId === DEFAULT_LIST_ID && (isBoardType(listType) || isTodoType(listType))) {
+            snackbar.show(i18n.t('shareList.builtinBlocked'), 'error')
             return
         }
-        let result: { ok?: boolean; invite?: string } | null = null
+        let result: { ok?: boolean; invite?: string; listId?: string } | null = null
         try {
-            const reply = await sendRPCWithReply(RPC_SHARE_LIST, JSON.stringify({ listId }))
+            const reply = await sendRPCWithReply(RPC_SHARE_LIST, JSON.stringify({
+                listId: decoded.listId,
+                listType,
+                name: name || lib.listsById[surfaceId]?.name || undefined,
+            }))
             result = reply ? JSON.parse(reply) : null
         } catch { result = null }
         if (!result || !result.ok || !result.invite) {
             snackbar.show(i18n.t('shareList.failed'), 'error')
             return
         }
+        // Sharing the built-in grocery promotes it to a new canonical list id.
+        // Follow that id immediately so the owner stays on the same content
+        // when the old built-in surface's synced hide marker arrives.
+        if (result.listId && result.listId !== decoded.listId) {
+            if (currentId === surfaceId) {
+                dispatch(listsActions.selectedListChanged({ listId: result.listId, listType }))
+            }
+            if (defaultListId === surfaceId || defaultListId === decoded.listId) {
+                dispatch(preferencesActions.defaultListIdSet(result.listId))
+                void AsyncStorage.setItem(PREF_DEFAULT_LIST, result.listId)
+            }
+        }
         setShareInvite({ scope: 'list', invite: result.invite })
-    }, [sendRPCWithReply, i18n, snackbar])
+    }, [currentId, defaultListId, dispatch, sendRPCWithReply, i18n, snackbar, lib])
 
     const handleShareInvite = useCallback(() => {
         if (!shareInvite) return
@@ -1788,13 +1826,13 @@ function AppInner() {
         )
     }, [animate, dispatch, i18n, lib, sendRPC])
 
-    // Delete a whole named list (registry tombstone + cascade its items), mirrors
-    // desktop's deleteList. Built-in surfaces (Groceries/Board/Todo) share the
-    // 'default' bucket and have no registry meta-item, so they can't be deleted —
-    // only cleared; the button is hidden for them and this bails as a safety net.
+    // Delete a whole list. Named lists use a registry tombstone; legacy built-in
+    // surfaces use the synced visibility channel because their shared `default`
+    // bucket has no per-surface registry identity.
     const handleDeleteList = useCallback((listId: string) => {
         const rec = lib.listsById[listId]
-        if (!rec || isBuiltinSurfaceId(listId)) return
+        if (!rec) return
+        const builtin = isBuiltinSurfaceId(listId)
         Alert.alert(
             i18n.t('main.deleteList.title'),
             i18n.t('main.deleteList.message'),
@@ -1805,11 +1843,47 @@ function AppInner() {
                     style: 'destructive',
                     onPress: () => {
                         animate()
+                        setIsAdding(false)
+                        setAddText('')
                         // Cascade the items FIRST, while the list's base is still
                         // routed — the registry tombstone can trigger a shared-base
                         // reconcile that closes the base and would strand later writes.
                         const items = selectItemsForList(store.getState(), listId)
                         items.forEach((item) => sendRPC(RPC_DELETE, JSON.stringify({ item })))
+                        const fallback = groupedLists.flatMap((group) => group.lists)
+                            .find((list) => list.id !== listId)
+                        if (builtin) {
+                            const decoded = decodeSurface(listId)
+                            const newestItemWrite = items.reduce(
+                                (max, item) => Math.max(max, Number(item.updatedAt) || 0),
+                                0,
+                            )
+                            const marker = buildBuiltinVisibilityItem({
+                                listId: decoded.listId,
+                                type: decoded.listType || rec.type,
+                                hidden: true,
+                                updatedAt: Math.max(Date.now(), newestItemWrite + 1),
+                            }) as unknown as ListEntry
+                            // Apply optimistically so the deleted surface leaves
+                            // navigation immediately; the backend then replicates
+                            // the same durable marker to every owned device.
+                            dispatch(labelsActions.labelItemApplied(marker))
+                            sendRPC(RPC_UPDATE, JSON.stringify({ item: marker }))
+                            dispatch(listsActions.selectedListItemsReplaced({
+                                listId,
+                                listType: rec.type,
+                                items: [],
+                            }))
+                            if (defaultListId === listId || defaultListId === decoded.listId) {
+                                dispatch(preferencesActions.defaultListIdSet(null))
+                                void AsyncStorage.removeItem(PREF_DEFAULT_LIST)
+                            }
+                            if (currentId === listId && fallback) {
+                                dispatch(listsActions.selectedListChanged({ listId: fallback.id, listType: fallback.type }))
+                            }
+                            haptics.delete()
+                            return
+                        }
                         // Soft-delete tombstone: reduceRegistry drops regDeleted metas
                         // (mirrors desktop deleteListMeta). Rides the normal LWW pipeline.
                         const now = Date.now()
@@ -1830,19 +1904,18 @@ function AppInner() {
                         // Remove the bucket outright (not just empty it) so the list
                         // can't resurface as a stray Ungrouped list via extraLists.
                         dispatch(listsActions.listRemoved({ listId }))
-                        // If the deleted list was the one on screen, fall back to Groceries.
-                        if (currentId === listId) {
-                            dispatch(listsActions.selectedListChanged({
-                                listId: `${DEFAULT_LIST_ID}:${DEFAULT_LIST_TYPE}`,
-                                listType: DEFAULT_LIST_TYPE,
-                            }))
+                        // If the deleted list was on screen, select another visible
+                        // list when one exists. Otherwise the shell shows its
+                        // explicit no-list state and keeps the create menu handy.
+                        if (currentId === listId && fallback) {
+                            dispatch(listsActions.selectedListChanged({ listId: fallback.id, listType: fallback.type }))
                         }
                         haptics.delete()
                     },
                 },
             ]
         )
-    }, [animate, currentId, dispatch, i18n, lib, sendRPC])
+    }, [animate, currentId, defaultListId, dispatch, groupedLists, i18n, lib, sendRPC])
 
     // Show paywall if trial expired and not subscribed
     if (subscription.shouldShowPaywall) {
@@ -2043,7 +2116,25 @@ function AppInner() {
                 notify={notify}
             />
 
-            {!overviewOpen && (
+            {!overviewOpen && (!hasCurrentList ? (
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: t.spacing.xxl, gap: t.spacing.lg }}>
+                <Text style={{ color: t.colors.text, ...t.type.title, textAlign: 'center' }}>
+                    {i18n.t('desktop.noList.title')}
+                </Text>
+                <Text style={{ color: t.colors.textSecondary, ...t.type.body, lineHeight: 22, textAlign: 'center' }}>
+                    {i18n.t('desktop.noList.subtitle')}
+                </Text>
+                <TouchableOpacity
+                    style={{ backgroundColor: t.colors.primary, paddingHorizontal: t.spacing.xl, paddingVertical: t.spacing.md, borderRadius: t.radius.lg }}
+                    onPress={() => handleCreateList(DEFAULT_LIST_TYPE)}
+                    activeOpacity={0.7}
+                >
+                    <Text style={{ color: t.colors.onPrimary, ...t.type.label }}>
+                        {i18n.t('lists.menu.createGrocery')}
+                    </Text>
+                </TouchableOpacity>
+            </View>
+            ) : (
             <ListSwipePager
                 canPage={!isAdding && !listsMenuVisible && !joinDialogVisible && backupPasswordDialogReason === null && !membersDialogVisible && !ownedDevicesVisible && !leafPairingVisible && !isJoining && boardTicketId === null && !createTicketVisible}
                 reduceMotion={reduceMotion}
@@ -2090,9 +2181,9 @@ function AppInner() {
                 )}
             </View>
             </ListSwipePager>
-            )}
+            ))}
 
-            {!overviewOpen && !isAdding && showFab && !isBoard && <Fab onPress={handleRequestAdd} bottomOffset={insets.bottom + 20} />}
+            {!overviewOpen && hasCurrentList && !isAdding && showFab && !isBoard && <Fab onPress={handleRequestAdd} bottomOffset={insets.bottom + 20} />}
 
             <PlanSheet
                 visible={planSheetItem !== null}

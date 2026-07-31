@@ -64,11 +64,19 @@ const TODO_SURFACE = surfaceLabelKey(DEFAULT_LIST_ID, TODO_LIST_TYPE) // 'defaul
 // selectCurrentListView reads state.lists (items/lists/selected), the separate
 // state.labels (surface names + built-in group placement), and state.preferences.
 function makeState(selectedListId, builtinViews) {
+    const selectedType = selectedListId === TODO_SURFACE ? TODO_LIST_TYPE : DEFAULT_LIST_TYPE
     return {
-        lists: { itemsById: {}, listsById: {}, selectedListId },
+        // Board/Todo built-ins are legacy content-only surfaces now. Seed one
+        // row when exercising the Todo view so the selector keeps it reachable.
+        lists: {
+            itemsById: selectedListId === TODO_SURFACE
+                ? { legacyTodo: { id: 'legacyTodo', listId: DEFAULT_LIST_ID, listType: selectedType, text: 'Legacy task' } }
+                : {},
+            listsById: {},
+            selectedListId,
+        },
         labels: { itemsById: {} },
-        // features.todo on so the built-in To-do surface exists for the clamp
-        // test below (the progressive-disclosure gate hides it otherwise).
+        // Feature flags control creation actions, not empty built-in surfaces.
         preferences: { defaultListId: null, boardEnabled: false, features: { todo: true }, builtinViews },
     }
 }

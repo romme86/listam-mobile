@@ -3,8 +3,16 @@ import { reduceRegistry, REGISTRY_LIST_ID, REGISTRY_LIST_TYPE, type RegistryList
 import { toNavLibrary, type NavLibrary } from '@listam/domain/list-nav'
 import { DEFAULT_LIST_ID, DEFAULT_LIST_TYPE, TODO_LIST_TYPE, isTodoType } from '@listam/domain/identity'
 import { BOARD_LIST_TYPE, isBoardType } from '@listam/domain/board'
-import { PEER_LABEL_LIST_ID, SURFACE_LABEL_LIST_ID, BUILTIN_GROUP_LIST_ID, PLAN_LIST_ID, surfaceLabelKey } from '@listam/domain'
-import { selectSurfaceLabels, selectBuiltinGroups } from './labelsSlice'
+import {
+    PEER_LABEL_LIST_ID,
+    SURFACE_LABEL_LIST_ID,
+    BUILTIN_GROUP_LIST_ID,
+    BUILTIN_VISIBILITY_LIST_ID,
+    PLAN_LIST_ID,
+    isBuiltinSurfaceHidden,
+    surfaceLabelKey,
+} from '@listam/domain'
+import { selectSurfaceLabels, selectBuiltinGroups, selectLabelItems } from './labelsSlice'
 import type { RootState } from './store'
 
 // Defaults for a list's view settings, applied when a list carries no override.
@@ -28,8 +36,6 @@ export const DEFAULT_VIEW: RegistryListView = {
 
 const selectListsState = (state: RootState) => state.lists
 const selectDefaultListId = (state: RootState) => state.preferences.defaultListId
-const selectBoardEnabled = (state: RootState) => state.preferences.boardEnabled
-const selectTodoEnabled = (state: RootState) => state.preferences.features.todo
 const selectCurrentListId = (state: RootState) => state.lists.selectedListId
 // Device-local per-surface view overrides for the built-in surfaces (they can't
 // carry a synced registry meta-item, so this is where their view lives).
@@ -60,26 +66,27 @@ export function isBuiltinSurfaceId(id: string): boolean {
 // have no registry meta-item. We synthesize one nav entry per surface with a
 // COMPOSITE id (= surfaceLabelKey) so the pager can tell them apart, name each
 // from the synced rename channel, and file each into its synced group placement.
-// Board follows desktop's gate: shown when boardEnabled OR a board ticket already
-// exists on 'default' (so an incoming shared board stays reachable). The To-do
-// surface gates the same way on the todo feature flag — content wins, so a
-// basic-mode device that joins a mesh with todo items still sees them.
+// Board and Todo are legacy compatibility surfaces only. A new user creates a
+// named board or to-do list, so toggling their creation features must not also
+// materialize an empty built-in. Existing content still wins: an older project
+// that already has default-bucket Board/Todo rows keeps those surfaces reachable.
 export const selectNavLibrary = createSelector(
     selectListsState,
     selectRegistry,
     selectDefaultListId,
     selectSurfaceLabels,
     selectBuiltinGroups,
-    selectBoardEnabled,
-    selectTodoEnabled,
+    selectLabelItems,
     selectBuiltinViews,
-    (lists, registry, defaultListId, surfaceLabels, builtinGroups, boardEnabled, todoEnabled, builtinViews): NavLibrary => {
+    (lists, registry, defaultListId, surfaceLabels, builtinGroups, labelItems, builtinViews): NavLibrary => {
         const items = Object.values(lists.itemsById)
+        const surfaceState = [...items, ...labelItems]
         const hasBoardOnDefault = items.some((it) => it.listId === DEFAULT_LIST_ID && isBoardType(it.listType))
         const hasTodoOnDefault = items.some((it) => it.listId === DEFAULT_LIST_ID && isTodoType(it.listType))
         const builtinLists = BUILTIN_SURFACE_TYPES.filter((type) => {
-            if (isBoardType(type)) return boardEnabled || hasBoardOnDefault
-            if (isTodoType(type)) return todoEnabled || hasTodoOnDefault
+            if (isBuiltinSurfaceHidden(surfaceState, DEFAULT_LIST_ID, type)) return false
+            if (isBoardType(type)) return hasBoardOnDefault
+            if (isTodoType(type)) return hasTodoOnDefault
             return true
         }).map((type, i) => {
             const key = surfaceLabelKey(DEFAULT_LIST_ID, type)
@@ -110,6 +117,7 @@ export const selectNavLibrary = createSelector(
                     l.id !== PEER_LABEL_LIST_ID &&
                     l.id !== SURFACE_LABEL_LIST_ID &&
                     l.id !== BUILTIN_GROUP_LIST_ID &&
+                    l.id !== BUILTIN_VISIBILITY_LIST_ID &&
                     l.id !== PLAN_LIST_ID &&
                     l.id !== DEFAULT_LIST_ID &&
                     !filed.has(l.id),

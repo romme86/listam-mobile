@@ -13,6 +13,7 @@ import {
 } from '@listam/domain'
 import type { RootState } from './store'
 import type { ListEntry } from '../components/_types'
+import { baseScopedKey } from '@listam/domain/identity'
 
 // isLabelItem now also covers the presence channel (so every list projection
 // hides presence too), but presence lives in its own slice — exclude it here so
@@ -24,9 +25,11 @@ const isLabelOnly = (item: ListEntry) => isLabelItem(item) && !isPresenceItem(it
 // deliberately filtered OUT of listsSlice (so they never render as a list row
 // or spawn a phantom list); this slice is the single place they are retained,
 // keyed by item id, so the members screen + built-in surface names can resolve
-// human-readable labels. LWW resolution is delegated to the shared reducers.
+// human-readable labels. Different metadata channels deliberately reuse the
+// same surface id, so storage is scoped by base + listId + item id rather than
+// the bare id. LWW resolution is delegated to the shared reducers.
 export type LabelsState = {
-    // item id -> raw label item
+    // base/list-scoped identity -> raw label item
     itemsById: Record<string, ListEntry>
 }
 
@@ -49,7 +52,7 @@ const labelsSlice = createSlice({
         // mostly arrive per-item, so this must NOT clear existing labels).
         labelsApplied(state, action: PayloadAction<ListEntry[]>) {
             for (const item of action.payload) {
-                if (isLabelOnly(item) && item.id) state.itemsById[item.id] = item
+                if (isLabelOnly(item) && item.id) state.itemsById[baseScopedKey(item)] = item
             }
         },
         // A structured SYNC_LIST envelope is an exact snapshot of one reserved
@@ -76,18 +79,22 @@ const labelsSlice = createSlice({
                     && normalized.listType === listType
                     && normalized.id
                 ) {
-                    state.itemsById[normalized.id] = normalized
+                    state.itemsById[baseScopedKey(normalized)] = normalized
                 }
             }
         },
         // Fold a single incremental item (add/update). Non-label items are ignored.
         labelItemApplied(state, action: PayloadAction<ListEntry>) {
             const item = action.payload
-            if (isLabelOnly(item) && item.id) state.itemsById[item.id] = item
+            if (isLabelOnly(item) && item.id) state.itemsById[baseScopedKey(item)] = item
         },
         labelItemRemoved(state, action: PayloadAction<ListEntry>) {
             const item = action.payload
-            if (item.id && state.itemsById[item.id]) delete state.itemsById[item.id]
+            if (!item.id) return
+            delete state.itemsById[baseScopedKey(item)]
+            // Older in-memory states used the bare id. Redux is normally rebuilt
+            // from sync, but clearing it here keeps hot reload/update safe.
+            delete state.itemsById[item.id]
         },
         labelsCleared(state) {
             state.itemsById = {}
@@ -100,7 +107,7 @@ export default labelsSlice.reducer
 
 const selectLabelsState = (state: RootState) => state.labels
 
-const selectLabelItems = createSelector(selectLabelsState, (state) =>
+export const selectLabelItems = createSelector(selectLabelsState, (state) =>
     Object.values(state.itemsById),
 )
 

@@ -96,13 +96,14 @@ type Props = {
     onSetValueReturn: (surfaceId: string, type: string, enabled: boolean) => void
     onRenameList: (listId: string, name: string) => void
     onDeleteListItems: (listId: string) => void
-    // Delete a whole named list (registry + items). Never wired for built-ins.
+    // Delete a whole list. Built-ins use the synced visibility lifecycle;
+    // registry-backed lists use their normal tombstone.
     onDeleteList: (listId: string) => void
     // Clear the completed items from one list (moved out of the bottom summary).
     onClearDone: (listId: string) => void
     // Single-list sharing: promote one list to its own shared base (shows a
     // co-edit invite), and additively join one shared list via an invite.
-    onShareList: (listId: string) => void
+    onShareList: (listId: string, type?: string, name?: string) => void
     // Mint a whole-project invite (everything syncs to whoever joins it).
     onShareProject: () => void
     // The whole-project (BlindPairing) join — replaces the local base.
@@ -216,6 +217,8 @@ export function ListsMenu(props: Props) {
     }, [allLists, settingsListId])
     const settingsIsBoard = !!settingsList && isBoardType(settingsList.type)
     const settingsIsTodo = !!settingsList && isTodoType(settingsList.type)
+    const settingsIsBuiltin = !!settingsList && isBuiltinSurfaceId(settingsList.id)
+    const settingsBuiltinShareable = settingsIsBuiltin && !settingsIsBoard && !settingsIsTodo
     const listView: RegistryListView = useMemo(
         () => ({ ...DEFAULT_VIEW, ...((settingsList?.view as Partial<RegistryListView>) ?? {}) }),
         [settingsList],
@@ -644,20 +647,17 @@ export function ListsMenu(props: Props) {
                                         </>
                                     )}
 
-                                    {/* Built-in surfaces share the 'default' base and can't be promoted
-                                        to their own shared base — explain that instead of hiding the
-                                        section. A shared list can always mint a fresh invite (the
-                                        backend re-mints on demand). The whole section is gated on the
-                                        Sharing feature — EXCEPT an already-shared list, whose invite
-                                        stays reachable (content wins over the toggle). */}
+                                    {/* Default Groceries is safely promoted by re-identifying it as a
+                                        normal shared list. Legacy default Board/Todo remain blocked.
+                                        A shared list can always mint a fresh invite. */}
                                     {features.sharing || settingsList.baseKey ? (
                                         <>
                                             <Text style={styles.sectionLabel}>{i18n.t('shareList.title')}</Text>
-                                            {isBuiltinSurfaceId(settingsList.id) ? (
+                                            {settingsIsBuiltin && !settingsBuiltinShareable ? (
                                                 <Text style={styles.sectionNote}>{i18n.t('shareList.builtinBlocked')}</Text>
                                             ) : settingsList.baseKey ? (
                                                 <>
-                                                    <TouchableOpacity style={styles.actionRow} onPress={() => { onShareList(settingsList.id); close() }} activeOpacity={0.6}>
+                                                    <TouchableOpacity style={styles.actionRow} onPress={() => { onShareList(settingsList.id, settingsList.type, surfaceName(settingsList)); close() }} activeOpacity={0.6}>
                                                         <Ionicons name="people" size={20} color={t.colors.text} />
                                                         <Text style={styles.actionLabel}>{i18n.t('shareList.showInvite')}</Text>
                                                     </TouchableOpacity>
@@ -665,7 +665,7 @@ export function ListsMenu(props: Props) {
                                                 </>
                                             ) : (
                                                 <>
-                                                    <TouchableOpacity style={styles.actionRow} onPress={() => { onShareList(settingsList.id); close() }} activeOpacity={0.6}>
+                                                    <TouchableOpacity style={styles.actionRow} onPress={() => { onShareList(settingsList.id, settingsList.type, surfaceName(settingsList)); close() }} activeOpacity={0.6}>
                                                         <Ionicons name="share-social-outline" size={20} color={t.colors.text} />
                                                         <Text style={styles.actionLabel}>{i18n.t('shareList.button')}</Text>
                                                     </TouchableOpacity>
@@ -687,15 +687,10 @@ export function ListsMenu(props: Props) {
                                         <Ionicons name="trash-outline" size={20} color={t.colors.danger} />
                                         <Text style={[styles.actionLabel, { color: t.colors.danger }]}>{i18n.t('header.action.deleteAll')}</Text>
                                     </TouchableOpacity>
-                                    {/* Deleting the list itself is only for user-created named lists —
-                                        built-in Groceries/Board/Todo share the 'default' bucket and have
-                                        no registry meta-item to tombstone, so they can only be cleared. */}
-                                    {!isBuiltinSurfaceId(settingsList.id) && (
-                                        <TouchableOpacity style={[styles.actionRow, styles.dangerRow]} onPress={() => onDeleteList(settingsList.id)} activeOpacity={0.6}>
-                                            <Ionicons name="trash" size={20} color={t.colors.danger} />
-                                            <Text style={[styles.actionLabel, { color: t.colors.danger }]}>{i18n.t('header.action.deleteList')}</Text>
-                                        </TouchableOpacity>
-                                    )}
+                                    <TouchableOpacity style={[styles.actionRow, styles.dangerRow]} onPress={() => onDeleteList(settingsList.id)} activeOpacity={0.6}>
+                                        <Ionicons name="trash" size={20} color={t.colors.danger} />
+                                        <Text style={[styles.actionLabel, { color: t.colors.danger }]}>{i18n.t('header.action.deleteList')}</Text>
+                                    </TouchableOpacity>
                                 </ScrollView>
                             ) : null}
                         </>
