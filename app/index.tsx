@@ -66,6 +66,7 @@ import {
 import { useSubscription } from './hooks/useSubscription'
 import { useReduceMotion } from './hooks/useReduceMotion'
 import { useLearnedCategories } from './hooks/useLearnedCategories'
+import { finishJoin, joinInFlightRef, tryBeginJoin } from './hooks/workletHolders'
 import { Header } from './components/Header'
 import { JoinDialog } from './components/JoinDialog'
 import { BackupPasswordDialog } from './components/BackupPasswordDialog'
@@ -452,11 +453,15 @@ function AppInner() {
             pendingConfirmedInviteRef.current = invite
             return
         }
+        if (!tryBeginJoin('project')) {
+            snackbar.show(i18n.t('invite.notification.alreadyJoining'))
+            return
+        }
         setIsJoining(true)
         setCurrentP2PMessage(0)
         isJoiningRef.current = true
         sendRPC(RPC_JOIN_KEY, JSON.stringify({ key: invite }))
-    }, [isJoiningRef, isWorkletReady, sendRPC, setIsJoining])
+    }, [i18n, isJoiningRef, isWorkletReady, sendRPC, setIsJoining, snackbar])
 
     const beginJoinWithInvite = useCallback((rawInvite: string) => {
         const invite = extractInviteFromInput(rawInvite)
@@ -540,10 +545,10 @@ function AppInner() {
         return presentJoinConfirmation(createJoinConfirmationRequest(rawInvite, {
             source,
             pendingInvite: pendingJoinConfirmationInviteRef.current || pendingBackupJoinInviteRef.current,
-            isJoining: isJoiningRef.current,
+            isJoining: joinInFlightRef.current !== null,
             copy: joinConfirmationCopy,
         }))
-    }, [isJoiningRef, joinConfirmationCopy, presentJoinConfirmation])
+    }, [joinConfirmationCopy, presentJoinConfirmation])
 
     useEffect(() => {
         AsyncStorage.multiGet([
@@ -840,7 +845,7 @@ function AppInner() {
             if (!url) return
             const request = planIncomingLinkJoin(url, {
                 pendingInvite: pendingJoinConfirmationInviteRef.current || pendingBackupJoinInviteRef.current,
-                isJoining: isJoiningRef.current,
+                isJoining: joinInFlightRef.current !== null,
                 copy: joinConfirmationCopy,
             })
             if (request) presentJoinConfirmation(request)
@@ -862,7 +867,7 @@ function AppInner() {
         return () => {
             subscription.remove()
         }
-    }, [isJoiningRef, joinConfirmationCopy, presentJoinConfirmation])
+    }, [joinConfirmationCopy, presentJoinConfirmation])
 
     useEffect(() => {
         if (!isWorkletReady) return
@@ -1644,16 +1649,33 @@ function AppInner() {
             snackbar.show(i18n.t('invite.notification.emptyManual'), 'error')
             return
         }
+        if (!tryBeginJoin('list')) {
+            snackbar.show(i18n.t('invite.notification.alreadyJoining'))
+            return
+        }
+        // A shared-list join can spend several seconds discovering and syncing
+        // its peer. Reuse the project-join loading experience for that entire
+        // request instead of leaving the user on the list with no feedback.
+        setIsJoining(true)
+        setCurrentP2PMessage(0)
+        isJoiningRef.current = true
         let result: { ok?: boolean } | null = null
         try {
             const reply = await sendRPCWithReply(RPC_JOIN_LIST, JSON.stringify({ invite: value }))
             result = reply ? JSON.parse(reply) : null
-        } catch { result = null }
+        } catch {
+            result = null
+        } finally {
+            if (finishJoin('list')) {
+                setIsJoining(false)
+                isJoiningRef.current = false
+            }
+        }
         snackbar.show(
             result && result.ok ? i18n.t('joinList.joined') : i18n.t('joinList.failed'),
             result && result.ok ? 'success' : 'error',
         )
-    }, [sendRPCWithReply, i18n, snackbar])
+    }, [sendRPCWithReply, i18n, snackbar, setIsJoining, isJoiningRef])
 
     const handleJoin = useCallback(() => {
         setJoinMode('project')
@@ -1796,6 +1818,9 @@ function AppInner() {
     }, [handleJoinList, joinMode, requestJoinConfirmation])
 
     const handleJoiningCancel = useCallback(() => {
+        // The peer request itself cannot be cancelled. Hide the overlay, but
+        // keep joinInFlightRef owned until its real success/failure arrives so
+        // another join cannot race it.
         setIsJoining(false)
         isJoiningRef.current = false
     }, [setIsJoining, isJoiningRef])

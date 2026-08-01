@@ -33,6 +33,25 @@ export const workletRef: { current: any } = { current: null }
 /** Mirrors Redux `isJoining` so the RPC handler can read it synchronously. */
 export const isJoiningRef: { current: boolean } = { current: false }
 
+/**
+ * The join request that still owns the backend, even if its overlay was
+ * dismissed. Join RPCs are not cancellable, so this prevents a second join
+ * from racing the first and lets only the owning completion clear its state.
+ */
+export const joinInFlightRef: { current: 'project' | 'list' | null } = { current: null }
+
+export function tryBeginJoin(kind: 'project' | 'list'): boolean {
+    if (joinInFlightRef.current !== null) return false
+    joinInFlightRef.current = kind
+    return true
+}
+
+export function finishJoin(kind: 'project' | 'list'): boolean {
+    if (joinInFlightRef.current !== kind) return false
+    joinInFlightRef.current = null
+    return true
+}
+
 /** The current mount's snackbar/alert callback. */
 export const notifyRef: { current: NotifyFn | undefined } = { current: undefined }
 
@@ -47,6 +66,7 @@ export function resetWorkletHolders(): void {
     rpcRef.current = null
     workletRef.current = null
     isJoiningRef.current = false
+    joinInFlightRef.current = null
     notifyRef.current = undefined
     i18nRef.current = null
 }

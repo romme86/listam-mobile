@@ -15,7 +15,7 @@ import {
     persistBackendSecretFromPayload,
 } from '../secrets'
 import { appLogger } from '../logger'
-import { i18nRef, isJoiningRef, notifyRef, rpcRef, workletRef } from './workletHolders'
+import { finishJoin, i18nRef, isJoiningRef, joinInFlightRef, notifyRef, rpcRef, workletRef } from './workletHolders'
 import type { NotifyFn } from './workletHolders'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { appReset } from '../store/store'
@@ -362,7 +362,9 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                         }
                     } else if (payload.type === 'join-success') {
                         dispatch(syncActions.joinPhaseSet(null))
-                        if (isJoiningRef.current) {
+                        const projectOwnsJoin = joinInFlightRef.current !== 'list'
+                        finishJoin('project')
+                        if (projectOwnsJoin && isJoiningRef.current) {
                             isJoiningRef.current = false
                             setIsJoining(false)
                         }
@@ -374,7 +376,9 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                         )
                     } else if (payload.type === 'join-error') {
                         dispatch(syncActions.joinPhaseSet(null))
-                        if (isJoiningRef.current) {
+                        const projectOwnsJoin = joinInFlightRef.current !== 'list'
+                        finishJoin('project')
+                        if (projectOwnsJoin && isJoiningRef.current) {
                             isJoiningRef.current = false
                             setIsJoining(false)
                         }
@@ -593,6 +597,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         rpcRef.current = null
         workletRef.current = null
         isJoiningRef.current = false
+        joinInFlightRef.current = null
 
         // Give the native worklet teardown a turn to release its file handles.
         await new Promise<void>((resolve) => setTimeout(resolve, 50))

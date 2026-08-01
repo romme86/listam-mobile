@@ -34,7 +34,17 @@ fs.writeFileSync(out, ts.transpileModule(fs.readFileSync(src, 'utf8'), {
 }).outputText)
 
 const holders = await import(pathToFileURL(out).href)
-const { rpcRef, workletRef, isJoiningRef, notifyRef, i18nRef, resetWorkletHolders } = holders
+const {
+    rpcRef,
+    workletRef,
+    isJoiningRef,
+    joinInFlightRef,
+    notifyRef,
+    i18nRef,
+    tryBeginJoin,
+    finishJoin,
+    resetWorkletHolders,
+} = holders
 
 beforeEach(() => resetWorkletHolders())
 
@@ -88,15 +98,27 @@ test('a handler built by the FIRST mount notifies the SECOND mount', () => {
 test('the isJoining mirror follows the current mount', () => {
     mount({ notify: () => {}, i18n: {} })
     isJoiningRef.current = true
+    joinInFlightRef.current = 'list'
     unmount()
     mount({ notify: () => {}, i18n: {} })
     assert.equal(isJoiningRef.current, true, 'join state must not reset just because React remounted')
+    assert.equal(joinInFlightRef.current, 'list', 'the uncancellable join must remain busy across a remount')
+})
+
+test('only the owning join can start and finish the shared loading lifecycle', () => {
+    assert.equal(tryBeginJoin('list'), true)
+    assert.equal(tryBeginJoin('project'), false, 'a second join must stay blocked')
+    assert.equal(finishJoin('project'), false, 'an older unrelated completion must not clear the list join')
+    assert.equal(joinInFlightRef.current, 'list')
+    assert.equal(finishJoin('list'), true)
+    assert.equal(joinInFlightRef.current, null)
 })
 
 test('holders start empty so a cold boot cannot read stale state', () => {
     assert.equal(rpcRef.current, null)
     assert.equal(workletRef.current, null)
     assert.equal(isJoiningRef.current, false)
+    assert.equal(joinInFlightRef.current, null)
     assert.equal(notifyRef.current, undefined)
     assert.equal(i18nRef.current, null)
 })
