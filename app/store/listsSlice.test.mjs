@@ -64,7 +64,7 @@ try {
 after(() => fs.rmSync(buildDir, { recursive: true, force: true }))
 
 const { default: reducer, listsActions, selectSelectedListItems, selectItemsForList, selectAllItems } = slice
-const { selectedListChanged, listItemAdded, selectedListItemsSynced, selectedListItemsReplaced, listRemoved } = listsActions
+const { selectedListChanged, listItemAdded, listItemUpdated, listItemDeleted, selectedListItemsSynced, selectedListItemsReplaced, listRemoved } = listsActions
 
 let seq = 0
 function makeEntry(over = {}) {
@@ -299,6 +299,41 @@ test('a late personal tombstone cannot empty a list that was just shared', () =>
         true,
         'an event from the base this list was promoted away from must be ignored',
     )
+})
+
+test('a restart-restored shared bucket keeps base-scoped identity', () => {
+    const store = makeStore()
+    const SHARED = 'ab'.repeat(32)
+    const row = makeEntry({
+        id: 'same-id',
+        text: 'Milk',
+        listId: 'spesa-2',
+        listType: 'shopping',
+        baseKey: SHARED,
+    })
+
+    store.dispatch(selectedListItemsSynced({
+        listId: 'spesa-2',
+        listType: 'shopping',
+        items: [row],
+    }))
+
+    // A late personal-base tombstone for the pre-share copy has no baseKey and
+    // therefore cannot delete the row restored from the shared snapshot.
+    store.dispatch(listItemDeleted({ ...row, baseKey: undefined, updatedAt: row.updatedAt + 1 }))
+    assert.equal(selectItemsForList(store.getState(), 'spesa-2')[0]?.baseKey, SHARED)
+
+    store.dispatch(listItemUpdated({ ...row, text: 'Oat milk', updatedAt: row.updatedAt + 2 }))
+    assert.equal(selectItemsForList(store.getState(), 'spesa-2')[0]?.text, 'Oat milk')
+
+    store.dispatch(listItemAdded(makeEntry({ id: 'personal', text: 'Bread' })))
+    store.dispatch(selectedListItemsSynced({
+        listId: 'spesa-2',
+        listType: 'shopping',
+        items: [],
+    }))
+    assert.deepEqual(selectItemsForList(store.getState(), 'spesa-2'), [])
+    assert.deepEqual(texts(selectItemsForList(store.getState(), 'default')), ['Bread'])
 })
 
 test('the base guard fails open for a list the registry has not described', () => {

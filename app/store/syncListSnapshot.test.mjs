@@ -52,6 +52,7 @@ test('SYNC_LIST decoder accepts legacy arrays and exact bucket envelopes', () =>
     assert.deepEqual(decoder.decodeSyncListSnapshot(legacy), {
         mode: 'legacy',
         items: legacy,
+        baseKey: null,
     })
 
     const list = [{ id: 'planned' }]
@@ -64,10 +65,32 @@ test('SYNC_LIST decoder accepts legacy arrays and exact bucket envelopes', () =>
         items: list,
         listId: '__plan__',
         listType: 'plan',
+        baseKey: null,
     })
 
-    assert.equal(decoder.decodeSyncListSnapshot({ list }), null, 'bucket identity is required')
+    assert.deepEqual(decoder.decodeSyncListSnapshot({ list }), {
+        mode: 'legacy',
+        items: list,
+        baseKey: null,
+    }, 'older envelopes without bucket identity retain legacy compatibility')
     assert.equal(decoder.decodeSyncListSnapshot({ list: {}, listId: 'x', listType: 'todo' }), null)
+})
+
+test('shared snapshot materializes its envelope base key onto every restored row', () => {
+    const baseKey = 'ab'.repeat(32)
+    const raw = [{ id: 'milk', listId: 'spesa-2', listType: 'shopping' }]
+    const snapshot = decoder.decodeSyncListSnapshot({
+        list: raw,
+        listId: 'spesa-2',
+        listType: 'shopping',
+        baseKey,
+    })
+
+    assert.equal(snapshot.baseKey, baseKey)
+    assert.deepEqual(decoder.materializeSnapshotItems(snapshot), [
+        { ...raw[0], baseKey },
+    ])
+    assert.equal(raw[0].baseKey, undefined, 'transport decoding does not mutate the durable row')
 })
 
 test('structured label snapshot replaces only its named reserved bucket', () => {

@@ -29,7 +29,7 @@ import {
 import { boardConfigActions } from '../store/boardConfigSlice'
 import { labelsActions } from '../store/labelsSlice'
 import { presenceActions } from '../store/presenceSlice'
-import { decodeSyncListSnapshot } from '../store/syncListSnapshot'
+import { decodeSyncListSnapshot, materializeSnapshotItems } from '../store/syncListSnapshot'
 import { useI18n } from '../i18n'
 import {
     RPC_UPDATE,
@@ -523,22 +523,23 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                             appLogger.warn('Invalid SYNC_LIST snapshot payload', event.items)
                             return
                         }
+                        const snapshotItems = materializeSnapshotItems(snapshot)
                         if (snapshot.mode === 'legacy') {
                         // Peer/surface name labels ride the same item stream; the
                         // labels slice retains them while listsSlice filters them
                         // out of list rows. SYNC_LIST is default-list-only, so labels
                         // (reserved buckets) actually arrive via *-from-backend below
                         // — fold any present here additively, never clearing.
-                            dispatch(listsActions.selectedListItemsSynced(snapshot.items))
-                            dispatch(labelsActions.labelsApplied(snapshot.items))
-                            dispatch(presenceActions.presenceApplied(snapshot.items))
+                            dispatch(listsActions.selectedListItemsSynced(snapshotItems))
+                            dispatch(labelsActions.labelsApplied(snapshotItems))
+                            dispatch(presenceActions.presenceApplied(snapshotItems))
                             return
                         }
 
                         const bucket = {
                             listId: snapshot.listId,
                             listType: snapshot.listType,
-                            items: snapshot.items,
+                            items: snapshotItems,
                         }
                         dispatch(listsActions.selectedListItemsSynced(bucket))
                         dispatch(labelsActions.labelsSnapshotApplied(bucket))
