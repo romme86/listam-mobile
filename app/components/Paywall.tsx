@@ -51,8 +51,11 @@ export function Paywall({ state, onPurchase, onSelectPlan, onRestore, onDismiss 
     const selectedPlan = state.plans.find((plan) => plan.id === state.selectedPlanId) ?? state.plans[0]
     const price = selectedPlan?.displayPrice ?? fallbackPrice
 
-    const openPrivacyPolicy = () => Linking.openURL('https://saynode.ch/privacy')
-    const openTerms = () => Linking.openURL('https://saynode.ch/terms')
+    // Both of these previously pointed at saynode.ch, which is no longer ours
+    // and returns 404 for each — so the paywall has been showing two dead legal
+    // links. listam.ch/privacy is live; listam.ch/terms still needs publishing.
+    const openPrivacyPolicy = () => Linking.openURL('https://listam.ch/privacy')
+    const openTerms = () => Linking.openURL('https://listam.ch/terms')
 
     return (
         <SafeAreaView style={styles.container}>
