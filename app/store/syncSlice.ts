@@ -20,12 +20,45 @@ export type WriteBlock =
     | 'write-needs-decision'
     | null
 
+// What the backend told us about the invite it just minted. Mobile used to hold
+// the bare z32 code alone, so the two facts that made "the code stopped working"
+// look like a bug — it is single-use, and it dies in ~10 minutes — were never
+// shown to the person sharing it.
+export type InviteInfo = {
+    key: string
+    expiresAt: number | null
+    singleUse: boolean
+    // How many codes are currently live. Minting a second code no longer kills
+    // the first, so this is what tells the owner "one code per friend" works.
+    liveInvites: number
+    maxInvites: number | null
+}
+
+export const EMPTY_INVITE: InviteInfo = {
+    key: '',
+    expiresAt: null,
+    singleUse: true,
+    liveInvites: 0,
+    maxInvites: null,
+}
+
+// The 10-second `join-progress` heartbeat the backend broadcasts during pairing.
+// Without it the overlay had nothing but a spinner to show for two minutes.
+export type JoinProgress = {
+    elapsedMs: number
+    // hyperdht's `randomized`: this network blocks direct connections, so every
+    // connection is relayed. It is the carrier-NAT signature from the field.
+    relayed: boolean
+    online: boolean
+}
+
 export type SyncState = {
-    autobaseInviteKey: string
+    invite: InviteInfo
     peerCount: number
     isWorkletReady: boolean
     isJoining: boolean
     joinPhase: JoinPhase
+    joinProgress: JoinProgress | null
     networkStatus: NetworkStatus
     baseId: string | null
     epoch: number | null
@@ -37,11 +70,12 @@ export type SyncState = {
 }
 
 const initialState: SyncState = {
-    autobaseInviteKey: '',
+    invite: EMPTY_INVITE,
     peerCount: 0,
     isWorkletReady: false,
     isJoining: false,
     joinPhase: null,
+    joinProgress: null,
     networkStatus: 'connecting',
     baseId: null,
     epoch: null,
@@ -53,8 +87,14 @@ const syncSlice = createSlice({
     name: 'sync',
     initialState,
     reducers: {
-        autobaseInviteKeySet(state, action: PayloadAction<string>) {
-            state.autobaseInviteKey = action.payload
+        inviteReceived(state, action: PayloadAction<InviteInfo>) {
+            state.invite = action.payload
+        },
+        // Clear before re-minting: the backend can hand back a code we already
+        // hold, and an unchanged store value would never re-trigger the effect
+        // that opens the share sheet.
+        inviteCleared(state) {
+            state.invite = EMPTY_INVITE
         },
         peerCountSet(state, action: PayloadAction<number>) {
             state.peerCount = Number.isFinite(action.payload) ? Math.max(0, action.payload) : 0
@@ -89,9 +129,15 @@ const syncSlice = createSlice({
         joiningSet(state, action: PayloadAction<boolean>) {
             state.isJoining = action.payload
             if (!action.payload) state.joinPhase = null
+            // Both edges clear it: a finished join must not leave "48s elapsed"
+            // behind, and a NEW attempt must not open on the old one's numbers.
+            state.joinProgress = null
         },
         joinPhaseSet(state, action: PayloadAction<JoinPhase>) {
             state.joinPhase = action.payload
+        },
+        joinProgressReported(state, action: PayloadAction<JoinProgress>) {
+            state.joinProgress = action.payload
         },
         networkStatusSet(state, action: PayloadAction<NetworkStatus>) {
             const next = action.payload
@@ -104,10 +150,11 @@ const syncSlice = createSlice({
             state.epoch = Number.isInteger(action.payload.epoch) ? action.payload.epoch as number : null
         },
         syncReset(state) {
-            state.autobaseInviteKey = ''
+            state.invite = EMPTY_INVITE
             state.peerCount = 0
             state.isJoining = false
             state.joinPhase = null
+            state.joinProgress = null
             state.networkStatus = 'connecting'
             state.baseId = null
             state.epoch = null

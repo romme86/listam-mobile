@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react'
-import { Alert, View, Text, ScrollView, Switch, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
+import { Alert, Platform, View, Text, ScrollView, Switch, TextInput, TouchableOpacity, StyleSheet } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import Clipboard from '@react-native-clipboard/clipboard'
+import { RPC_GET_LOG_TAIL, RPC_GET_NET_DIAGNOSTICS } from '@listam/protocol'
 import { useTheme, cardColor, type Theme } from '../theme'
 import { useI18n, type LocaleChoice } from '../i18n'
+import { formatDiagnosticsBundle, isRelayedNetwork, type NetDiagnostics } from '../joinDiagnostics'
 import { MAX_LABEL_NAME } from '@listam/domain'
 import type { LoyaltyCardHandle } from '../store/loyaltyCardsSlice'
 import {
@@ -20,6 +22,24 @@ import { CloseDot } from './CloseDot'
 // The ON track is the theme-constant ink-block — the only fill the acid accent
 // sits on (Kinetic Minimalist law), identical in light and dark.
 const INK_BLOCK = '#1b1b1b'
+
+// Enough log to cover a whole 120s join attempt plus the boot before it, and
+// still small enough to survive being pasted into a chat message.
+const LOG_TAIL_LIMIT = 300
+
+function parseReply(raw: string | null): any {
+    if (!raw) return null
+    try {
+        const parsed = JSON.parse(raw)
+        return parsed && typeof parsed === 'object' ? parsed : null
+    } catch {
+        return null
+    }
+}
+
+function toLines(value: unknown): string[] {
+    return Array.isArray(value) ? value.map((line) => String(line)) : []
+}
 
 // The app-level Settings screen (progressive disclosure, 2026-07 restructure).
 //
@@ -81,7 +101,46 @@ export function SettingsScreen(props: Props) {
     const styles = useMemo(() => makeStyles(t), [t])
     const [subView, setSubView] = useState<SubView>('root')
     const [deletingLocalData, setDeletingLocalData] = useState(false)
+    const [diagnostics, setDiagnostics] = useState<NetDiagnostics | null>(null)
+    const [copyingDiagnostics, setCopyingDiagnostics] = useState(false)
     const advancedOn = advancedMode === 'on'
+
+    // The whole point of this row: the 2026-08-26 field failure left three
+    // phones with nothing to send us — mobile has no log sink and the backend
+    // runs inside a worklet whose console is unreachable without a cable. One
+    // tap now puts the live transport state AND the redacted log ring on the
+    // clipboard, so the next failure is diagnosable from a chat message.
+    const copyDiagnostics = async () => {
+        if (copyingDiagnostics) return
+        setCopyingDiagnostics(true)
+        try {
+            const [netRaw, logRaw] = await Promise.all([
+                sendRPCWithReply(RPC_GET_NET_DIAGNOSTICS),
+                sendRPCWithReply(RPC_GET_LOG_TAIL, JSON.stringify({ limit: LOG_TAIL_LIMIT })),
+            ])
+            const net = parseReply(netRaw)
+            const log = parseReply(logRaw)
+            // Show what we learned even if only half the bundle came back — a
+            // backend that answers one call and not the other is itself a
+            // finding, and hiding it would repeat the original mistake.
+            setDiagnostics(net)
+            Clipboard.setString(formatDiagnosticsBundle({
+                diagnostics: net,
+                // The backend spreads @listam/logging's logTail(), which names
+                // the array `entries`. `lines` is accepted too so a version skew
+                // in either direction still produces a usable bundle.
+                logLines: toLines(log?.entries ?? log?.lines),
+                dropped: Number(log?.dropped) || 0,
+                platform: `${Platform.OS} ${String(Platform.Version)}`,
+            }))
+            notify(i18n.t('network.diagnostics.copied'), 'success')
+        } finally {
+            // No error branch on purpose: sendRPCWithReply already answers null
+            // instead of throwing, and a bundle that says the backend never
+            // answered is more useful to us than a toast that says "failed".
+            setCopyingDiagnostics(false)
+        }
+    }
 
     const subViewTitle: Record<SubView, string> = {
         root: i18n.t('lists.menu.settings'),
@@ -412,7 +471,23 @@ export function SettingsScreen(props: Props) {
                                     {navRow('server-outline', i18n.t('settings.dataBackups'), () => setSubView('data'))}
                                 </>
                             ) : null}
+                            <View style={styles.separator} />
+                            <TouchableOpacity
+                                style={styles.row}
+                                onPress={() => { void copyDiagnostics() }}
+                                disabled={copyingDiagnostics}
+                                activeOpacity={0.6}
+                                accessibilityRole="button"
+                            >
+                                <Ionicons name="pulse-outline" size={20} color={t.colors.text} style={styles.rowIcon} />
+                                <Text style={styles.rowLabel}>{i18n.t('network.diagnostics.title')}</Text>
+                                <Ionicons name="copy-outline" size={18} color={t.colors.textTertiary} />
+                            </TouchableOpacity>
                         </View>
+                        <Text style={styles.sectionNote}>{i18n.t('network.diagnostics.copy')}</Text>
+                        {isRelayedNetwork(diagnostics) ? (
+                            <Text style={styles.sectionNote}>{i18n.t('network.diagnostics.relayed')}</Text>
+                        ) : null}
                         {localDataDangerSection}
                     </>
                 )}

@@ -14,6 +14,7 @@ import {
 import { Provider } from 'react-redux'
 import * as Linking from 'expo-linking'
 import { useFonts } from 'expo-font'
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { isLocaleChoice } from '@listam/i18n'
@@ -34,6 +35,9 @@ import {
     RPC_CONTROL_COMMAND,
     RPC_CONTROL_LIST,
     RPC_GET_BOARD_CONFIG,
+    RPC_CANCEL_JOIN,
+    RPC_NET_SUSPEND,
+    RPC_NET_RESUME,
     type NotifyType,
 } from './hooks/_useWorklet'
 import {
@@ -67,6 +71,8 @@ import { useSubscription } from './hooks/useSubscription'
 import { useReduceMotion } from './hooks/useReduceMotion'
 import { useLearnedCategories } from './hooks/useLearnedCategories'
 import { finishJoin, joinInFlightRef, tryBeginJoin } from './hooks/workletHolders'
+import { listJoinFailureMessageKey } from './joinDiagnostics'
+import { netLifecycleAction } from './appLifecycle'
 import { Header } from './components/Header'
 import { JoinDialog } from './components/JoinDialog'
 import { BackupPasswordDialog } from './components/BackupPasswordDialog'
@@ -184,6 +190,10 @@ function parseBuiltinViews(raw: string | null): Record<string, Partial<RegistryL
     }
 }
 
+// Tag for the join-scoped keep-awake lock. Tagged rather than global so it can
+// only ever release the lock this screen took, never someone else's.
+const KEEP_AWAKE_JOIN_TAG = 'listam-join'
+
 // Max gap between the two taps of a double-tap-to-add gesture.
 const DOUBLE_TAP_MS = 300
 // Settle window for row-toggle taps while the Overview is enabled: within it,
@@ -269,6 +279,7 @@ function AppInner() {
         setIsJoining,
         isJoiningRef,
         joinPhase,
+        joinProgress,
         networkStatus,
         baseId,
         epoch,
@@ -276,7 +287,7 @@ function AppInner() {
         ownerRecoveryCode,
         clearOwnerRecoveryCode,
         ownerControl,
-        autobaseInviteKey,
+        invite,
         sendRPC,
         sendRPCWithReply,
         deleteLocalData,
@@ -883,19 +894,46 @@ function AppInner() {
         void refreshBackupPasswordSet()
     }, [isWorkletReady, refreshBackupPasswordSet])
 
-    // Foreground catch-up for rolling backups. A backend timer only fires while
-    // the worklet is alive; iOS suspends it in the background. On each
-    // background→active transition (only — not on every state change) we re-send
-    // RPC_SET_BACKUP_SCHEDULE with the current enabled flag, which restarts the
-    // backend scheduler; its catch-up pass writes any tier that came due while we
-    // were suspended. Cheap and idempotent: skipped while disabled or not ready.
+    // App lifecycle. Two jobs, and the FIRST one is why a host who left the app
+    // to send an invite code stopped being reachable at all.
+    //
+    // react-native-bare-kit already suspends the worklet on background (it wires
+    // AppState at import time, index.js:332), but nothing ever told the SWARM.
+    // The DHT came back from a suspend with dead UDP sockets and an expired
+    // announce and simply stayed unreachable, so the person sharing the code —
+    // who must leave the app to send it — was the peer that vanished.
+    // RPC_NET_SUSPEND / RPC_NET_RESUME drive hyperswarm's own mobile lifecycle
+    // API so the sockets are re-bound and the announce refreshed on return.
+    //
+    // Edges match Bare Kit's exactly ('background' and 'active', never
+    // 'inactive'): the iOS share sheet — the very flow that hands over an invite
+    // — puts the app in 'inactive', and suspending the swarm there would churn
+    // it on every share. Bare Kit's suspend lingers before it hard-freezes the
+    // loop, which is what lets this RPC still be processed on the way down.
+    //
+    // The second job is the pre-existing foreground catch-up: a backend timer
+    // only fires while the worklet is alive, so on each background→active
+    // transition we re-send RPC_SET_BACKUP_SCHEDULE, whose catch-up pass writes
+    // any tier that came due while we were suspended. Idempotent, and skipped
+    // while disabled or not ready.
     const appStateRef = useRef(AppState.currentState)
     useEffect(() => {
         const sub = AppState.addEventListener('change', (next) => {
             const prev = appStateRef.current
             appStateRef.current = next
-            const cameToForeground = prev.match(/inactive|background/) && next === 'active'
-            if (!cameToForeground || !isWorkletReady) return
+            if (!isWorkletReady) return
+
+            // Destination-keyed, like Bare Kit's own handler. See
+            // netLifecycleAction for why prev==='active' would have been wrong.
+            const action = netLifecycleAction(prev, next)
+            if (action === 'suspend') {
+                sendRPC(RPC_NET_SUSPEND)
+                return
+            }
+            if (action !== 'resume') return
+            // Resume the swarm BEFORE the catch-up RPCs below: they are pointless
+            // against a DHT whose sockets are dead.
+            sendRPC(RPC_NET_RESUME)
             // iOS suspends timers and networking in the background. Force one
             // durable-view catch-up plus roster refresh immediately on resume;
             // this also pokes the backend presence heartbeat, so desktop shows
@@ -910,6 +948,29 @@ function AppInner() {
         })
         return () => sub.remove()
     }, [isWorkletReady, sendRPC, refreshBackupPasswordSet])
+
+    // A join can run for two minutes; the default auto-lock is thirty seconds.
+    // The lock backgrounds the app, which freezes the worklet mid-pairing — the
+    // user "waited it out" and it could never have succeeded. Held for the
+    // duration of a join only, so it can never leak into normal use.
+    useEffect(() => {
+        if (!isJoining) return
+        let released = false
+        // Both calls are async and BOTH can reject — deactivating a tag that was
+        // never activated warns/throws (see expo-keep-awake's own useKeepAwake).
+        // Swallow explicitly: an unhandled rejection here would be a crash
+        // report for a screen-lock hint, on the one screen we least want noisy.
+        const release = () => deactivateKeepAwake(KEEP_AWAKE_JOIN_TAG).catch(() => {})
+        // Activation can land after a fast join already finished; release
+        // immediately in that case rather than leaving the screen pinned awake.
+        activateKeepAwakeAsync(KEEP_AWAKE_JOIN_TAG)
+            .then(() => { if (released) void release() })
+            .catch(() => { /* non-fatal: the join still runs, the screen may lock */ })
+        return () => {
+            released = true
+            void release()
+        }
+    }, [isJoining])
 
     // Prompt once (ever) to set a backup password when none is set. The same
     // self-contained dialog is used by the project-join gate below; never replace
@@ -1567,7 +1628,7 @@ function AppInner() {
         shareProjectPendingRef.current = true
         // Clear any stale key first: re-minting can return the same invite, and
         // an unchanged store value would never re-trigger the effect below.
-        dispatch(syncActions.autobaseInviteKeySet(''))
+        dispatch(syncActions.inviteCleared())
         sendRPC(RPC_CREATE_INVITE)
         // The backend replies with an empty key when this device may not mint
         // (only the project owner can create invites) — indistinguishable from
@@ -1581,10 +1642,40 @@ function AppInner() {
     }, [dispatch, sendRPC, i18n, snackbar, membershipRoster])
 
     useEffect(() => {
-        if (!shareProjectPendingRef.current || !autobaseInviteKey) return
+        if (!shareProjectPendingRef.current || !invite.key) return
         shareProjectPendingRef.current = false
-        setShareInvite({ scope: 'project', invite: autobaseInviteKey })
-    }, [autobaseInviteKey])
+        setShareInvite({ scope: 'project', invite: invite.key })
+    }, [invite])
+
+    // "New code". RPC_CREATE_INVITE now mints an ADDITIONAL invite and leaves
+    // the earlier ones live and separately single-use, so an owner can finally
+    // hand a different code to each person — minting for friend #2 used to
+    // silently kill friend #1's code, because there was only one invite slot.
+    const handleRegenerateInvite = useCallback(() => {
+        shareProjectPendingRef.current = true
+        dispatch(syncActions.inviteCleared())
+        sendRPC(RPC_CREATE_INVITE)
+    }, [dispatch, sendRPC])
+
+    // A project invite dialog must track the LIVE envelope, not just the code it
+    // opened with: mobile kept displaying a corpse — QR and all — after the code
+    // had been consumed, so the next person scanned a dead invite and the owner
+    // had no idea why. The backend re-publishes invite state after every use or
+    // refusal, so "the newest live code is no longer the one on screen" is
+    // exactly the signal that ours is spent.
+    //
+    // Skipped while a mint is in flight: handleShareProject/handleRegenerate
+    // clear the store first (see above), and that empty window is not a use.
+    //
+    // A list invite has no such channel — its code comes back on the RPC reply
+    // and is never re-published — so it keeps the snapshot it was given.
+    const isProjectInvite = shareInvite?.scope === 'project'
+    const shareInviteExpiresAt = isProjectInvite ? invite.expiresAt : null
+    const shareInviteSingleUse = isProjectInvite ? invite.singleUse : true
+    const shareInviteUsed = !!isProjectInvite
+        && !shareProjectPendingRef.current
+        && !!shareInvite?.invite
+        && invite.key !== shareInvite.invite
 
     // Promote ONE list to its own shared base and offer its co-edit invite via
     // the OS share sheet. Others who join this invite get only this list.
@@ -1659,7 +1750,7 @@ function AppInner() {
         setIsJoining(true)
         setCurrentP2PMessage(0)
         isJoiningRef.current = true
-        let result: { ok?: boolean } | null = null
+        let result: { ok?: boolean; reason?: string } | null = null
         try {
             const reply = await sendRPCWithReply(RPC_JOIN_LIST, JSON.stringify({ invite: value }))
             result = reply ? JSON.parse(reply) : null
@@ -1671,10 +1762,14 @@ function AppInner() {
                 isJoiningRef.current = false
             }
         }
-        snackbar.show(
-            result && result.ok ? i18n.t('joinList.joined') : i18n.t('joinList.failed'),
-            result && result.ok ? 'success' : 'error',
-        )
+        if (result && result.ok) {
+            snackbar.show(i18n.t('joinList.joined'), 'success')
+            return
+        }
+        // Every list-join failure used to collapse into one string — "Could not
+        // join that list." — which told the user nothing about whether to ask
+        // for a new code, check their connection, or simply try again.
+        snackbar.show(i18n.t(listJoinFailureMessageKey(result?.reason)), 'error')
     }, [sendRPCWithReply, i18n, snackbar, setIsJoining, isJoiningRef])
 
     const handleJoin = useCallback(() => {
@@ -1818,12 +1913,17 @@ function AppInner() {
     }, [handleJoinList, joinMode, requestJoinConfirmation])
 
     const handleJoiningCancel = useCallback(() => {
-        // The peer request itself cannot be cancelled. Hide the overlay, but
-        // keep joinInFlightRef owned until its real success/failure arrives so
-        // another join cannot race it.
+        // Cancel is real now. It used to only hide the overlay, and the backend
+        // kept the wedged attempt alive behind its single-flight guard — so a
+        // retry with a FRESH code silently re-attached to the stuck one and
+        // reported the OLD failure against the NEW code. Release ownership here
+        // too, or the next tryBeginJoin is refused as "already joining".
+        sendRPC(RPC_CANCEL_JOIN)
+        const owner = joinInFlightRef.current
+        if (owner) finishJoin(owner)
         setIsJoining(false)
         isJoiningRef.current = false
-    }, [setIsJoining, isJoiningRef])
+    }, [sendRPC, setIsJoining, isJoiningRef])
 
     const handleDeleteListItems = useCallback((listId: string) => {
         Alert.alert(
@@ -2036,6 +2136,10 @@ function AppInner() {
                 visible={shareInvite !== null}
                 scope={shareInvite?.scope ?? 'project'}
                 invite={shareInvite?.invite ?? ''}
+                expiresAt={shareInviteExpiresAt}
+                singleUse={shareInviteSingleUse}
+                used={shareInviteUsed}
+                onRegenerate={isProjectInvite ? handleRegenerateInvite : undefined}
                 onShare={handleShareInvite}
                 onClose={() => setShareInvite(null)}
             />
@@ -2072,6 +2176,7 @@ function AppInner() {
                 visible={isJoining}
                 currentMessageIndex={currentP2PMessage}
                 joinPhase={joinPhase}
+                joinProgress={joinProgress}
                 onCancel={handleJoiningCancel}
             />
             <ListsMenu

@@ -20,7 +20,14 @@ import type { NotifyFn } from './workletHolders'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { appReset } from '../store/store'
 import { listsActions, selectSelectedListItems } from '../store/listsSlice'
-import { selectSyncState, syncActions, type JoinPhase, type NetworkStatus } from '../store/syncSlice'
+import {
+    selectSyncState,
+    syncActions,
+    type InviteInfo,
+    type JoinPhase,
+    type JoinProgress,
+    type NetworkStatus,
+} from '../store/syncSlice'
 import {
     devicesActions,
     selectMembershipRoster,
@@ -31,6 +38,7 @@ import { labelsActions } from '../store/labelsSlice'
 import { presenceActions } from '../store/presenceSlice'
 import { decodeSyncListSnapshot, materializeSnapshotItems } from '../store/syncListSnapshot'
 import { useI18n } from '../i18n'
+import { joinFailureMessageKey } from '../joinDiagnostics'
 import {
     RPC_UPDATE,
     RPC_DELETE,
@@ -54,11 +62,16 @@ import {
     RPC_SHARE_LIST,
     RPC_JOIN_LIST,
     RPC_REQUEST_SYNC,
+    RPC_CANCEL_JOIN,
+    RPC_NET_SUSPEND,
+    RPC_NET_RESUME,
+    RPC_GET_LOG_TAIL,
+    RPC_GET_NET_DIAGNOSTICS,
 } from '@listam/protocol'
 import type { ListEntry } from '@/app/components/_types'
 
 export type { MembershipMember, MembershipRoster } from '../store/devicesSlice'
-export type { JoinPhase, NetworkStatus } from '../store/syncSlice'
+export type { InviteInfo, JoinPhase, JoinProgress, NetworkStatus } from '../store/syncSlice'
 
 const GLOBAL_KEY = '__LISTAM_WORKLET_SINGLETON__' as const
 
@@ -84,13 +97,14 @@ function getGlobalState(): GlobalWorkletState {
 
 type UseWorkletResult = {
     dataList: ListEntry[]
-    autobaseInviteKey: string
+    invite: InviteInfo
     peerCount: number
     isWorkletReady: boolean
     isJoining: boolean
     setIsJoining: (isJoining: boolean) => void
     isJoiningRef: MutableRefObject<boolean>
     joinPhase: JoinPhase
+    joinProgress: JoinProgress | null
     networkStatus: NetworkStatus
     baseId: string | null
     epoch: number | null
@@ -142,11 +156,12 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
     const dataList = useAppSelector(selectSelectedListItems)
     const membershipRoster = useAppSelector(selectMembershipRoster)
     const {
-        autobaseInviteKey,
+        invite,
         peerCount,
         isWorkletReady,
         isJoining,
         joinPhase,
+        joinProgress,
         networkStatus,
         baseId,
         epoch,
@@ -179,9 +194,15 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
             return
         }
         const req = rpcRef.current.request(command)
-        if (payload !== undefined) {
-            req.send(payload)
-        }
+        // ALWAYS send, even with no payload. bare-rpc's `request()` only builds a
+        // local OutgoingRequest; the REQUEST frame is written by `send()` and by
+        // nothing else (bare-rpc/lib/outgoing-request.js:21). Guarding the send on
+        // `payload !== undefined` therefore made every payload-less command a
+        // silent no-op that never left the device — RPC_NET_SUSPEND/RPC_NET_RESUME
+        // and RPC_CANCEL_JOIN among them, which is the whole mobile half of the
+        // 4G pairing fix. An empty string arrives as `req.data === null`, which is
+        // exactly what these handlers already expect.
+        req.send(payload ?? '')
     }, [])
 
     // Request/response variant for commands that return a value (the encrypted
@@ -310,6 +331,16 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                         dispatch(syncActions.networkStatusSet(payload.status))
                     } else if (payload.type === 'join-phase') {
                         dispatch(syncActions.joinPhaseSet(payload.phase || null))
+                    } else if (payload.type === 'join-progress') {
+                        // The 10s pairing heartbeat. `randomized` means this
+                        // network blocks direct connections (carrier NAT) — the
+                        // one fact that turns a two-minute silent spinner into
+                        // something the user can understand.
+                        dispatch(syncActions.joinProgressReported({
+                            elapsedMs: Number.isFinite(payload.elapsedMs) ? payload.elapsedMs : 0,
+                            relayed: payload.randomized === true,
+                            online: payload.online === true,
+                        }))
                     } else if (payload.type === 'not-writable') {
                         const msg = payload.message || i18nRef.current.t('backend.notWritable')
                         dispatch(syncActions.writeBlocked('not-writable'))
@@ -383,9 +414,21 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                             setIsJoining(false)
                         }
                         haptics.error()
-                        const msg = payload.message || i18nRef.current.t('backend.joinError')
+                        // NEVER payload.message: that is the backend's raw
+                        // English Error.message ("Pairing timed out"), which is
+                        // what three people on 4G were left staring at. The
+                        // reason is machine-readable precisely so this side can
+                        // say something translated and actionable instead.
+                        const msg = i18nRef.current.t(joinFailureMessageKey(payload.reason))
                         if (notifyRef.current) notifyRef.current(msg, 'error')
                         else Alert.alert(i18nRef.current.t('backend.joinError.title'), msg)
+                    } else if (payload.type === 'join-list-result') {
+                        // Deliberately a no-op: the single-list join is a
+                        // request/reply RPC and its caller already reports the
+                        // outcome. Claimed here only so it stops tripping the
+                        // unhandled-payload warning below — that warning now
+                        // ships in the field diagnostic bundle, and a known
+                        // event crying wolf in it costs us the next diagnosis.
                     } else if (payload.type === 'membership-roster') {
                         dispatch(devicesActions.rosterReceived(payload.roster ?? null))
                     } else if (payload.type === 'board-config') {
@@ -510,7 +553,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                     return
                 case 'reset':
                     dispatch(listsActions.selectedListCleared())
-                    dispatch(syncActions.autobaseInviteKeySet(''))
+                    dispatch(syncActions.inviteCleared())
                     dispatch(devicesActions.rosterReceived(null))
                     dispatch(boardConfigActions.boardConfigReset())
                     dispatch(labelsActions.labelsCleared())
@@ -566,8 +609,17 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
                     dispatch(syncActions.writeBlockCleared())
                     return
                 case 'invite-key':
+                    // @listam/client already absorbed the bare-string/envelope
+                    // skew, so take the whole decoded shape. Parsing the raw
+                    // payload here would re-introduce exactly that skew.
                     if (event.key != null) {
-                        dispatch(syncActions.autobaseInviteKeySet(event.key))
+                        dispatch(syncActions.inviteReceived({
+                            key: event.key,
+                            expiresAt: event.expiresAt ?? null,
+                            singleUse: event.singleUse !== false,
+                            liveInvites: Number.isFinite(event.liveInvites) ? event.liveInvites : (event.key ? 1 : 0),
+                            maxInvites: Number.isFinite(event.maxInvites) ? event.maxInvites : null,
+                        }))
                     }
                     return
                 case 'invalid-json':
@@ -674,13 +726,14 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
 
     return {
         dataList,
-        autobaseInviteKey,
+        invite,
         peerCount,
         isWorkletReady,
         isJoining,
         setIsJoining,
         isJoiningRef,
         joinPhase,
+        joinProgress,
         networkStatus,
         baseId,
         epoch,
@@ -716,4 +769,9 @@ export {
     RPC_SHARE_LIST,
     RPC_JOIN_LIST,
     RPC_REQUEST_SYNC,
+    RPC_CANCEL_JOIN,
+    RPC_NET_SUSPEND,
+    RPC_NET_RESUME,
+    RPC_GET_LOG_TAIL,
+    RPC_GET_NET_DIAGNOSTICS,
 }

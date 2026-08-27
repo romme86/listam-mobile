@@ -103,6 +103,21 @@ export function makeJoiningStyles(t: Theme) {
             marginBottom: t.spacing.xxl,
             lineHeight: 20,
         },
+        // Deliberately quiet: the elapsed readout exists to prove the join is
+        // still running, not to start a countdown the user feels judged by.
+        elapsed: {
+            fontSize: t.type.caption.fontSize,
+            color: t.colors.textTertiary,
+            textAlign: 'center',
+            marginBottom: t.spacing.sm,
+        },
+        hint: {
+            fontSize: t.type.caption.fontSize,
+            color: t.colors.textSecondary,
+            textAlign: 'center',
+            lineHeight: 18,
+            marginBottom: t.spacing.lg,
+        },
         p2pMessage: {
             fontSize: t.type.label.fontSize,
             color: t.colors.textTertiary,

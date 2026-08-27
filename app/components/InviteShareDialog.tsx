@@ -1,14 +1,22 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { createInviteQrPayload, type InviteQrScope } from '@listam/protocol'
 import { useI18n } from '../i18n'
 import { useTheme, type Theme } from '../theme'
+import { formatInviteCountdown, inviteRemainingMs } from '../joinDiagnostics'
 import { InviteQrCode } from './InviteQrCode'
 
 type InviteShareDialogProps = {
     visible: boolean
     scope: InviteQrScope
     invite: string
+    /** When the backend says this code dies. Null on a pre-envelope backend. */
+    expiresAt?: number | null
+    singleUse?: boolean
+    /** The backend has retired this code — someone joined with it. */
+    used?: boolean
+    /** Mint an ADDITIONAL code. Omitted for list invites, which have no re-mint RPC. */
+    onRegenerate?: () => void
     onShare: () => void
     onClose: () => void
 }
@@ -17,6 +25,10 @@ export function InviteShareDialog({
     visible,
     scope,
     invite,
+    expiresAt = null,
+    singleUse = true,
+    used = false,
+    onRegenerate,
     onShare,
     onClose,
 }: InviteShareDialogProps) {
@@ -27,6 +39,21 @@ export function InviteShareDialog({
         () => (invite ? createInviteQrPayload(invite, scope) : ''),
         [invite, scope],
     )
+
+    // A live countdown, not a snapshot. The ~10-minute expiry was invisible, so
+    // an owner could sit on an open dialog, send the code, and have the guest
+    // hit a dead invite with nothing on either screen explaining why.
+    const [now, setNow] = useState(() => Date.now())
+    useEffect(() => {
+        if (!visible || expiresAt === null) return
+        setNow(Date.now())
+        const interval = setInterval(() => setNow(Date.now()), 1000)
+        return () => clearInterval(interval)
+    }, [visible, expiresAt])
+
+    const remainingMs = inviteRemainingMs(expiresAt, now)
+    // Both mean "sharing this is pointless", and both used to be invisible.
+    const dead = used || (remainingMs !== null && remainingMs <= 0)
     const title = scope === 'project'
         ? i18n.t('share.project.dialogTitle')
         : i18n.t('shareList.title')
@@ -67,7 +94,30 @@ export function InviteShareDialog({
                         <Text style={styles.scanHint}>{i18n.t('invite.qr.scanHint')}</Text>
                         <Text style={styles.codeLabel}>{i18n.t('invite.qr.codeLabel')}</Text>
                         <Text style={styles.inviteCode} selectable={true}>{invite}</Text>
+
+                        {singleUse ? (
+                            <Text style={styles.inviteFact}>{i18n.t('invite.singleUse')}</Text>
+                        ) : null}
+                        {used ? (
+                            <Text style={styles.inviteExpired}>{i18n.t('invite.used')}</Text>
+                        ) : dead ? (
+                            <Text style={styles.inviteExpired}>{i18n.t('invite.expired')}</Text>
+                        ) : remainingMs !== null ? (
+                            <Text style={styles.inviteFact}>
+                                {i18n.t('invite.expiresIn', { time: formatInviteCountdown(remainingMs) })}
+                            </Text>
+                        ) : null}
                     </ScrollView>
+
+                    {onRegenerate ? (
+                        <TouchableOpacity
+                            style={styles.regenerateButton}
+                            onPress={onRegenerate}
+                            accessibilityRole="button"
+                        >
+                            <Text style={styles.regenerateButtonText}>{i18n.t('invite.regenerate')}</Text>
+                        </TouchableOpacity>
+                    ) : null}
 
                     <View style={styles.buttonContainer}>
                         <TouchableOpacity
@@ -78,9 +128,11 @@ export function InviteShareDialog({
                             <Text style={styles.closeButtonText}>{i18n.t('common.close')}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
-                            style={[styles.button, styles.shareButton]}
+                            style={[styles.button, styles.shareButton, dead && styles.shareButtonDisabled]}
                             onPress={onShare}
+                            disabled={dead}
                             accessibilityRole="button"
+                            accessibilityState={{ disabled: dead }}
                         >
                             <Text style={styles.shareButtonText}>{i18n.t('invite.qr.share')}</Text>
                         </TouchableOpacity>
@@ -161,6 +213,28 @@ function makeStyles(t: Theme) {
             lineHeight: 17,
             marginBottom: t.spacing.lg,
         },
+        inviteFact: {
+            color: t.colors.textSecondary,
+            fontSize: t.type.caption.fontSize,
+            lineHeight: 17,
+            marginBottom: t.spacing.xs,
+        },
+        inviteExpired: {
+            color: t.colors.danger,
+            fontSize: t.type.caption.fontSize,
+            lineHeight: 17,
+            marginBottom: t.spacing.xs,
+        },
+        regenerateButton: {
+            alignSelf: 'flex-start',
+            paddingVertical: t.spacing.sm,
+            marginBottom: t.spacing.md,
+        },
+        regenerateButtonText: {
+            color: t.colors.primary,
+            fontSize: t.type.bodyStrong.fontSize,
+            fontWeight: '600',
+        },
         buttonContainer: {
             flexDirection: 'row',
             gap: t.spacing.md,
@@ -182,6 +256,9 @@ function makeStyles(t: Theme) {
         },
         shareButton: {
             backgroundColor: t.colors.primary,
+        },
+        shareButtonDisabled: {
+            opacity: 0.4,
         },
         shareButtonText: {
             color: t.colors.onPrimary,

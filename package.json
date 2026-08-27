@@ -11,7 +11,7 @@
     "test:grocery": "node scripts/test-grocery-intelligence.mjs",
     "test:backend": "node --test backend/lib/*.test.mjs",
     "test:store": "node --test app/store/*.test.mjs",
-    "test": "npm run test:backend && npm run test:store && npm run test:hooks && npm run test:grocery",
+    "test": "npm run test:backend && npm run test:store && npm run test:hooks && npm run test:app && npm run test:grocery",
     "lint": "eslint .",
     "check:deps": "node scripts/check-deps.mjs",
     "check:secrets": "node scripts/check-secrets.mjs",
@@ -21,6 +21,7 @@
     "bundle:backend:ios": "npx bare-pack --target ios --linked backend/backend.mjs --encoding base64 --out app/app.ios.bundle && node scripts/wrap-bare-bundle.mjs app/app.ios.bundle app/app.ios.bundle.mjs",
     "bundle:backend:android": "npx bare-pack --target android --linked backend/backend.mjs --encoding base64 --out app/assets/backend.android.bundle && node scripts/wrap-bare-bundle.mjs app/assets/backend.android.bundle app/assets/backend.android.bundle.mjs",
     "test:hooks": "node --test app/hooks/*.test.mjs",
+    "test:app": "node --test app/*.test.mjs",
     "check:bundles": "node scripts/check-bundles.mjs"
   },
   "dependencies": {
@@ -60,6 +61,7 @@
     "expo-file-system": "~19.0.21",
     "expo-font": "~14.0.12",
     "expo-haptics": "~15.0.8",
+    "expo-keep-awake": "~15.0.8",
     "expo-linking": "~8.0.12",
     "expo-router": "~6.0.24",
     "expo-secure-store": "~15.0.8",
