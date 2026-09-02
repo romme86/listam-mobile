@@ -17,15 +17,22 @@ const RICH_TYPES = new Set(['markdown', 'callout'])
 type Props = {
     blocks: TicketBlock[] | undefined
     onChange: (blocks: TicketBlock[]) => void
+    /** Whether the body owns its own "add block" affordance. The notes detail
+     *  turns it off and inserts from its own bottom-sheet tray instead. */
+    showAdd?: boolean
 }
 
+// Shared with the notes detail's insert tray so both insertion paths mint ids
+// from the same counter.
 let _seq = 0
-function nextBlockId(): string {
+export function nextBlockId(): string {
     _seq += 1
     return `blk-${Date.now().toString(36)}-${_seq}`
 }
 
-const BLOCK_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+export const BLOCK_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+    heading: 'reader-outline',
+    divider: 'remove-outline',
     markdown: 'text-outline',
     checklist: 'checkbox-outline',
     numberedList: 'list-outline',
@@ -39,7 +46,7 @@ const BLOCK_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
 // The block-based ticket body editor. Each block renders a formatted view and,
 // on tap, an inline raw-text editor (seeded by blockToText, committed via
 // blockFromText) — the same model as desktop, plus mobile checkbox toggles.
-export function BlockBody({ blocks, onChange }: Props) {
+export function BlockBody({ blocks, onChange, showAdd = true }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
@@ -148,7 +155,7 @@ export function BlockBody({ blocks, onChange }: Props) {
                 </View>
             ))}
 
-            {adding ? (
+            {!showAdd ? null : adding ? (
                 <View style={styles.typeMenu}>
                     {BLOCK_TYPES.map((spec) => (
                         <TouchableOpacity key={spec.type} style={styles.typeItem} onPress={() => addBlock(spec.type)}>

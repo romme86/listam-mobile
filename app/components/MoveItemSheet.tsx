@@ -5,23 +5,26 @@ import { haptics } from '../feedback'
 import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
 import { isBoardType } from '@listam/domain/board'
-import { isTodoType } from '@listam/domain/identity'
+import { isTodoType, isNotesType } from '@listam/domain/identity'
 import type { GroupedLists } from '../store/registrySelectors'
 import type { ListEntry } from './_types'
 import { CloseDot } from './CloseDot'
 
-// The surface a (listId, type) renders as — board ('kanban'/'board'), todo, or
-// grocery. Used to exclude the source surface (built-ins share one listId, so
-// listId equality alone would wrongly hide e.g. Board when moving from Groceries).
-function surfaceOf(type: string): 'board' | 'todo' | 'grocery' {
+// The surface a (listId, type) renders as — board ('kanban'/'board'), todo,
+// notes, or grocery. Used to exclude the source surface (built-ins share one
+// listId, so listId equality alone would wrongly hide e.g. Board when moving
+// from Groceries).
+function surfaceOf(type: string): 'board' | 'todo' | 'notes' | 'grocery' {
     if (isBoardType(type)) return 'board'
     if (isTodoType(type)) return 'todo'
+    if (isNotesType(type)) return 'notes'
     return 'grocery'
 }
 
 function typeIcon(type: string): keyof typeof Ionicons.glyphMap {
     if (isBoardType(type)) return 'grid-outline'
     if (isTodoType(type)) return 'checkbox-outline'
+    if (isNotesType(type)) return 'document-text-outline'
     return 'cart-outline'
 }
 
