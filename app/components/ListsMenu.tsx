@@ -10,7 +10,7 @@ import { useTheme, cardColor, type Theme } from '../theme'
 import { useI18n, type LocaleChoice } from '../i18n'
 import { MAX_LABEL_NAME } from '@listam/domain'
 import { isBoardType, BOARD_WRITE_TYPE } from '@listam/domain/board'
-import { isTodoType, TODO_LIST_TYPE, DEFAULT_LIST_ID } from '@listam/domain/identity'
+import { isTodoType, isNotesType, TODO_LIST_TYPE, NOTES_LIST_TYPE, DEFAULT_LIST_ID } from '@listam/domain/identity'
 import { UNGROUPED_GROUP_ID } from '@listam/domain/list-nav'
 import type { RegistryListView } from '@listam/domain/list-registry'
 import type { GroupedLists } from '../store/registrySelectors'
@@ -135,6 +135,7 @@ type Rect = { x: number; y: number; w: number; h: number }
 function typeIcon(type: string): keyof typeof Ionicons.glyphMap {
     if (isBoardType(type)) return 'grid-outline'
     if (isTodoType(type)) return 'checkbox-outline'
+    if (isNotesType(type)) return 'document-text-outline'
     return 'cart-outline'
 }
 
@@ -217,6 +218,7 @@ export function ListsMenu(props: Props) {
     }, [allLists, settingsListId])
     const settingsIsBoard = !!settingsList && isBoardType(settingsList.type)
     const settingsIsTodo = !!settingsList && isTodoType(settingsList.type)
+    const settingsIsNotes = !!settingsList && isNotesType(settingsList.type)
     const settingsIsBuiltin = !!settingsList && isBuiltinSurfaceId(settingsList.id)
     const settingsBuiltinShareable = settingsIsBuiltin && !settingsIsBoard && !settingsIsTodo
     const listView: RegistryListView = useMemo(
@@ -441,6 +443,14 @@ export function ListsMenu(props: Props) {
                                             <Text style={styles.utilityLabel} numberOfLines={2}>{i18n.t('lists.menu.createBoard')}</Text>
                                         </TouchableOpacity>
                                     )}
+                                    {/* Notes has no feature flag of its own: it rides
+                                        Multiple lists like the grocery tile. */}
+                                    {features.multiList && (
+                                        <TouchableOpacity style={styles.utilityBtn} onPress={() => onCreate(NOTES_LIST_TYPE)} accessibilityRole="button">
+                                            <Ionicons name="document-text-outline" size={20} color={t.colors.textSecondary} />
+                                            <Text style={styles.utilityLabel} numberOfLines={2}>{i18n.t('lists.menu.newNotes')}</Text>
+                                        </TouchableOpacity>
+                                    )}
                                     {features.listGroups && (
                                         <TouchableOpacity style={styles.utilityBtn} onPress={onCreateGroup} accessibilityRole="button">
                                             <Ionicons name="add" size={20} color={t.colors.textSecondary} />
@@ -552,10 +562,10 @@ export function ListsMenu(props: Props) {
 
                                     {settingsIsBoard ? (
                                         <Text style={styles.sectionNote}>{i18n.t('lists.menu.boardSoon')}</Text>
-                                    ) : settingsIsTodo ? (
-                                        // A to-do list is plain text: no view mode (grid is forbidden),
-                                        // no item icons, no categories. Only the text-presentation
-                                        // controls that make sense for a flat list.
+                                    ) : settingsIsTodo || settingsIsNotes ? (
+                                        // A to-do or notes list is plain text: no view mode (grid is
+                                        // forbidden), no item icons, no categories. Only the
+                                        // text-presentation controls that make sense for a flat list.
                                         <>
                                             <Text style={styles.sectionLabel}>{i18n.t('lists.menu.sectionItems')}</Text>
                                             <SegmentedSetting

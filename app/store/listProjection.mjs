@@ -1,10 +1,13 @@
-import { DEFAULT_LIST_ID as SHARED_DEFAULT_LIST_ID, DEFAULT_LIST_TYPE as SHARED_DEFAULT_LIST_TYPE, TODO_LIST_TYPE as SHARED_TODO_LIST_TYPE, isTodoType as sharedIsTodoType, identityKey as sharedIdentityKey, normalizeListEntry as sharedNormalizeListEntry, normalizeListEntries as sharedNormalizeListEntries, upsertListEntry as sharedUpsertListEntry, updateListEntry as sharedUpdateListEntry, deleteListEntry as sharedDeleteListEntry, sameListEntry as sharedSameListEntry, } from '@listam/domain/identity';
+import { DEFAULT_LIST_ID as SHARED_DEFAULT_LIST_ID, DEFAULT_LIST_TYPE as SHARED_DEFAULT_LIST_TYPE, TODO_LIST_TYPE as SHARED_TODO_LIST_TYPE, isTodoType as sharedIsTodoType, isNotesType as sharedIsNotesType, identityKey as sharedIdentityKey, normalizeListEntry as sharedNormalizeListEntry, normalizeListEntries as sharedNormalizeListEntries, upsertListEntry as sharedUpsertListEntry, updateListEntry as sharedUpdateListEntry, deleteListEntry as sharedDeleteListEntry, sameListEntry as sharedSameListEntry, } from '@listam/domain/identity';
 import { isBoardType as sharedIsBoardType } from '@listam/domain/board';
 export const DEFAULT_LIST_ID = SHARED_DEFAULT_LIST_ID;
 export const DEFAULT_LIST_TYPE = SHARED_DEFAULT_LIST_TYPE;
 export const TODO_LIST_TYPE = SHARED_TODO_LIST_TYPE;
 export function isTodoType(type) {
     return sharedIsTodoType(type);
+}
+export function isNotesType(type) {
+    return sharedIsNotesType(type);
 }
 // The built-in surfaces (Groceries / Board / Todo) all share listId 'default',
 // so the nav presents them with COMPOSITE ids `default:<type>` (= surfaceLabelKey)
@@ -19,16 +22,20 @@ export function decodeSurface(navId) {
 }
 // Does an item belong to a given built-in surface? Mirrors desktop's typePredicate
 // (ui.mjs): board = isBoardType (dual-reads 'board'/'kanban'), todo = isTodoType,
-// grocery = neither (the empty/default surface type also means grocery). Used to
-// split + surface-scope the shared 'default' bucket so the three surfaces never
-// bleed into or wipe one another.
+// notes = isNotesType, grocery = none of them (the empty/default surface type also
+// means grocery). Used to split + surface-scope the shared 'default' bucket so the
+// three surfaces never bleed into or wipe one another. Every typed surface must be
+// subtracted from the grocery fallback: while notes was missing here, the voice
+// notetaker's items rendered as categorized grocery rows.
 export function matchesSurfaceType(surfaceType, item) {
     const t = item?.listType;
     if (sharedIsBoardType(surfaceType))
         return sharedIsBoardType(t);
     if (sharedIsTodoType(surfaceType))
         return sharedIsTodoType(t);
-    return !sharedIsBoardType(t) && !sharedIsTodoType(t);
+    if (sharedIsNotesType(surfaceType))
+        return sharedIsNotesType(t);
+    return !sharedIsBoardType(t) && !sharedIsTodoType(t) && !sharedIsNotesType(t);
 }
 export function normalizeListEntry(entry) {
     return sharedNormalizeListEntry(entry);

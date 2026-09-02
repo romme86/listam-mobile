@@ -5,7 +5,7 @@ import { useTheme, type Theme } from '../theme'
 import { useI18n } from '../i18n'
 import { reducePlan, groupPlanByDate, overduePlanRecords, toDateKey, shiftDateKey, type PlanRecord } from '@listam/domain/plan'
 import { isBoardType } from '@listam/domain/board'
-import { isTodoType } from '@listam/domain/identity'
+import { isTodoType, isNotesType } from '@listam/domain/identity'
 import { ListSwipePager } from './ListSwipePager'
 import type { ListEntry } from './_types'
 
@@ -56,7 +56,8 @@ export function OverviewScreen({ allItems, listName, onToggleSource, onClearPlan
     const matchesType = (itemType: string | undefined, refType: string) => {
         if (isBoardType(refType)) return isBoardType(itemType)
         if (isTodoType(refType)) return isTodoType(itemType)
-        return !isBoardType(itemType) && !isTodoType(itemType)
+        if (isNotesType(refType)) return isNotesType(itemType)
+        return !isBoardType(itemType) && !isTodoType(itemType) && !isNotesType(itemType)
     }
 
     const resolve = (rec: PlanRecord): Resolved | null => {
@@ -131,22 +132,33 @@ export function OverviewScreen({ allItems, listName, onToggleSource, onClearPlan
             )
         }
         const item = r.item
+        // A starred note is filed, never finished: it gets no checkbox and is
+        // never struck through (an archived one just recedes), and tapping it
+        // opens the list it lives in instead of toggling a state it doesn't have.
+        const isNote = isNotesType(item.listType)
         return (
             <TouchableOpacity
                 key={r.rec.ref}
                 style={[styles.row, opts.spotlight && styles.spotlight, opts.carried && styles.carryRow, item.isDone && styles.rowDone]}
                 activeOpacity={0.7}
-                onPress={() => onToggleSource(item)}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: item.isDone }}
+                onPress={() => (isNote ? onOpenList(item.listId ?? '', item.listType ?? '') : onToggleSource(item))}
+                accessibilityRole={isNote ? 'button' : 'checkbox'}
+                accessibilityState={isNote ? undefined : { checked: item.isDone }}
             >
                 <Ionicons
-                    name={item.isDone ? 'checkbox' : 'square-outline'}
+                    name={isNote ? 'document-text-outline' : item.isDone ? 'checkbox' : 'square-outline'}
                     size={opts.spotlight ? 26 : 22}
                     color={item.isDone ? t.colors.textTertiary : t.colors.text}
                 />
-                <Text style={[styles.rowText, opts.spotlight && styles.spotlightText, item.isDone && styles.doneText]} numberOfLines={2}>
-                    {item.text}
+                <Text
+                    style={[
+                        styles.rowText,
+                        opts.spotlight && styles.spotlightText,
+                        item.isDone && (isNote ? styles.archivedText : styles.doneText),
+                    ]}
+                    numberOfLines={2}
+                >
+                    {isNote ? item.text || i18n.t('mobile.notes.untitled') : item.text}
                 </Text>
                 {opts.carried ? carryExtras(r.rec.ref, r.rec.plannedFor) : null}
                 <Text style={styles.chip}>{listName(item.listId ?? '', item.listType ?? '')}</Text>
@@ -304,6 +316,7 @@ function makeStyles(t: Theme) {
         spotlightText: { fontSize: t.type.bodyLg.fontSize, fontWeight: '600' },
         listText: { fontWeight: '600' },
         doneText: { color: t.colors.textDisabled, textDecorationLine: 'line-through' },
+        archivedText: { color: t.colors.textDisabled },
         chip: {
             fontSize: t.type.caption.fontSize,
             color: t.colors.textSecondary,

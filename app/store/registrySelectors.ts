@@ -1,7 +1,7 @@
 import { createSelector } from '@reduxjs/toolkit'
 import { reduceRegistry, REGISTRY_LIST_ID, REGISTRY_LIST_TYPE, type RegistryListView } from '@listam/domain/list-registry'
 import { toNavLibrary, type NavLibrary } from '@listam/domain/list-nav'
-import { DEFAULT_LIST_ID, DEFAULT_LIST_TYPE, TODO_LIST_TYPE, isTodoType } from '@listam/domain/identity'
+import { DEFAULT_LIST_ID, DEFAULT_LIST_TYPE, TODO_LIST_TYPE, isTodoType, isNotesType } from '@listam/domain/identity'
 import { BOARD_LIST_TYPE, isBoardType } from '@listam/domain/board'
 import {
     PEER_LABEL_LIST_ID,
@@ -159,11 +159,13 @@ export const selectGroupedLists = createSelector(selectNavLibrary, (lib): Groupe
 // The effective view settings for the currently-selected list: the list's own
 // synced overrides merged over DEFAULT_VIEW, so components always get a full set.
 //
-// To-do lists are plain text only — they can never be grid or categorized, so we
-// clamp those two flags off here regardless of any (possibly stale) synced
-// override. This is the single source of truth the whole list screen reads, so
-// the clamp guarantees the grocery-intelligence surfaces (grid, category
-// grouping, category drag) stay dark for a to-do list everywhere at once.
+// To-do and notes lists are plain text only — they can never be grid or
+// categorized, so we clamp those two flags off here regardless of any (possibly
+// stale) synced override. This is the single source of truth the whole list
+// screen reads, so the clamp guarantees the grocery-intelligence surfaces (grid,
+// category grouping, category drag) stay dark for them everywhere at once. The
+// three presentation settings they DO keep (text size, alignment, spacing) pass
+// through untouched.
 export const selectCurrentListView = createSelector(
     selectNavLibrary,
     selectCurrentListId,
@@ -172,7 +174,8 @@ export const selectCurrentListView = createSelector(
             ...DEFAULT_VIEW,
             ...(lib.listsById[currentId]?.view ?? {}),
         }
-        if (isTodoType(lib.listsById[currentId]?.type)) {
+        const type = lib.listsById[currentId]?.type
+        if (isTodoType(type) || isNotesType(type)) {
             return { ...view, isGridView: false, categoriesEnabled: false }
         }
         return view

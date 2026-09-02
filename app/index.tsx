@@ -91,7 +91,7 @@ import { VisualGridList } from './components/VisualGridList'
 import { CategoryDragProvider } from './components/CategoryDrag'
 import { getDisplayCategoryName, groupByCategory } from './components/categoryGrouping'
 import { computeReorder, sortByOrder } from '@listam/domain/ordering'
-import { baseScopedKey, DEFAULT_LIST_TYPE, DEFAULT_LIST_ID, decodeSurface, isTodoType } from './listProjection'
+import { baseScopedKey, DEFAULT_LIST_TYPE, DEFAULT_LIST_ID, decodeSurface, isNotesType, isTodoType } from './listProjection'
 import { AddItemBar } from './components/AddItemBar'
 import { Fab } from './components/Fab'
 import { ListsMenu } from './components/ListsMenu'
@@ -100,6 +100,8 @@ import { ListSwipePager } from './components/ListSwipePager'
 import { BoardView } from './components/board/BoardView'
 import { TicketDetail } from './components/board/TicketDetail'
 import { CreateTicket, type TicketDraft } from './components/board/CreateTicket'
+import NotesList from './components/notes/NotesList'
+import { NoteDetail } from './components/notes/NoteDetail'
 import { ValueRateSheet } from './components/ValueRateSheet'
 import { useListPager } from './nav/useListPager'
 import { selectGroupedLists, selectCurrentListView, DEFAULT_VIEW, isBuiltinSurfaceId, builtinSurfaceNameKey } from './store/registrySelectors'
@@ -317,6 +319,9 @@ function AppInner() {
     // affordance is offered only on to-do (and board) surfaces. A grocery list is
     // neither a board nor a to-do, so the move icon is suppressed there.
     const isTodo = isTodoType(currentListType)
+    // Notes are free-form documents: no grocery intelligence, no barcode, no FAB
+    // (the surface carries its own persistent composer row instead).
+    const isNotes = isNotesType(currentListType)
 
     // The list as shown: entries without an explicit (dragged) category override
     // inherit one from what was learned for that item name. The raw `dataList`
@@ -383,6 +388,8 @@ function AppInner() {
     const [planSheetItem, setPlanSheetItem] = useState<ListEntry | null>(null)
     const [pendingListSettingsId, setPendingListSettingsId] = useState<string | null>(null)
     const [boardTicketId, setBoardTicketId] = useState<string | null>(null)
+    // The note open in the full-screen detail (null = the index is on screen).
+    const [noteItemId, setNoteItemId] = useState<string | null>(null)
     // Pending to-do add awaiting its mandatory value/delay rating (text to file).
     const [valueRateAdd, setValueRateAdd] = useState<string | null>(null)
     const [createTicketVisible, setCreateTicketVisible] = useState(false)
@@ -402,6 +409,7 @@ function AppInner() {
         setSelectedCard(null)
         setPlanSheetItem(null)
         setBoardTicketId(null)
+        setNoteItemId(null)
         setCreateTicketVisible(false)
         setMoveTarget(null)
     }, [deleteLocalData, resetLearnedCategories])
@@ -411,6 +419,12 @@ function AppInner() {
     const selectedTicket = useMemo(
         () => (boardTicketId ? dataList.find((it) => it.id === boardTicketId) ?? null : null),
         [boardTicketId, dataList]
+    )
+
+    // Same for the open note — the detail edits the live row, never a snapshot.
+    const selectedNote = useMemo(
+        () => (noteItemId ? dataList.find((it) => it.id === noteItemId) ?? null : null),
+        [noteItemId, dataList]
     )
 
     const pendingConfirmedInviteRef = useRef('')
@@ -1387,7 +1401,8 @@ function AppInner() {
         const sameSurface = item.listId === targetListId && (
             isBoardType(item.listType) ? isBoardType(targetType)
                 : isTodoType(item.listType) ? isTodoType(targetType)
-                    : (!isBoardType(targetType) && !isTodoType(targetType))
+                    : isNotesType(item.listType) ? isNotesType(targetType)
+                        : (!isBoardType(targetType) && !isTodoType(targetType) && !isNotesType(targetType))
         )
         if (sameSurface) return
         if (isBoardType(targetType) && boardConfig.rigorOn && validateTicketDraft(item, boardConfig).missing.length > 0) {
@@ -1463,6 +1478,29 @@ function AppInner() {
         haptics.toggleOn()
     }, [selectedTicket, dispatch, sendRPC])
 
+    const handleOpenNote = useCallback((note: ListEntry) => {
+        if (note.id) setNoteItemId(note.id)
+    }, [])
+
+    // The notes composer files a plain item — the same shape the voice notetaker
+    // writes. It gains blocks only if the user opens it and adds one. No
+    // duplicate guard (two notes may share a title) and no value rating (a notes
+    // list carries none), so this goes straight to the add path.
+    const handleCreateNote = useCallback(async (text: string) => {
+        const saved = await handleInsert(0, text)
+        if (saved) haptics.toggleOn()
+        return saved
+    }, [handleInsert])
+
+    // Title/block edits: merge the patch, dispatch for instant UI, then sync —
+    // identical to the ticket path (LWW by updatedAt).
+    const handleUpdateNote = useCallback((patch: Record<string, unknown>) => {
+        if (!selectedNote) return
+        const updated = { ...selectedNote, ...patch, updatedAt: Date.now() } as ListEntry
+        dispatch(listsActions.listItemUpdated(updated))
+        sendRPC(RPC_UPDATE, JSON.stringify({ item: updated }))
+    }, [selectedNote, dispatch, sendRPC])
+
     const handleRequestAdd = useCallback(() => {
         if (!hasCurrentList) {
             setMenuInitialView('lists')
@@ -1500,12 +1538,14 @@ function AppInner() {
     const handleCreateList = useCallback((type: string) => {
         const id = `list-${Date.now().toString(36)}`
         const now = Date.now()
-        const isGrocery = !isBoardType(type) && !isTodoType(type)
+        const isGrocery = !isBoardType(type) && !isTodoType(type) && !isNotesType(type)
         const baseName = isBoardType(type)
             ? i18n.t('lists.menu.newBoard')
             : isTodoType(type)
                 ? i18n.t('lists.menu.newTodo')
-                : i18n.t('lists.menu.newGrocery')
+                : isNotesType(type)
+                    ? i18n.t('lists.menu.newNotes')
+                    : i18n.t('lists.menu.newGrocery')
         // List names are unique per project now; the auto-generated name gets a
         // numeric suffix instead of colliding with an earlier unrenamed list.
         let name = baseName
@@ -2085,7 +2125,7 @@ function AppInner() {
                 overviewEnabled={overviewEnabled}
                 overviewOpen={overviewOpen}
                 listName={currentListName}
-                showBarcode={!isTodo && !isBoard && features.loyaltyCards}
+                showBarcode={!isTodo && !isBoard && !isNotes && features.loyaltyCards}
                 onBarcode={() => { const card = loyaltyCards[0]; if (card) { handleSelectCard(card) } else { setScannerVisible(true) } }}
                 onOpenLists={() => { setMenuInitialView('lists'); setPendingListSettingsId(null); setListsMenuVisible(true) }}
             />
@@ -2266,7 +2306,7 @@ function AppInner() {
             </View>
             ) : (
             <ListSwipePager
-                canPage={!isAdding && !listsMenuVisible && !joinDialogVisible && backupPasswordDialogReason === null && !membersDialogVisible && !ownedDevicesVisible && !leafPairingVisible && !isJoining && boardTicketId === null && !createTicketVisible}
+                canPage={!isAdding && !listsMenuVisible && !joinDialogVisible && backupPasswordDialogReason === null && !membersDialogVisible && !ownedDevicesVisible && !leafPairingVisible && !isJoining && boardTicketId === null && noteItemId === null && !createTicketVisible}
                 reduceMotion={reduceMotion}
                 onCommit={commit}
             >
@@ -2277,6 +2317,19 @@ function AppInner() {
                         config={boardConfig}
                         onOpenTicket={handleOpenTicket}
                         onTripleTapTicket={overviewEnabled ? captureToggle : undefined}
+                    />
+                ) : isNotes ? (
+                    <NotesList
+                        data={dataList}
+                        onOpen={handleOpenNote}
+                        onCreate={handleCreateNote}
+                        onDelete={handleDelete}
+                        onFlagToday={overviewEnabled ? handleFlagToday : undefined}
+                        isPlanned={overviewEnabled ? isItemPlanned : undefined}
+                        listTextSize={listTextSize}
+                        listAlignment={listAlignment}
+                        listItemSpacing={listItemSpacing}
+                        reduceMotion={reduceMotion}
                     />
                 ) : isGridView ? (
                     <VisualGridList
@@ -2313,7 +2366,7 @@ function AppInner() {
             </ListSwipePager>
             ))}
 
-            {!overviewOpen && hasCurrentList && !isAdding && showFab && !isBoard && <Fab onPress={handleRequestAdd} bottomOffset={insets.bottom + 20} />}
+            {!overviewOpen && hasCurrentList && !isAdding && showFab && !isBoard && !isNotes && <Fab onPress={handleRequestAdd} bottomOffset={insets.bottom + 20} />}
 
             <PlanSheet
                 visible={planSheetItem !== null}
@@ -2346,6 +2399,13 @@ function AppInner() {
                 onChangeStatus={handleChangeTicketStatus}
                 onRequestMove={(ticket) => { setBoardTicketId(null); setMoveTarget(ticket) }}
                 onClose={() => setBoardTicketId(null)}
+            />
+            <NoteDetail
+                visible={noteItemId !== null && selectedNote !== null}
+                note={selectedNote}
+                listName={currentListName}
+                onUpdate={handleUpdateNote}
+                onClose={() => setNoteItemId(null)}
             />
             <CreateTicket
                 visible={createTicketVisible}

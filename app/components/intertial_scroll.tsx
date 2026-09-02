@@ -39,14 +39,16 @@ type Props = {
     reduceMotion?: boolean
 }
 
-function getListTextScale(size: SizeOption) {
+// Exported for the notes surface, which is its own list but honors the same
+// three per-list presentation settings (text size, alignment, spacing).
+export function getListTextScale(size: SizeOption) {
     if (size === 'small') return 0.7
     if (size === 'medium') return 0.85
     if (size === 'large') return 1.25
     return 1
 }
 
-function getListSpacing(spacing: ListSpacing) {
+export function getListSpacing(spacing: ListSpacing) {
     if (spacing === 'compact') return 6
     if (spacing === 'cozy') return 10
     if (spacing === 'relaxed') return 28
