@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
 
@@ -34,7 +35,12 @@ test('normal PNG and ICNS parsing and Xcode UUID generation remain compatible', 
     const icns = Buffer.alloc(16)
     icns.write('icns'); icns.writeUInt32BE(16, 4); icns.write('ic10', 8); icns.writeUInt32BE(8, 12)
     assert.equal(size(icns).width, 1024)
-    const project = require('xcode').project('ios/listam.xcodeproj/project.pbxproj')
+    // Native projects are gitignored and absent on clean CI checkouts. Exercise
+    // Xcode's parser + UUID dependency against a tracked minimal project.
+    const fixture = fileURLToPath(new URL('./fixtures/uuid-project.pbxproj', import.meta.url))
+    const project = require('xcode').project(fixture)
     project.parseSync()
-    assert.match(project.generateUuid(), /^[A-F0-9]{24}$/)
+    const id = project.generateUuid()
+    assert.match(id, /^[A-F0-9]{24}$/)
+    assert.ok(!project.allUuids().includes(id))
 })
