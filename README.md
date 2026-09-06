@@ -111,6 +111,27 @@ Build settings and `ios/listam/Info.plist` in sync. Choose the `listam` scheme,
 an iOS device destination, and **Product > Archive**; the scheme archives with
 the Release configuration.
 
+## Android App Bundle
+
+With the local Android project and upload-key configuration in place:
+
+```bash
+npm run android:release
+```
+
+This synchronizes the generated Gradle version with `app.json`, verifies that
+the release variant selects release signing, regenerates both backend modules
+required by Metro, and runs `:app:bundleRelease`. The AAB is generated at
+`android/app/build/outputs/bundle/release/app-release.aab`.
+
+The upload keystore and its `LISTAM_UPLOAD_*` Gradle properties stay outside
+git. A fresh Expo Android template needs release signing configured first;
+the preparation script rejects its default debug-signing setup.
+
+See [the Android 1.3.4 (21) handoff](docs/releases/android-1.3.4.md) for the
+versioned artifact, verification results, and Internal testing / production
+promotion steps.
+
 ## Building a Free Version (Disabling the Paywall)
 
 Listam includes a subscription paywall that appears after a 30-day trial. If you're building your own version of the app according to the open source philosophy, you can disable it entirely.

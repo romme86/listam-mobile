@@ -7,7 +7,7 @@
     "postinstall": "node scripts/patch-dependencies.mjs",
     "start": "expo start",
     "android": "npm run bundle:backend:android && expo run:android",
-    "android:release": "cd android && ./gradlew bundleRelease",
+    "android:release": "node scripts/prepare-android-release.mjs && npm run bundle:backend:ios && npm run bundle:backend:android && cd android && ./gradlew :app:bundleRelease",
     "ios": "npm run bundle:backend:ios && expo run:ios --device",
     "test:grocery": "node scripts/test-grocery-intelligence.mjs",
     "test:backend": "node --test backend/lib/*.test.mjs",
