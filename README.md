@@ -60,7 +60,7 @@ live in the sibling `../listam-packages` npm workspace and are linked in via
 `file:` dependencies, so a clean build looks like:
 
 ```bash
-npm install
+npm install --legacy-peer-deps
 npm run bundle:backend:ios          # generates the Bare backend bundle
 (cd ios && LANG=en_US.UTF-8 pod install)
 LANG=en_US.UTF-8 npx expo run:ios
@@ -89,6 +89,28 @@ Notes:
   their hoisted dependencies. Don't remove it, or the bundler will fail to
   resolve those packages from a clean checkout.
 
+## TestFlight
+
+See [the 1.3.4 (24) release handoff](docs/releases/1.3.4.md) for the prepared
+Xcode workspace, archive/upload steps, and the shared-backend rollout notes.
+The `ios/` project and backend bundles are generated local artifacts; the
+committed version and iOS build number live in `app.json`.
+
+Before a manual Xcode archive, regenerate **both** backend bundles:
+
+```bash
+npm run bundle:backend:ios
+npm run bundle:backend:android
+(cd ios && LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 pod install)
+open ios/listam.xcworkspace
+```
+
+The worklet imports both platform modules, so Metro needs both files even for
+an iOS archive. After changing `app.json`, keep the native target's Version and
+Build settings and `ios/listam/Info.plist` in sync. Choose the `listam` scheme,
+an iOS device destination, and **Product > Archive**; the scheme archives with
+the Release configuration.
+
 ## Building a Free Version (Disabling the Paywall)
 
 Listam includes a subscription paywall that appears after a 30-day trial. If you're building your own version of the app according to the open source philosophy, you can disable it entirely.
@@ -109,4 +131,3 @@ return {
 This works for both Android and iOS builds.
 
 ---
-
