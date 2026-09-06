@@ -5,7 +5,7 @@
 // provisioners. Requires a dev-client build (ble-plx is a native module) and a
 // physical device (iOS BLE does not work in the simulator).
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { PermissionsAndroid, Platform } from 'react-native'
+import { AppState, PermissionsAndroid, Platform } from 'react-native'
 import { BleManager, type Device, type Characteristic } from 'react-native-ble-plx'
 import { fromByteArray, toByteArray } from 'base64-js'
 import {
@@ -25,7 +25,7 @@ const SCAN_TIMEOUT_MS = 20000
 
 async function ensureAndroidPermissions(): Promise<boolean> {
     if (Platform.OS !== 'android') return true
-    const wanted = [
+    const wanted = Number(Platform.Version) < 31 ? [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] : [
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
         PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
     ].filter(Boolean) as string[]
@@ -33,17 +33,25 @@ async function ensureAndroidPermissions(): Promise<boolean> {
     return Object.values(result).every((v) => v === PermissionsAndroid.RESULTS.GRANTED)
 }
 
-function scanForLeaf(manager: BleManager, timeoutMs: number): Promise<Device> {
+function scanForLeaf(manager: BleManager, timeoutMs: number, signal: AbortSignal): Promise<Device> {
     return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-            manager.stopDeviceScan()
-            reject(new Error('not-found'))
-        }, timeoutMs)
-        manager.startDeviceScan([SERVICE_UUID], null, (error: Error | null, device: Device | null) => {
+        let settled = false
+        const finish = (error: Error | null, device?: Device) => {
+            if (settled) return
+            settled = true
+            clearTimeout(timer)
+            signal.removeEventListener('abort', onAbort)
+            void manager.stopDeviceScan().catch(() => {})
+            if (error) reject(error)
+            else if (device) resolve(device)
+        }
+        const onAbort = () => finish(new Error('provisioning cancelled'))
+        const timer = setTimeout(() => finish(new Error('not-found')), timeoutMs)
+        signal.addEventListener('abort', onAbort, { once: true })
+        if (signal.aborted) { onAbort(); return }
+        void manager.startDeviceScan([SERVICE_UUID], null, (error: Error | null, device: Device | null) => {
             if (error) {
-                clearTimeout(timer)
-                manager.stopDeviceScan()
-                reject(error)
+                finish(error)
                 return
             }
             if (!device) return
@@ -51,11 +59,9 @@ function scanForLeaf(manager: BleManager, timeoutMs: number): Promise<Device> {
             const byName = name.startsWith(ADVERTISED_NAME_PREFIX)
             const bySvc = (device.serviceUUIDs ?? []).some((u: string) => u.toLowerCase() === SERVICE_UUID)
             if (byName || bySvc) {
-                clearTimeout(timer)
-                manager.stopDeviceScan()
-                resolve(device)
+                finish(null, device)
             }
-        })
+        }).catch((error: Error) => finish(error))
     })
 }
 
@@ -87,77 +93,114 @@ function makeTransport(device: Device, mtu: number) {
 
 export function useLeafProvisioning() {
     const managerRef = useRef<BleManager | null>(null)
+    const sessionRef = useRef<AbortController | null>(null)
+    const mountedRef = useRef(true)
+    const closingRef = useRef<Promise<void>>(Promise.resolve())
     const [state, setState] = useState<LeafProvState>({ phase: 'idle' })
 
     useEffect(() => {
-        return () => {
-            managerRef.current?.destroy()
+        mountedRef.current = true
+        const cancel = () => {
+            sessionRef.current?.abort()
+            const manager = managerRef.current
             managerRef.current = null
+            if (manager) closingRef.current = manager.destroy().catch(() => {})
+        }
+        const subscription = AppState.addEventListener('change', (next) => {
+            if (next === 'background') cancel()
+        })
+        return () => {
+            mountedRef.current = false
+            subscription.remove()
+            cancel()
         }
     }, [])
 
     const reset = useCallback(() => setState({ phase: 'idle' }), [])
 
     const provision = useCallback(async (payload: ProvisioningPayload): Promise<LeafProvResult> => {
+        if (sessionRef.current || AppState.currentState === 'background') return { ok: false, reason: 'failed' }
+        const session = new AbortController()
+        sessionRef.current = session
+        const cancelled = new Promise<never>((_, reject) => {
+            session.signal.addEventListener('abort', () => reject(new Error('provisioning cancelled')), { once: true })
+        })
+        // Every stage spends the same budget, including adapter startup,
+        // discovery and native writes. OS suspension invalidates the session.
+        const deadline = setTimeout(() => session.abort(), 60_000)
+        const step = <T,>(operation: Promise<T>) => Promise.race([operation, cancelled]).then((value) => {
+            if (session.signal.aborted) throw new Error('provisioning cancelled')
+            return value
+        })
+        const report = (next: LeafProvState) => { if (mountedRef.current) setState(next) }
         let device: Device | null = null
         try {
-            if (!(await ensureAndroidPermissions())) {
-                setState({ phase: 'error', reason: 'permissions' })
+            if (!(await step(ensureAndroidPermissions()))) {
+                report({ phase: 'error', reason: 'permissions' })
                 return { ok: false, reason: 'permissions' }
             }
+            await step(closingRef.current)
             if (!managerRef.current) managerRef.current = new BleManager()
             const manager = managerRef.current
 
             // Wait (briefly) for the adapter to be powered on.
-            if ((await manager.state()) !== 'PoweredOn') {
-                const ready = await new Promise<boolean>((resolve) => {
-                    const sub = manager.onStateChange((s: string) => {
-                        if (s === 'PoweredOn') {
-                            sub.remove()
-                            resolve(true)
-                        }
-                    }, true)
-                    setTimeout(() => {
+            if ((await step(manager.state())) !== 'PoweredOn') {
+                const ready = await step(new Promise<boolean>((resolve) => {
+                    let timer: ReturnType<typeof setTimeout>
+                    const finish = (value: boolean) => {
+                        clearTimeout(timer)
                         sub.remove()
-                        resolve(false)
-                    }, 4000)
-                })
+                        session.signal.removeEventListener('abort', onAbort)
+                        resolve(value)
+                    }
+                    const onAbort = () => finish(false)
+                    const sub = manager.onStateChange((s: string) => {
+                        if (s === 'PoweredOn') finish(true)
+                    }, false)
+                    timer = setTimeout(() => finish(false), 4000)
+                    session.signal.addEventListener('abort', onAbort, { once: true })
+                    // Close the gap between the state read and subscription.
+                    void manager.state().then((s) => { if (s === 'PoweredOn') finish(true) }).catch(() => finish(false))
+                }))
                 if (!ready) {
-                    setState({ phase: 'error', reason: 'bt-unavailable' })
+                    report({ phase: 'error', reason: 'bt-unavailable' })
                     return { ok: false, reason: 'bt-unavailable' }
                 }
             }
 
-            setState({ phase: 'scanning' })
-            device = await scanForLeaf(manager, SCAN_TIMEOUT_MS)
+            report({ phase: 'scanning' })
+            device = await step(scanForLeaf(manager, SCAN_TIMEOUT_MS, session.signal))
 
-            setState({ phase: 'connecting' })
-            const connected = await device.connect()
-            await connected.discoverAllServicesAndCharacteristics()
+            report({ phase: 'connecting' })
+            const connected = await step(device.connect({ timeout: 15_000 }))
+            await step(connected.discoverAllServicesAndCharacteristics())
             let mtu = DEFAULT_MTU
             try {
-                const negotiated = await connected.requestMTU(247)
+                const negotiated = await step(connected.requestMTU(247))
                 mtu = Math.max(DEFAULT_MTU, (negotiated.mtu ?? 23) - 3)
             } catch {
+                if (session.signal.aborted) throw new Error('provisioning cancelled')
                 // keep the safe default
             }
 
-            setState({ phase: 'writing' })
-            await provisionLeaf({ transport: makeTransport(connected, mtu), payload, mtu })
+            report({ phase: 'writing' })
+            await step(provisionLeaf({ transport: makeTransport(connected, mtu), payload, mtu, signal: session.signal }))
 
-            setState({ phase: 'success' })
+            report({ phase: 'success' })
             return { ok: true }
         } catch (err) {
             const reason: LeafProvReason = (err as Error)?.message === 'not-found' ? 'not-found' : 'failed'
-            setState({ phase: 'error', reason })
+            report({ phase: 'error', reason })
             return { ok: false, reason }
         } finally {
-            try {
-                // The leaf reboots on success, so this often races a disconnect.
-                await device?.cancelConnection()
-            } catch {
-                /* already gone */
-            }
+            clearTimeout(deadline)
+            session.abort()
+            // Native teardown is best effort and must not keep the UI waiting.
+            if (device) void device.cancelConnection().catch(() => {})
+            const manager = managerRef.current
+            managerRef.current = null
+            if (manager) closingRef.current = manager.destroy().catch(() => {})
+            sessionRef.current = null
         }
     }, [])
 

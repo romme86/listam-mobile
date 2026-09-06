@@ -6,7 +6,7 @@ import { RPC_GET_LOG_TAIL, RPC_GET_NET_DIAGNOSTICS } from '@listam/protocol'
 import { useTheme, cardColor, type Theme } from '../theme'
 import { useI18n, type LocaleChoice } from '../i18n'
 import { formatDiagnosticsBundle, isRelayedNetwork, type NetDiagnostics } from '../joinDiagnostics'
-import { MAX_LABEL_NAME } from '@listam/domain'
+import { LEAF_EXPERIMENT_ENABLED, MAX_LABEL_NAME } from '@listam/domain'
 import type { LoyaltyCardHandle } from '../store/loyaltyCardsSlice'
 import {
     THEME_CHOICES,
@@ -402,8 +402,10 @@ export function SettingsScreen(props: Props) {
                             {switchRow('people-outline', i18n.t('lists.menu.sectionNetwork'), features.peersDevices, () => onToggleFeature('peersDevices'))}
                             <View style={styles.separator} />
                             {switchRow('cloud-outline', i18n.t('settings.feature.backups'), features.backups, () => onToggleFeature('backups'))}
-                            <View style={styles.separator} />
-                            {switchRow('mic-outline', i18n.t('settings.feature.voice'), features.voice, () => onToggleFeature('voice'))}
+                            {LEAF_EXPERIMENT_ENABLED && <>
+                                <View style={styles.separator} />
+                                {switchRow('mic-outline', i18n.t('settings.feature.voice'), features.voice, () => onToggleFeature('voice'))}
+                            </>}
                             <View style={styles.separator} />
                             {switchRow('card-outline', i18n.t('header.section.loyaltyCards'), features.loyaltyCards, () => onToggleFeature('loyaltyCards'))}
                         </View>
@@ -423,7 +425,7 @@ export function SettingsScreen(props: Props) {
                             </>
                         ) : null}
 
-                        {features.peersDevices || features.voice ? (
+                        {features.peersDevices || (LEAF_EXPERIMENT_ENABLED && features.voice) ? (
                             <>
                                 <Text style={styles.sectionLabel}>{i18n.t('lists.menu.sectionNetwork')}</Text>
                                 <View style={styles.card}>
@@ -434,8 +436,8 @@ export function SettingsScreen(props: Props) {
                                             {navRow('hardware-chip-outline', i18n.t('control.section'), () => { onManageOwnedDevices(); onClose() })}
                                         </>
                                     ) : null}
-                                    {features.peersDevices && features.voice ? <View style={styles.separator} /> : null}
-                                    {features.voice
+                                    {features.peersDevices && LEAF_EXPERIMENT_ENABLED && features.voice ? <View style={styles.separator} /> : null}
+                                    {LEAF_EXPERIMENT_ENABLED && features.voice
                                         ? navRow('bluetooth-outline', i18n.t('leaf.section'), () => { onPairLeaf(); onClose() })
                                         : null}
                                 </View>

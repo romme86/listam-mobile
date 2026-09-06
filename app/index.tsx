@@ -18,6 +18,7 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { isLocaleChoice } from '@listam/i18n'
+import { LEAF_EXPERIMENT_ENABLED } from '@listam/domain'
 import {
     useWorklet,
     RPC_UPDATE,
@@ -72,7 +73,8 @@ import { useReduceMotion } from './hooks/useReduceMotion'
 import { useLearnedCategories } from './hooks/useLearnedCategories'
 import { finishJoin, joinInFlightRef, tryBeginJoin } from './hooks/workletHolders'
 import { listJoinFailureMessageKey } from './joinDiagnostics'
-import { netLifecycleAction } from './appLifecycle'
+import { createAppLifecycleCoordinator, netLifecycleAction } from './appLifecycle'
+import { workletRef } from './hooks/workletHolders'
 import { Header } from './components/Header'
 import { JoinDialog } from './components/JoinDialog'
 import { BackupPasswordDialog } from './components/BackupPasswordDialog'
@@ -932,6 +934,21 @@ function AppInner() {
     // while disabled or not ready.
     const appStateRef = useRef(AppState.currentState)
     useEffect(() => {
+        const lifecycle = createAppLifecycleCoordinator({
+            request: (action, timeoutMs) => sendRPCWithReply(action === 'suspend' ? RPC_NET_SUSPEND : RPC_NET_RESUME, '', timeoutMs),
+            suspendRuntime: (lingerMs) => {
+                try { workletRef.current?.suspend(lingerMs) }
+                catch (error) { appLogger.warn('Runtime suspend failed', { message: (error as Error)?.message }) }
+            },
+            report: (safeToSleep, reason) => appLogger.info('Background drain completed', { safeToSleep, reason }),
+            catchUp: () => {
+                sendRPC(RPC_REQUEST_SYNC)
+                sendRPC(RPC_GET_MEMBERS)
+                if (!backupScheduleEnabledRef.current) return
+                sendRPC(RPC_SET_BACKUP_SCHEDULE, JSON.stringify({ enabled: true }))
+                void refreshBackupPasswordSet()
+            },
+        })
         const sub = AppState.addEventListener('change', (next) => {
             const prev = appStateRef.current
             appStateRef.current = next
@@ -939,29 +956,10 @@ function AppInner() {
 
             // Destination-keyed, like Bare Kit's own handler. See
             // netLifecycleAction for why prev==='active' would have been wrong.
-            const action = netLifecycleAction(prev, next)
-            if (action === 'suspend') {
-                sendRPC(RPC_NET_SUSPEND)
-                return
-            }
-            if (action !== 'resume') return
-            // Resume the swarm BEFORE the catch-up RPCs below: they are pointless
-            // against a DHT whose sockets are dead.
-            sendRPC(RPC_NET_RESUME)
-            // iOS suspends timers and networking in the background. Force one
-            // durable-view catch-up plus roster refresh immediately on resume;
-            // this also pokes the backend presence heartbeat, so desktop shows
-            // the phone online and the name effect reasserts under the CURRENT
-            // writer key instead of leaving a label attached to an old identity.
-            sendRPC(RPC_REQUEST_SYNC)
-            sendRPC(RPC_GET_MEMBERS)
-            if (!backupScheduleEnabledRef.current) return
-            sendRPC(RPC_SET_BACKUP_SCHEDULE, JSON.stringify({ enabled: true }))
-            // Re-read so the ref (and any open Settings UI) reflects fresh lastAt.
-            void refreshBackupPasswordSet()
+            void lifecycle.transition(netLifecycleAction(prev, next))
         })
-        return () => sub.remove()
-    }, [isWorkletReady, sendRPC, refreshBackupPasswordSet])
+        return () => { sub.remove(); lifecycle.dispose() }
+    }, [isWorkletReady, sendRPC, sendRPCWithReply, refreshBackupPasswordSet])
 
     // A join can run for two minutes; the default auto-lock is thirty seconds.
     // The lock backgrounds the app, which freezes the worklet mid-pairing — the
@@ -1906,6 +1904,7 @@ function AppInner() {
     }, [sendRPC])
 
     const handleOpenLeafPairing = useCallback(() => {
+        if (!LEAF_EXPERIMENT_ENABLED) return
         setLeafPairingVisible(true)
         // Refresh the paired-hub list so the dialog can pick one to read the
         // leaf bridge's control key + address from.
@@ -2206,12 +2205,12 @@ function AppInner() {
                 onCheckStatus={handleOwnedDeviceStatus}
                 onClose={() => setOwnedDevicesVisible(false)}
             />
-            <LeafPairingDialog
+            {LEAF_EXPERIMENT_ENABLED && <LeafPairingDialog
                 visible={leafPairingVisible}
                 ownerControl={ownerControl}
                 onFetchHubInfo={handleOwnedDeviceStatus}
                 onClose={() => setLeafPairingVisible(false)}
-            />
+            />}
             <JoiningOverlay
                 visible={isJoining}
                 currentMessageIndex={currentP2PMessage}

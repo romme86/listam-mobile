@@ -16,6 +16,7 @@ import {
 } from '../secrets'
 import { appLogger } from '../logger'
 import { finishJoin, i18nRef, isJoiningRef, joinInFlightRef, notifyRef, rpcRef, workletRef } from './workletHolders'
+import { awaitRpcReply } from './requestReply'
 import type { NotifyFn } from './workletHolders'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { appReset } from '../store/store'
@@ -113,7 +114,7 @@ type UseWorkletResult = {
     clearOwnerRecoveryCode: () => void
     ownerControl: OwnerControlState
     sendRPC: (command: number, payload?: string) => void
-    sendRPCWithReply: (command: number, payload?: string) => Promise<string | null>
+    sendRPCWithReply: (command: number, payload?: string, timeoutMs?: number) => Promise<string | null>
     deleteLocalData: () => Promise<void>
 }
 
@@ -208,7 +209,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
     // Request/response variant for commands that return a value (the encrypted
     // backup file, or the import outcome). Mirrors how the backend awaits the
     // persist-secret ack: send, then await the reply and decode it to a string.
-    const sendRPCWithReply = useCallback(async (command: number, payload?: string): Promise<string | null> => {
+    const sendRPCWithReply = useCallback(async (command: number, payload?: string, timeoutMs?: number): Promise<string | null> => {
         if (!rpcRef.current) {
             appLogger.warn('RPC not ready, ignoring command', { command })
             return null
@@ -216,7 +217,7 @@ export function useWorklet(onNotify?: NotifyFn): UseWorkletResult {
         const req = rpcRef.current.request(command)
         req.send(payload ?? '')
         try {
-            const raw = await req.reply()
+            const raw = await awaitRpcReply(req, timeoutMs)
             return raw == null ? null : dataToString(raw)
         } catch (e) {
             appLogger.warn('RPC reply failed', { command, message: (e as Error)?.message })

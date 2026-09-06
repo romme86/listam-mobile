@@ -32,3 +32,36 @@ export function netLifecycleAction(prev: AppStateStatus, next: AppStateStatus): 
     if (next === 'active' && (prev === 'inactive' || prev === 'background')) return 'resume'
     return null
 }
+
+type LifecycleOptions = {
+    request: (action: 'suspend' | 'resume', timeoutMs: number) => Promise<string | null>
+    suspendRuntime: (lingerMs: number) => void
+    catchUp: () => void
+    report: (safeToSleep: boolean, reason: string) => void
+    budgetMs?: number
+}
+
+// Bare Kit handles the native AppState resume. Give its background suspend a
+// finite linger, then shorten that to zero once the backend confirms its drain.
+// Generation checks prevent an old reply from freezing a foreground worklet.
+export function createAppLifecycleCoordinator({ request, suspendRuntime, catchUp, report, budgetMs = 10000 }: LifecycleOptions) {
+    let generation = 0
+    let disposed = false
+    async function transition(action: NetLifecycleAction) {
+        if (!action || disposed) return
+        const mine = ++generation
+        if (action === 'suspend') suspendRuntime(budgetMs)
+        let raw: string | null = null
+        try { raw = await request(action, budgetMs - 500) } catch { /* deadline/error is not a drain */ }
+        if (disposed || mine !== generation) return
+        let result: { safeToSleep?: boolean, reason?: string } = {}
+        try { result = raw ? JSON.parse(raw) : {} } catch { /* older/unavailable backend */ }
+        if (action === 'resume') { catchUp(); return }
+        const safe = result.safeToSleep === true
+        report(safe, result.reason ?? 'unavailable')
+        // If not drained, native linger enforces the existing hard budget;
+        // pending durable work gets another attempt on the next foreground.
+        if (safe) suspendRuntime(0)
+    }
+    return { transition, dispose() { disposed = true; generation++ } }
+}

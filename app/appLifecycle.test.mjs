@@ -31,7 +31,7 @@ fs.writeFileSync(out, ts.transpileModule(fs.readFileSync(src, 'utf8'), {
     fileName: src,
 }).outputText)
 
-const { netLifecycleAction } = await import(pathToFileURL(out).href)
+const { netLifecycleAction, createAppLifecycleCoordinator } = await import(pathToFileURL(out).href)
 
 // Replay a sequence of AppState events the way the effect does — each event
 // carries the state before it — and collect the actions it produced.
@@ -79,4 +79,51 @@ test('a repeated active event is not a resume', () => {
     // duplicate 'active' should trigger the catch-up RPC burst.
     assert.equal(netLifecycleAction('active', 'active'), null)
     assert.equal(netLifecycleAction('unknown', 'active'), null)
+})
+
+test('100 rapid returns never let a late sleep reply freeze the foreground', async () => {
+    const lingers = [], pending = []
+    let catches = 0
+    const lifecycle = createAppLifecycleCoordinator({
+        request: (action) => action === 'resume' ? Promise.resolve('{}') : new Promise((r) => pending.push(r)),
+        suspendRuntime: (linger) => lingers.push(linger), catchUp: () => catches++, report() {},
+    })
+    for (let i = 0; i < 100; i++) {
+        const sleeping = lifecycle.transition('suspend')
+        await lifecycle.transition('resume')
+        pending.shift()(JSON.stringify({ safeToSleep: true }))
+        await sleeping
+    }
+    assert.equal(catches, 100)
+    assert.deepEqual(lingers, Array(100).fill(10000))
+    lifecycle.dispose()
+})
+
+test('only an explicit drain reply shortens the finite native linger', async () => {
+    const lingers = [], statuses = []
+    const replies = [null, '{"safeToSleep":false,"reason":"deadline"}', '{"safeToSleep":true,"reason":"drained"}']
+    const lifecycle = createAppLifecycleCoordinator({
+        request: async (_, timeout) => { assert.equal(timeout, 9500); return replies.shift() },
+        suspendRuntime: (linger) => lingers.push(linger), catchUp() {},
+        report: (...args) => statuses.push(args),
+    })
+    for (let i = 0; i < 3; i++) await lifecycle.transition('suspend')
+    assert.deepEqual(lingers, [10000, 10000, 10000, 0])
+    assert.deepEqual(statuses, [[false, 'unavailable'], [false, 'deadline'], [true, 'drained']])
+})
+
+test('catch-up awaits resume and a disposed screen cannot act on an old reply', async () => {
+    let finish, catches = 0
+    const lifecycle = createAppLifecycleCoordinator({
+        request: () => new Promise((r) => { finish = r }),
+        suspendRuntime() {}, catchUp: () => catches++, report() {},
+    })
+    const resuming = lifecycle.transition('resume')
+    assert.equal(catches, 0)
+    finish('{}'); await resuming
+    assert.equal(catches, 1)
+    const obsolete = lifecycle.transition('resume')
+    lifecycle.dispose()
+    finish('{}'); await obsolete
+    assert.equal(catches, 1)
 })

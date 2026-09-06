@@ -4,6 +4,7 @@
   "description": "A minimalistic p2p list app",
   "main": "expo-router/entry",
   "scripts": {
+    "postinstall": "node scripts/patch-dependencies.mjs",
     "start": "expo start",
     "android": "npm run bundle:backend:android && expo run:android",
     "android:release": "cd android && ./gradlew bundleRelease",
@@ -11,7 +12,8 @@
     "test:grocery": "node scripts/test-grocery-intelligence.mjs",
     "test:backend": "node --test backend/lib/*.test.mjs",
     "test:store": "node --test app/store/*.test.mjs",
-    "test": "npm run test:backend && npm run test:store && npm run test:hooks && npm run test:app && npm run test:grocery",
+    "test": "npm run test:backend && npm run test:store && npm run test:hooks && npm run test:app && npm run test:grocery && npm run test:dependencies",
+    "test:dependencies": "node --test scripts/dependency-safety.test.mjs",
     "lint": "eslint .",
     "check:deps": "node scripts/check-deps.mjs",
     "check:secrets": "node scripts/check-secrets.mjs",
@@ -27,7 +29,6 @@
   "dependencies": {
     "@10play/tentap-editor": "^1.0.1",
     "@expo/vector-icons": "^15.0.0",
-    "@inquirer/prompts": "^7.8.1",
     "@listam/backend": "file:../listam-packages/packages/backend",
     "@listam/client": "file:../listam-packages/packages/client",
     "@listam/domain": "file:../listam-packages/packages/domain",
@@ -42,7 +43,6 @@
     "@react-native-clipboard/clipboard": "1.16.3",
     "@reduxjs/toolkit": "^2.12.0",
     "autobase": "^7.20.0",
-    "autopass": "^2.2.1",
     "b4a": "^1.7.1",
     "bare-crypto": "^1.12.0",
     "bare-fs": "^4.4.4",
@@ -51,7 +51,6 @@
     "bare-url": "^2.4.3",
     "base64-js": "^1.5.1",
     "blind-pairing": "^2.3.1",
-    "blind-peering": "^1.13.0",
     "corestore": "^7.5.0",
     "expo": "~54.0.31",
     "expo-build-properties": "1.0.10",
@@ -67,13 +66,8 @@
     "expo-secure-store": "~15.0.8",
     "expo-system-ui": "6.0.9",
     "hypercore-crypto": "^3.6.1",
-    "hyperdb": "^4.19.0",
-    "hyperdispatch": "^1.4.4",
-    "hyperschema": "^1.17.0",
     "hyperswarm": "^4.12.1",
     "lucide-react-native": "^0.553.0",
-    "make-dir": "^5.1.0",
-    "protomux-wakeup": "^2.6.1",
     "qrcode-generator": "2.0.4",
     "qrcode-terminal": "^0.12.0",
     "react": "19.1.0",
@@ -95,17 +89,22 @@
     "z32": "^1.1.0"
   },
   "devDependencies": {
-    "@react-native-community/cli": "latest",
+    "@react-native-community/cli": "^20.2.0",
     "@types/b4a": "1.6.5",
     "@types/react": "19.2.7",
     "babel-plugin-module-resolver": "^5.0.2",
+    "babel-preset-expo": "~54.0.12",
     "bare-pack": "1.5.1",
+    "decode-uri-component": "0.5.0",
     "eslint": "^9.0.0",
-    "hyperdht": "^6.27.0",
+    "hyperdht": "^6.34.0",
+    "image-size": "1.2.1",
     "prettier": "3.7.4",
     "prettier-config-holepunch": "2.0.0",
+    "query-string": "7.1.3",
     "typescript": "5.9.3",
-    "typescript-eslint": "^8.0.0"
+    "typescript-eslint": "^8.0.0",
+    "xcode": "3.0.1"
   },
   "overrides": {
     "@listam/protocol": "file:../listam-packages/packages/protocol",
@@ -117,6 +116,9 @@
     "@listam/i18n": "file:../listam-packages/packages/i18n",
     "@listam/owner-control": "file:../listam-packages/packages/owner-control",
     "@listam/client": "file:../listam-packages/packages/client",
-    "@listam/backend": "file:../listam-packages/packages/backend"
+    "@listam/backend": "file:../listam-packages/packages/backend",
+    "postcss": "^8.5.28",
+    "uuid": "^11.1.1",
+    "decode-uri-component": "0.5.0"
   }
 }
