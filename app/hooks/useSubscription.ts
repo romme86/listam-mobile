@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Platform } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import {
@@ -10,6 +10,7 @@ import {
     finishTransaction,
     purchaseUpdatedListener,
     purchaseErrorListener,
+    ErrorCode,
     type Purchase,
     type PurchaseError,
     type ProductOrSubscription,
@@ -18,6 +19,7 @@ import {
 import { useI18n } from '../i18n'
 import { appLogger } from '../logger'
 import { nextPaywallAt } from '../paywallSchedule'
+import { PAYWALL_ENABLED } from '../monetization'
 
 const TRIAL_START_KEY = '@lista_trial_start'
 const TRIAL_DURATION_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
@@ -34,6 +36,7 @@ const MAX_TIMEOUT_MS = 2_147_000_000
 const IOS_RECURRING_ID = 'standard'
 const IOS_PREPAID_ID = 'standard.yearly.nonrenewing'
 const ANDROID_PRODUCT_ID = 'ch.saynode.listam.yearly'
+const ANDROID_RECURRING_BASE_PLAN_ID = 'yearly-auto'
 const ANDROID_PREPAID_BASE_PLAN_ID = 'yearly-prepaid'
 
 const PRODUCT_IDS = Platform.select({
@@ -106,6 +109,7 @@ function hasActiveEntitlement(purchases: Purchase[]) {
 
 export function useSubscription() {
     const i18n = useI18n()
+    const purchaseInFlight = useRef(false)
     const [state, setState] = useState<SubscriptionState>({
         isLoading: true,
         isSubscribed: false,
@@ -131,22 +135,28 @@ export function useSubscription() {
                 // Listen for purchase updates
                 purchaseUpdateSubscription = purchaseUpdatedListener(
                     async (purchase: Purchase) => {
-                        if (purchase.purchaseState === 'purchased') {
-                            await finishTransaction({ purchase, isConsumable: false })
-                            setState((prev) => ({
-                                ...prev,
-                                isSubscribed: true,
-                                isLoading: false,
-                            }))
+                        if (!PRODUCT_IDS.includes(purchase.productId)) return
+                        try {
+                            if (purchase.purchaseState === 'purchased') {
+                                await finishTransaction({ purchase, isConsumable: false })
+                                setState((prev) => ({ ...prev, isSubscribed: true, error: null }))
+                            }
+                        } catch (err) {
+                            appLogger.warn('Finish purchase error', err)
+                            setState((prev) => ({ ...prev, error: i18n.t('paywall.purchaseFailed') }))
+                        } finally {
+                            purchaseInFlight.current = false
+                            setState((prev) => ({ ...prev, isLoading: false }))
                         }
                     }
                 )
 
                 purchaseErrorSubscription = purchaseErrorListener((error: PurchaseError) => {
-                    appLogger.warn('Purchase error', error)
+                    purchaseInFlight.current = false
+                    if (error.code !== ErrorCode.UserCancelled) appLogger.warn('Purchase error', error)
                     setState((prev) => ({
                         ...prev,
-                        error: error.message,
+                        error: error.code === ErrorCode.UserCancelled ? null : error.message,
                         isLoading: false,
                     }))
                 })
@@ -251,12 +261,14 @@ export function useSubscription() {
     }
 
     const purchase = useCallback(async (planId?: string) => {
+        if (state.isLoading || purchaseInFlight.current) return
         const plan = state.plans.find((candidate) => candidate.id === (planId ?? state.selectedPlanId))
         if (!plan) {
             setState((prev) => ({ ...prev, error: i18n.t('paywall.noSubscriptionAvailable') }))
             return
         }
 
+        purchaseInFlight.current = true
         setState((prev) => ({ ...prev, isLoading: true, error: null }))
 
         try {
@@ -279,14 +291,30 @@ export function useSubscription() {
                 })
             }
         } catch (err: unknown) {
-            const errorMessage = err instanceof Error ? err.message : i18n.t('paywall.purchaseFailed')
+            purchaseInFlight.current = false
+            const cancelled = (err as PurchaseError | null)?.code === ErrorCode.UserCancelled
+            const errorMessage = cancelled ? null : err instanceof Error ? err.message : i18n.t('paywall.purchaseFailed')
             setState((prev) => ({
                 ...prev,
                 error: errorMessage,
                 isLoading: false,
             }))
         }
-    }, [i18n, state.plans, state.selectedPlanId])
+    }, [i18n, state.isLoading, state.plans, state.selectedPlanId])
+
+    // Donate opens the existing standard yearly purchase directly. It never
+    // presents the paywall or falls back to a different/prepaid product.
+    const donationPlan = state.plans.find((plan) => plan.id === (
+        Platform.OS === 'ios' ? IOS_RECURRING_ID : ANDROID_RECURRING_BASE_PLAN_ID
+    ))
+    const donate = useCallback(async () => {
+        if (state.isLoading || state.isSubscribed || purchaseInFlight.current) return
+        if (!donationPlan) {
+            setState((prev) => ({ ...prev, error: i18n.t('donation.unavailable') }))
+            return
+        }
+        await purchase(donationPlan.id)
+    }, [donationPlan, i18n, purchase, state.isLoading, state.isSubscribed])
 
     const restore = useCallback(async () => {
         setState((prev) => ({ ...prev, isLoading: true, error: null }))
@@ -354,11 +382,14 @@ export function useSubscription() {
         }
     }, [state.paywallDeferredUntil])
 
-    const shouldShowPaywall = !state.isLoading && !state.isSubscribed && !state.isTrialActive && !state.isPaywallDismissed
+    const shouldShowPaywall = PAYWALL_ENABLED && !state.isLoading && !state.isSubscribed && !state.isTrialActive && !state.isPaywallDismissed
 
     return {
         ...state,
         shouldShowPaywall,
+        paywallEnabled: PAYWALL_ENABLED,
+        donationPlan,
+        donate,
         purchase,
         selectPlan,
         dismissPaywall,

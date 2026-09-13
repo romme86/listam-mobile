@@ -85,6 +85,7 @@ import { OwnedDevicesDialog } from './components/OwnedDevicesDialog'
 import { LeafPairingDialog } from './components/LeafPairingDialog'
 import { JoiningOverlay, P2P_MESSAGE_KEYS } from './components/JoiningOverlay'
 import { Paywall } from './components/Paywall'
+import { DonateButton } from './components/DonateButton'
 import { LoyaltyCardScanner } from './components/LoyaltyCardScanner'
 import { LoyaltyCardViewer } from './components/LoyaltyCardViewer'
 import type { LoyaltyCard } from './components/LoyaltyCardScanner'
@@ -1480,16 +1481,6 @@ function AppInner() {
         if (note.id) setNoteItemId(note.id)
     }, [])
 
-    // The notes composer files a plain item — the same shape the voice notetaker
-    // writes. It gains blocks only if the user opens it and adds one. No
-    // duplicate guard (two notes may share a title) and no value rating (a notes
-    // list carries none), so this goes straight to the add path.
-    const handleCreateNote = useCallback(async (text: string) => {
-        const saved = await handleInsert(0, text)
-        if (saved) haptics.toggleOn()
-        return saved
-    }, [handleInsert])
-
     // Title/block edits: merge the patch, dispatch for instant UI, then sync —
     // identical to the ticket path (LWW by updatedAt).
     const handleUpdateNote = useCallback((patch: Record<string, unknown>) => {
@@ -1610,7 +1601,7 @@ function AppInner() {
     const handleSubmitAdd = useCallback(async () => {
         const value = addText.trim()
         if (!value) return
-        if (dataList.some((item) => item.text === value)) {
+        if (!isNotes && dataList.some((item) => item.text === value)) {
             snackbar.show(i18n.t('main.notification.duplicateAdd'))
             setAddText('')
             return
@@ -1618,7 +1609,7 @@ function AppInner() {
         // On a value-return surface, rating is mandatory: defer to the rating
         // sheet, which finishes the add with the chosen value + delay.
         const { listId, listType } = decodeSurface(currentId)
-        if (isValueOn(listId, lib.listsById[currentId]?.type || listType)) {
+        if (!isNotes && isValueOn(listId, lib.listsById[currentId]?.type || listType)) {
             setValueRateAdd(value)
             setAddText('')
             return
@@ -1628,7 +1619,7 @@ function AppInner() {
         haptics.toggleOn()
         // Do not erase text the user started typing while the write was pending.
         setAddText((current) => current.trim() === value ? '' : current)
-    }, [addText, dataList, handleInsert, i18n, snackbar, currentId, lib, isValueOn])
+    }, [addText, dataList, handleInsert, i18n, snackbar, currentId, lib, isValueOn, isNotes])
 
     // Double-tap an empty part of the list to open the add bar. The handler runs
     // during the responder-negotiation bubble: an item or button that handles the
@@ -2081,7 +2072,7 @@ function AppInner() {
         )
     }, [animate, currentId, defaultListId, dispatch, groupedLists, i18n, lib, sendRPC])
 
-    // Show paywall if trial expired and not subscribed
+    // The shared monetization switch controls eligibility on both platforms.
     if (subscription.shouldShowPaywall) {
         return (
             <Paywall
@@ -2115,7 +2106,7 @@ function AppInner() {
                 networkStatus={networkStatus}
                 isJoining={isJoining}
                 onMenuToggle={() => { setMenuInitialView('settings'); setPendingListSettingsId(null); setListsMenuVisible(true) }}
-                trialDaysRemaining={subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
+                trialDaysRemaining={subscription.paywallEnabled && subscription.isTrialActive ? subscription.trialDaysRemaining : undefined}
                 groupCount={position?.groupCount ?? 0}
                 groupIndex={position?.groupIndex ?? 0}
                 groupSize={position?.groupSize ?? 0}
@@ -2220,6 +2211,7 @@ function AppInner() {
             />
             <ListsMenu
                 visible={listsMenuVisible}
+                donation={<DonateButton state={subscription} plan={subscription.donationPlan} onDonate={subscription.donate} />}
                 groups={groupedLists}
                 currentListId={currentId}
                 defaultListId={defaultListId}
@@ -2321,7 +2313,6 @@ function AppInner() {
                     <NotesList
                         data={dataList}
                         onOpen={handleOpenNote}
-                        onCreate={handleCreateNote}
                         onDelete={handleDelete}
                         onFlagToday={overviewEnabled ? handleFlagToday : undefined}
                         isPlanned={overviewEnabled ? isItemPlanned : undefined}
@@ -2400,6 +2391,7 @@ function AppInner() {
                 onClose={() => setBoardTicketId(null)}
             />
             <NoteDetail
+                key={noteItemId ?? 'closed'}
                 visible={noteItemId !== null && selectedNote !== null}
                 note={selectedNote}
                 listName={currentListName}

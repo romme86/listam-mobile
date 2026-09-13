@@ -46,6 +46,7 @@ type Props = {
     onRenameGroup: (groupId: string, name: string) => void
     onMoveListToGroup: (listId: string, groupId: string | null) => void
     onClose: () => void
+    donation: React.ReactNode
     peerCount: number
     isWorkletReady: boolean
     networkStatus: NetworkStatus
@@ -153,7 +154,7 @@ export function ListsMenu(props: Props) {
         deviceName, onDeviceNameChange, selfWriterKey,
         onChangeListView, valueReturnFor, onSetValueReturn, onRenameList, onDeleteListItems, onDeleteList, onClearDone, onShareList, onShareProject, onJoin, onJoinList,
         initialListSettingsId, initialView, loyaltyCards, onScanCard, onSelectCard,
-        sendRPCWithReply, onDeleteLocalData, notify,
+        sendRPCWithReply, onDeleteLocalData, notify, donation,
     } = props
 
     const t = useTheme()
@@ -459,6 +460,7 @@ export function ListsMenu(props: Props) {
                                     )}
                                 </View>
                             ) : null}
+                            <View style={styles.donationFooter}>{donation}</View>
                         </>
                     ) : menuView === 'settings' ? (
                         <SettingsScreen
@@ -491,6 +493,7 @@ export function ListsMenu(props: Props) {
                             sendRPCWithReply={sendRPCWithReply}
                             onDeleteLocalData={onDeleteLocalData}
                             notify={notify}
+                            donation={donation}
                         />
                     ) : (
                         <>
@@ -791,6 +794,7 @@ function makeStyles(t: Theme) {
         },
         utilityBtn: { flex: 1, alignItems: 'center', gap: 4, paddingVertical: t.spacing.xs },
         utilityLabel: { fontSize: t.type.caption.fontSize, color: t.colors.textSecondary, textAlign: 'center' },
+        donationFooter: { paddingHorizontal: t.spacing.lg },
         sectionLabel: {
             fontSize: t.type.caption.fontSize, fontWeight: '700', color: t.colors.textTertiary,
             textTransform: 'uppercase', letterSpacing: 0.6, marginTop: t.spacing.lg, marginBottom: t.spacing.xs,

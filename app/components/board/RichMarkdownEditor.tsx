@@ -17,6 +17,7 @@ type Props = {
     // (the markdown block) parses headings.
     mode?: 'block' | 'inline'
     minHeight?: number
+    minimal?: boolean
 }
 
 function seed (markdown: string, mode: 'block' | 'inline'): string {
@@ -33,7 +34,7 @@ function seed (markdown: string, mode: 'block' | 'inline'): string {
 // edit back with htmlToMarkdown, the same bridge the desktop editor uses.
 // Formatting is applied by typing markdown (TipTap's built-in input rules),
 // which keeps the editor flush against the keyboard with no separate toolbar.
-export function RichMarkdownEditor ({ initialMarkdown, onCommit, mode = 'block', minHeight = 140 }: Props) {
+export function RichMarkdownEditor ({ initialMarkdown, onCommit, mode = 'block', minHeight = 140, minimal = false }: Props) {
     const t = useTheme()
     const styles = useMemo(() => makeStyles(t), [t])
     // The freshest markdown seen from the webview; seeded with the incoming
@@ -93,12 +94,13 @@ export function RichMarkdownEditor ({ initialMarkdown, onCommit, mode = 'block',
             a { color: ${t.colors.accent}; }
             code { font-family: monospace; background: ${t.colors.surfaceAlt}; border-radius: 4px; padding: 0 3px; }
             h1 { font-size: 22px; } h2 { font-size: 19px; } h3 { font-size: 16px; }
+            ${minimal ? 'html, body { margin: 0; padding: 0; } .tiptap { padding: 0; min-height: 60px; } p { margin: 0 0 8px; line-height: 24px; }' : ''}
         `)
-    }, [editor, t])
+    }, [editor, t, minimal])
 
     return (
-        <View style={[styles.wrap, { minHeight }]}>
-            <RichText editor={editor} style={styles.rich} />
+        <View style={[styles.wrap, minimal && styles.minimal, { minHeight }]}>
+            <RichText editor={editor} style={[styles.rich, minimal && { minHeight }]} />
         </View>
     )
 }
@@ -115,5 +117,6 @@ function makeStyles (t: Theme) {
             backgroundColor: 'transparent',
             minHeight: 100,
         },
+        minimal: { backgroundColor: 'transparent', borderRadius: 0 },
     })
 }

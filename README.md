@@ -132,23 +132,23 @@ See [the Android 1.3.4 (21) handoff](docs/releases/android-1.3.4.md) for the
 versioned artifact, verification results, and Internal testing / production
 promotion steps.
 
-## Building a Free Version (Disabling the Paywall)
+## Paywall and voluntary support
 
-Listam includes a subscription paywall that appears after a 30-day trial. If you're building your own version of the app according to the open source philosophy, you can disable it entirely.
+The paywall and trial countdown are disabled on both Android and iOS by
+`PAYWALL_ENABLED = false` in `app/monetization.ts`. This also applies to
+existing installs with expired trials or expired paywall deferrals once they
+update to this build. Subscription status is still read from the store.
 
-Edit `app/hooks/useSubscription.ts` and modify the return statement at the end of the `useSubscription` function:
+Donate appears at the bottom of the lists menu and the main Settings screen
+(basic and advanced). It opens the existing standard yearly store purchase
+directly: `standard` on iOS and `ch.saynode.listam.yearly` / `yearly-auto` on
+Android. The menu shows the store's localized price and automatic renewal
+terms. Existing subscribers see a thank-you state; cancelling or failing a
+purchase leaves the app usable.
 
-```typescript
-return {
-    ...state,
-    shouldShowPaywall: false,  // Always false = no paywall
-    isSubscribed: true,        // Treat as always subscribed
-    purchase,
-    restore,
-    refresh: checkStatus,
-}
-```
-
-This works for both Android and iOS builds.
+To reactivate the paywall in a future release, set `PAYWALL_ENABLED` to `true`.
+The paywall, restore flow, 30-day trial, and stored dismissal schedule are
+preserved. Trial dates continue to age while the paywall is disabled, so
+reactivation uses the original dates rather than granting a new trial.
 
 ---

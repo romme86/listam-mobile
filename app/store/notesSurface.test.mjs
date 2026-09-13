@@ -40,6 +40,7 @@ function transpile(srcPath, rewrites = []) {
 let projection
 let selectors
 let noteRows
+let createDoubleTap
 try {
     fs.mkdirSync(buildDir, { recursive: true })
     fs.writeFileSync(path.join(buildDir, 'listProjection.mjs'), transpile(path.join(APP_DIR, 'listProjection.ts')))
@@ -49,6 +50,7 @@ try {
         path.join(buildDir, 'noteRows.mjs'),
         transpile(path.join(NOTES_DIR, 'noteRows.ts'), [["'../../listProjection'", "'./listProjection.mjs'"]]),
     )
+    fs.writeFileSync(path.join(buildDir, 'doubleTap.mjs'), transpile(path.join(NOTES_DIR, 'doubleTap.ts')))
     // labelsSlice only has runtime deps on @listam/domain + @reduxjs/toolkit; the
     // rest are type-only. registrySelectors imports it via './labelsSlice'.
     fs.writeFileSync(path.join(buildDir, 'labelsSlice.mjs'), transpile(path.join(STORE_DIR, 'labelsSlice.ts')))
@@ -58,6 +60,7 @@ try {
     )
     projection = await import(pathToFileURL(path.join(buildDir, 'listProjection.mjs')).href)
     noteRows = await import(pathToFileURL(path.join(buildDir, 'noteRows.mjs')).href)
+    createDoubleTap = (await import(pathToFileURL(path.join(buildDir, 'doubleTap.mjs')).href)).createDoubleTap
     selectors = await import(pathToFileURL(path.join(buildDir, 'registrySelectors.mjs')).href)
 } catch (err) {
     fs.rmSync(buildDir, { recursive: true, force: true })
@@ -177,4 +180,27 @@ test('rows carry their own height and a running offset for the focus lens', () =
 
 test('an empty notes list produces no rows', () => {
     assert.deepEqual(buildNoteRows([], METRICS), [])
+})
+
+test('the first double tap starts writing immediately; a third tap cannot add twice', () => {
+    const gesture = createDoubleTap()
+    assert.equal(gesture.tap({ x: 40, y: 180, time: 1000 }), false)
+    assert.equal(gesture.tap({ x: 44, y: 182, time: 1200 }), true)
+    assert.equal(gesture.tap({ x: 44, y: 182, time: 1300 }), false)
+})
+
+test('separate taps or taps in different places do not insert text', () => {
+    const gesture = createDoubleTap()
+    assert.equal(gesture.tap({ x: 40, y: 180, time: 1000 }), false)
+    assert.equal(gesture.tap({ x: 40, y: 180, time: 1500 }), false)
+    assert.equal(gesture.tap({ x: 200, y: 420, time: 1600 }), false)
+    assert.equal(gesture.tap({ x: 201, y: 420, time: 1700 }), true)
+})
+
+test('scrolling, long pressing, or opening the insertion tray breaks the tap pair', () => {
+    const gesture = createDoubleTap()
+    gesture.tap({ x: 40, y: 180, time: 1000 })
+    gesture.reset()
+    assert.equal(gesture.tap({ x: 40, y: 180, time: 1100 }), false)
+    assert.equal(gesture.tap({ x: 40, y: 180, time: 1250 }), true)
 })

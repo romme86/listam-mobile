@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react'
-import { Modal, View, Text, TextInput, ScrollView, TouchableOpacity, StyleSheet } from 'react-native'
+import React, { useMemo, useRef, useState } from 'react'
+import { Modal, View, Text, TextInput, ScrollView, Pressable, TouchableOpacity, StyleSheet } from 'react-native'
 import { SafeAreaProvider, SafeAreaView, initialWindowMetrics } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { BLOCK_TYPES, createBlock, normalizeBlocks, type TicketBlock } from '@listam/domain/board'
@@ -8,6 +8,7 @@ import { useI18n } from '../../i18n'
 import type { ListEntry } from '../_types'
 import { BlockBody, BLOCK_ICON, nextBlockId } from '../board/BlockBody'
 import { CloseDot } from '../CloseDot'
+import { createDoubleTap } from './doubleTap'
 
 type Props = {
     visible: boolean
@@ -18,24 +19,25 @@ type Props = {
     onClose: () => void
 }
 
-// The note, full screen: an editable title over the block body. The body is the
-// board's BlockBody verbatim (same ten block types, same raw-text/WYSIWYG
-// editors) — a note and a ticket differ in what surrounds the blocks, not in
-// the blocks themselves. Insertion is the one thing that moves: the board's
-// inline type menu is replaced by a bottom-sheet tray of icon tiles, because on
-// a note the body is the whole screen rather than one field among many.
+// A note reads as a document. Double-tap its empty body to write; the quiet
+// header insert action keeps the other element types within reach.
 export function NoteDetail({ visible, note, listName, onUpdate, onClose }: Props) {
     const t = useTheme()
     const i18n = useI18n()
     const styles = useMemo(() => makeStyles(t), [t])
     const [tray, setTray] = useState(false)
+    const [editBlockId, setEditBlockId] = useState<string | null>(null)
+    const doubleTap = useRef(createDoubleTap()).current
 
     if (!note) return null
     const blocks = normalizeBlocks(note.blocks as TicketBlock[] | undefined)
 
     const insertBlock = (type: string) => {
+        doubleTap.reset()
         setTray(false)
-        onUpdate({ blocks: [...blocks, createBlock(type, nextBlockId()) as TicketBlock] })
+        const block = createBlock(type, nextBlockId()) as TicketBlock
+        setEditBlockId(type === 'divider' ? null : block.id)
+        onUpdate({ blocks: [...blocks, block] })
     }
 
     return (
@@ -46,14 +48,24 @@ export function NoteDetail({ visible, note, listName, onUpdate, onClose }: Props
             <SafeAreaProvider initialMetrics={initialWindowMetrics}>
             <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
                 <View style={styles.header}>
-                    <TouchableOpacity onPress={onClose} hitSlop={10} accessibilityLabel={i18n.t('common.close')}>
-                        <Ionicons name="chevron-back" size={26} color={t.colors.text} />
+                    <TouchableOpacity style={styles.headerAction} onPress={onClose} accessibilityRole="button" accessibilityLabel={i18n.t('common.back')}>
+                        <Ionicons name="chevron-back" size={24} color={t.colors.text} />
                     </TouchableOpacity>
                     <Text style={styles.headerTitle} numberOfLines={1}>{listName}</Text>
-                    <CloseDot onPress={onClose} color={t.colors.text} accessibilityLabel={i18n.t('common.close')} />
+                    <TouchableOpacity style={styles.headerAction} onPress={() => { doubleTap.reset(); setTray(true) }} accessibilityRole="button" accessibilityLabel={i18n.t('mobile.notes.insertTitle')}>
+                        <Ionicons name="add" size={22} color={t.colors.textSecondary} />
+                    </TouchableOpacity>
                 </View>
 
-                <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+                <ScrollView
+                    style={styles.scroll}
+                    contentContainerStyle={styles.content}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    keyboardDismissMode="on-drag"
+                    automaticallyAdjustKeyboardInsets
+                    onScrollBeginDrag={() => doubleTap.reset()}
+                >
                     {/* Uncontrolled + keyed by the note: the store echoes every
                         write back, and a controlled title would snap the caret
                         on each one. Commits on blur/return, like a list rename. */}
@@ -69,25 +81,29 @@ export function NoteDetail({ visible, note, listName, onUpdate, onClose }: Props
                             if (text && text !== note.text) onUpdate({ text })
                         }}
                     />
-                    <Text style={styles.meta}>
-                        {blocks.length > 0
-                            ? i18n.t('desktop.notes.blockCount', { count: blocks.length })
-                            : i18n.t('desktop.notes.plain')}
-                    </Text>
-
                     <BlockBody
                         blocks={note.blocks as TicketBlock[] | undefined}
                         onChange={(next) => onUpdate({ blocks: next })}
                         showAdd={false}
+                        minimal
+                        editBlockId={editBlockId}
                     />
+                    <Pressable
+                        style={styles.writingSpace}
+                        accessibilityRole="button"
+                        accessibilityLabel={i18n.t('mobile.notes.writeText')}
+                        onAccessibilityTap={() => insertBlock('markdown')}
+                        accessibilityActions={[{ name: 'activate', label: i18n.t('mobile.notes.writeText') }]}
+                        onAccessibilityAction={(event) => { if (event.nativeEvent.actionName === 'activate') insertBlock('markdown') }}
+                        onPress={(event) => {
+                            const { pageX, pageY } = event.nativeEvent
+                            if (doubleTap.tap({ x: pageX, y: pageY, time: Date.now() })) insertBlock('markdown')
+                        }}
+                        onLongPress={() => doubleTap.reset()}
+                    >
+                        {blocks.length === 0 && <Text style={styles.writingHint}>{i18n.t('mobile.notes.doubleTapText')}</Text>}
+                    </Pressable>
                 </ScrollView>
-
-                <View style={styles.bottomBar}>
-                    <TouchableOpacity style={styles.insertBtn} onPress={() => setTray(true)} accessibilityRole="button">
-                        <Ionicons name="add" size={18} color={t.colors.text} />
-                        <Text style={styles.insertLabel}>{i18n.t('mobile.notes.insertBlock')}</Text>
-                    </TouchableOpacity>
-                </View>
 
                 <Modal visible={tray} transparent animationType="slide" onRequestClose={() => setTray(false)}>
                     <View style={styles.trayOverlay}>
@@ -125,23 +141,13 @@ function makeStyles(t: Theme) {
     return StyleSheet.create({
         safe: { flex: 1, backgroundColor: t.colors.bg },
         header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: t.spacing.lg, paddingVertical: t.spacing.sm },
-        headerTitle: { flex: 1, textAlign: 'center', fontSize: t.type.bodyStrong.fontSize, fontWeight: '700', color: t.colors.textSecondary },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: t.type.label.fontSize, fontWeight: '500', color: t.colors.textSecondary },
+        headerAction: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
         scroll: { flex: 1 },
-        content: { paddingHorizontal: t.spacing.lg, paddingBottom: t.spacing.xxl, gap: t.spacing.md },
-        title: { fontSize: 26, fontWeight: '800', color: t.colors.text, paddingVertical: 0, marginTop: t.spacing.sm },
-        meta: {
-            fontSize: t.type.caption.fontSize, fontWeight: '700', color: t.colors.textTertiary,
-            textTransform: 'uppercase', letterSpacing: 0.6,
-        },
-        bottomBar: {
-            flexDirection: 'row', alignItems: 'center', paddingHorizontal: t.spacing.lg, paddingTop: t.spacing.sm,
-            borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.colors.border,
-        },
-        insertBtn: {
-            flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: t.spacing.xs,
-            backgroundColor: t.colors.surfaceAlt, borderRadius: t.radius.md, paddingVertical: t.spacing.md,
-        },
-        insertLabel: { fontSize: t.type.bodyStrong.fontSize, fontWeight: '600', color: t.colors.text },
+        content: { flexGrow: 1, paddingHorizontal: t.spacing.xl, paddingBottom: t.spacing.xxl },
+        title: { fontSize: 26, fontWeight: '600', color: t.colors.text, padding: 0, marginTop: t.spacing.md, marginBottom: t.spacing.xl },
+        writingSpace: { flexGrow: 1, minHeight: 180, paddingTop: t.spacing.lg },
+        writingHint: { fontSize: t.type.body.fontSize, color: t.colors.textTertiary },
         trayOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: t.colors.overlay },
         trayBackdrop: { ...StyleSheet.absoluteFillObject },
         tray: {
@@ -162,7 +168,7 @@ function makeStyles(t: Theme) {
         },
         trayTile: { width: '25%', alignItems: 'center', gap: t.spacing.xs, paddingVertical: t.spacing.md },
         trayIcon: {
-            width: 44, height: 44, borderRadius: t.radius.md, backgroundColor: t.colors.surfaceAlt,
+            width: 44, height: 44,
             alignItems: 'center', justifyContent: 'center',
         },
         trayLabel: { fontSize: t.type.caption.fontSize, color: t.colors.textSecondary, textAlign: 'center' },

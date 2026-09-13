@@ -54,6 +54,7 @@ type SubView = 'root' | 'theme' | 'language' | 'identity' | 'data'
 type Props = {
     onExit: () => void
     onClose: () => void
+    donation: React.ReactNode
     advancedMode: AdvancedMode
     onActivateAdvanced: () => void
     features: FeatureFlags
@@ -93,7 +94,7 @@ export function SettingsScreen(props: Props) {
         onShareProject, onJoin, onJoinList,
         onManageMembers, onManageOwnedDevices, onPairLeaf,
         loyaltyCards, onScanCard, onSelectCard,
-        sendRPCWithReply, onDeleteLocalData, notify,
+        sendRPCWithReply, onDeleteLocalData, notify, donation,
     } = props
 
     const t = useTheme()
@@ -493,6 +494,7 @@ export function SettingsScreen(props: Props) {
                         {localDataDangerSection}
                     </>
                 )}
+                {subView === 'root' ? donation : null}
             </ScrollView>
         </>
     )

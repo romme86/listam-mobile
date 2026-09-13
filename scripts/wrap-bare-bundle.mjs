@@ -1,6 +1,7 @@
 // scripts/wrap-bare-bundle.mjs
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { backendBuildMetadata } from './backend-build-metadata.mjs';
 
 const [, , inFile, outFile] = process.argv;
 
@@ -22,6 +23,7 @@ mkdirSync(dirname(outFile), { recursive: true });
 writeFileSync(
     outFile,
     `// Auto-generated. Do not edit.\n` +
+    `// build-metadata: ${JSON.stringify(backendBuildMetadata())}\n` +
     `const chunks = ${JSON.stringify(chunks)};\n` +
     `export default chunks.join('');\n`,
 );
